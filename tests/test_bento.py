@@ -942,3 +942,28 @@ def test_roles_are_approved_then_used_for_tasks_and_reviewers():
     st2 = dataclasses.replace(st, prs=[pr0], roles={m[1]: ["fe"], m[3]: ["fe"]})
     item = next(i for i in triage(st2) if i["id"].startswith("review-"))
     assert item["options"][0]["label"].startswith(m[3]) and "프론트엔드" in item["options"][0]["sub"]
+
+
+def test_team_wide_change_needs_someone_other_than_proposer():
+    m = main._demo.d["members"]
+    lead = main.build_state(main._demo).leads[0]
+    proposer = next(x for x in m if x != lead)
+    hdr = {"X-Bento-User": proposer}
+    p = client.post("/api/roles", json={"roles": {m[1]: ["fe"]}}, headers=hdr).json()["proposal"]
+    assert p["by"] == proposer and p["team_wide"]
+    r = client.post("/api/execute", json={"token": p["token"]}, headers=hdr)
+    assert r.status_code == 409 and r.json()["detail"]["need_second"]  # 혼자서는 못 바꾼다
+    # 승인 요청 → 다른 팀원 승인 대기에 뜬다
+    q = client.post("/api/approval-request", json={"token": p["token"]}, headers=hdr).json()
+    assert q["issue"] and not q["already"]
+    assert client.post("/api/approval-request", json={"token": p["token"]}, headers=hdr).json()["already"]
+    items = client.get("/api/triage").json()["items"]
+    it = next(i for i in items if i["id"] == f"approve-{q['issue']}")
+    assert it["proposed_by"] == proposer and it["owner"] == lead and it["proposal"]["token"] == p["token"]
+    assert not any(i["id"] == "assign" and f"#{q['issue']}" in i["why"] for i in items)  # 승인 요청은 '담당자 없는 할 일'이 아니다
+    other = next(x for x in m if x not in (proposer,))
+    ok = client.post("/api/execute", json={"token": p["token"]}, headers={"X-Bento-User": other}).json()
+    assert ok["ok"] and main._demo.issue(q["issue"])["state"] == "closed"  # 실행되면 요청 이슈도 닫힌다
+    # 작은 일(리뷰어 지정 등)은 혼자 승인해도 된다
+    small = next(o["proposal"] for i in client.get("/api/triage", headers=hdr).json()["items"] if i["id"].startswith("review-") for o in i["options"])
+    assert client.post("/api/execute", json={"token": small["token"]}, headers=hdr).json()["ok"]

@@ -83,11 +83,40 @@ def state_for(repo: str | None):
         raise HTTPException(502, f"GitHub에서 읽지 못했어요: {e}") from e
 
 
-def _proposal(repo: str, summary: str, actions: list, item_id: str | None = None) -> dict:
+import contextvars
+
+_ASKER: contextvars.ContextVar[str | None] = contextvars.ContextVar("asker", default=None)
+# 팀 전체에 영향을 주는 변경: 제안한 사람 혼자서는 실행하지 못한다 (팀장이거나 다른 팀원이 승인해야)
+TEAM_WIDE = {"set_roles", "set_team_rules", "update_milestone", "close_issue"}
+APPROVE_PREFIX = "[승인 요청]"
+
+
+@app.middleware("http")
+async def _remember_asker(request: Request, call_next):
+    """누가 제안을 만들었는지: 로그인한 사람(로그인을 켰을 때) 또는 화면에서 고른 아이디."""
+    who = None
+    try:
+        u = current_user(request) if settings.login_enabled else None
+        who = (u or {}).get("login") or (request.headers.get("x-bento-user") or "").strip() or None
+    except Exception:  # noqa: BLE001
+        who = None
+    tok = _ASKER.set(who)
+    try:
+        return await call_next(request)
+    finally:
+        _ASKER.reset(tok)
+
+
+def _steps(actions: list) -> list[dict]:
     disc = bool(settings.discord_webhook)
-    steps = [{"label": label(a, disc)[0], "sub": label(a, disc)[1], "edit": EDITABLE.get(a.type), "text": getattr(a, EDITABLE.get(a.type, "_"), None)} for a in actions]
-    token = sign({"repo": repo, "summary": summary, "item": item_id, "actions": [a.model_dump() for a in actions]}, settings.signing_key)
-    return {"summary": summary, "steps": steps, "token": token}
+    return [{"label": label(a, disc)[0], "sub": label(a, disc)[1], "edit": EDITABLE.get(a.type), "text": getattr(a, EDITABLE.get(a.type, "_"), None)} for a in actions]
+
+
+def _proposal(repo: str, summary: str, actions: list, item_id: str | None = None) -> dict:
+    by = _ASKER.get()
+    token = sign({"repo": repo, "summary": summary, "item": item_id, "by": by, "actions": [a.model_dump() for a in actions]}, settings.signing_key)
+    team = any(a.type in TEAM_WIDE for a in actions)
+    return {"summary": summary, "steps": _steps(actions), "token": token, "by": by, "team_wide": team}
 
 
 @app.get("/api/health")
@@ -183,7 +212,11 @@ def get_triage(repo: str | None = None):
         it["lazy"] = own.lazy_status(gh, it, first["actions"], rules, st.members, now) if first and rules["lazy"] else {"eligible": False}
         it["options"] = [{"label": o["label"], "recommended": o.get("recommended", False), "sub": o.get("sub", ""),
                           "proposal": _proposal(gh.repo, o["label"], o["actions"], it["id"])} for o in it["options"]]
-    return {"repo": gh.repo, "items": items, "members": st.members, "duty": own.duty(st.members, now), "rules": rules, "roles": st.roles}
+    for it in _approval_items(gh, st):  # 다른 팀원이 보낸 승인 요청: 팀장(제안자가 아니면)이 먼저, 아니면 팀 누구나
+        lead = next((m for m in st.leads if m != it["proposed_by"]), None)
+        it.update(owner=lead, age_hours=0, level=0 if lead else 2, lazy={"eligible": False})
+        items.insert(0, it)
+    return {"repo": gh.repo, "items": items, "members": st.members, "duty": own.duty(st.members, now), "rules": rules, "roles": st.roles, "leads": st.leads}
 
 
 class NoticeIn(BaseModel):
@@ -496,7 +529,7 @@ class ExecuteIn(BaseModel):
     skip: list[int] = []  # 승인 화면에서 체크를 푼 행동 번호
 
 
-def _run(repo: str, actions: list, by: str | None = None, require_member: bool = False) -> list[dict]:
+def _run(repo: str, actions: list, by: str | None = None, require_member: bool = False, proposer: str | None = None) -> list[dict]:
     """승인된 행동을 안전하게 실행한다 (사람 승인 · 반대가 없으면 실행 모두 이 길로)."""
     data = {"repo": repo}
     # 팀원 여럿이 같은 제안을 동시에 승인해도 한 번만, 그리고 제안할 때 본 상태 그대로일 때만 실행한다.
@@ -525,7 +558,7 @@ def _run(repo: str, actions: list, by: str | None = None, require_member: bool =
                 if require_member and settings.live:
                     raise HTTPException(403, {"message": f"{by}님은 {gh.repo} 팀원이 아니라서 실행할 수 없어요", "errors": []})
                 by = None  # 팀원 목록에 없는 이름은 적지 않는다
-            results = execute(actions, gh, settings, op=key[:12], by=by)
+            results = execute(actions, gh, settings, op=key[:12], by=f"{proposer}|{by}" if proposer in st.members and by and by != "lazy" else by)  # 팀원 이름만 적는다
             if any(r["ok"] for r in results):
                 _EXECUTED[key] = time.time()
                 coord.mark_done(gh, key)
@@ -556,10 +589,85 @@ def run_proposal(body: ExecuteIn, request: Request, x_bento_code: str | None = H
     if not actions:
         raise HTTPException(400, "실행할 행동을 하나 이상 골라 주세요")
     who = (x_bento_user or "").strip()
-    results = _run(data["repo"], actions, by=who or None, require_member=settings.login_enabled)
+    if any(a.type in TEAM_WIDE for a in actions) and data.get("by") and who and data["by"] == who:
+        gh, st = state_for(data["repo"])
+        if len(st.members) > 1 and who not in st.leads:
+            raise HTTPException(409, {"message": "팀 전체에 영향을 주는 변경이라, 제안한 사람이 아닌 팀원이나 팀장이 승인해야 해요", "need_second": True,
+                                      "leads": st.leads})
+    results = _run(data["repo"], actions, by=who or None, require_member=settings.login_enabled, proposer=data.get("by"))
+    if all(r["ok"] for r in results):
+        _close_request(data["repo"], body.token, who)
     for i, r in zip(ran, results):
         r["index"] = i
     return {"ok": all(r["ok"] for r in results), "results": results}
+
+
+def _tok_key(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()[:16]
+
+
+def _close_request(repo: str, token: str, who: str | None) -> None:
+    """승인 요청 이슈로 들어온 제안이 실행되면 그 이슈를 닫는다."""
+    try:
+        gh = gh_for(repo)
+        key = _tok_key(token)
+        for i in gh.open_issues():
+            if (i.get("title") or "").startswith(APPROVE_PREFIX) and f"bento-approve:{key}" in (i.get("body") or ""):
+                gh.comment(i["number"], f"승인: @{who} · Bento가 실행했어요." if who else "승인돼서 Bento가 실행했어요.")
+                gh.update_issue(i["number"], state="closed")
+    except Exception:  # noqa: BLE001 - 닫지 못해도 실행은 끝났다
+        pass
+
+
+class RequestIn(BaseModel):
+    token: str
+
+
+@app.post("/api/approval-request")
+def approval_request(body: RequestIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    """다른 팀원(또는 팀장)에게 승인 요청 보내기: GitHub에 요청 이슈를 만들고, 팀원 Bento의 승인 대기에 뜬다."""
+    _check_code(x_bento_code, request)
+    try:
+        data = verify(body.token, settings.signing_key)
+    except ProposalError as e:
+        raise HTTPException(400, str(e)) from e
+    gh, st = state_for(data["repo"])
+    actions = ActionList.validate_python(data["actions"])
+    key = _tok_key(body.token)
+    for i in st.issues:
+        if i.title.startswith(APPROVE_PREFIX) and f"bento-approve:{key}" in (i.body or ""):
+            return {"issue": i.number, "url": i.url, "already": True}
+    by = data.get("by") or "팀원"
+    lines = "\n".join(f"- {s['label']}" + (f" · {s['sub']}" if s["sub"] else "") for s in _steps(actions))
+    ask = " ".join(f"@{m}" for m in st.leads if m != data.get("by")) or "다른 팀원"
+    text = (f"**{by}** 님이 제안했어요. {ask} 님(또는 다른 팀원)이 Bento에서 확인하고 승인해 주세요.\n\n{lines}\n\n"
+            "팀 전체에 영향을 주는 변경이라, 제안한 사람이 아닌 팀원이나 팀장이 승인해야 실행돼요.\n"
+            f"<!-- bento-approve:{key} -->\n<!-- bento-token:{body.token} -->")
+    n = gh.create_issue(f"{APPROVE_PREFIX} {data.get('summary', '')[:60]}", text, [], None)
+    return {"issue": n.get("number"), "url": n.get("html_url"), "already": False}
+
+
+def _approval_items(gh, st) -> list[dict]:
+    """GitHub에 올라온 승인 요청 → 승인 대기 항목 (제안한 사람 말고 다른 팀원·팀장이 승인)."""
+    out = []
+    for i in st.issues:
+        if not i.title.startswith(APPROVE_PREFIX):
+            continue
+        try:
+            body = gh.issue(i.number).get("body") or ""
+            m = re.search(r"bento-token:([A-Za-z0-9._\-=]+)", body)
+            data = verify(m.group(1), settings.signing_key) if m else None
+        except (ProposalError, GitHubError, AttributeError):
+            data = None
+        if not data or data.get("repo") != gh.repo:
+            continue
+        actions = ActionList.validate_python(data["actions"])
+        out.append({"id": f"approve-{i.number}", "sev": "주의", "title": f"승인 요청 · {data.get('summary', '')}",
+                    "why": f"{data.get('by') or '팀원'} 님이 제안했어요 · 제안한 사람이 아닌 팀원이나 팀장이 승인해요",
+                    "evidence": [{"label": f"#{i.number} 승인 요청", "url": i.url}], "options": [],
+                    "proposal": {"summary": data.get("summary", ""), "steps": _steps(actions), "token": m.group(1), "by": data.get("by"), "team_wide": True},
+                    "proposed_by": data.get("by")})
+    return out
 
 
 class SubmitIn(BaseModel):

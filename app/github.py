@@ -96,6 +96,17 @@ class GitHub:
     def milestones(self):
         return self.api("GET", self._r("/milestones"), params={"state": "open", "per_page": 30})
 
+    def leads(self) -> list[str]:
+        """팀장: 저장소 관리자(admin). 읽을 수 없으면 저장소 주인."""
+        try:
+            people = self.api("GET", self._r("/collaborators"), params={"per_page": 100})
+            admins = [u["login"] for u in people if (u.get("permissions") or {}).get("admin")]
+            if admins:
+                return admins
+        except GitHubError:
+            pass
+        return [self.owner]
+
     def members(self) -> list[str]:
         return [u["login"] for u in self.api("GET", self._r("/assignees"), params={"per_page": 100})]
 

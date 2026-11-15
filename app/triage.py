@@ -68,7 +68,7 @@ def triage(state: RepoState, review_wait_hours: float = 24) -> list[dict]:
     from .notice import is_submit_act
     has_ms = any(i.milestone for i in state.issues)
     unassigned = [i for i in state.issues if not i.assignees and not is_suspicious(i.body) and (i.milestone or not has_ms)
-                  and not is_submit_act(re.sub(r"^\[[^\]]*\]\s*", "", i.title))]  # 예전에 만든 '[제출] 제출 폼 작성'은 나눌 일이 아니다
+                  and not is_submit_act(re.sub(r"^\[[^\]]*\]\s*", "", i.title)) and not i.title.startswith("[승인 요청]")]  # 예전에 만든 '[제출] 제출 폼 작성'은 나눌 일이 아니다
     solo = len(state.members) <= 1  # 혼자인 저장소는 다 내 일이라 나누자고 하지 않는다
     if unassigned and not solo:
         from .ownership import pick_by_role

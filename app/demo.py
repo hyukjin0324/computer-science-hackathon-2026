@@ -70,6 +70,7 @@ class DemoGitHub:
 
     # 읽기
     def members(self): return list(self.d["members"])
+    def leads(self): return list(self.d.get("leads", self.d["members"][:1]))
     def open_prs(self): return copy.deepcopy(self.d["prs"])
     def pr_detail(self, n): return {"mergeable_state": self.d["detail"].get(n, "unknown")}
     def merged_prs(self): return copy.deepcopy(self.d["merged"])

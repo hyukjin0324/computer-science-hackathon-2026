@@ -258,6 +258,9 @@ def _posted(gh, n: int, marker: str) -> bool:
 def footer(by: str | None) -> str:
     if by == "lazy":
         return "\n\n<sub>— 정한 시간 동안 반대가 없어서, 팀 규칙에 따라 Bento가 남겼어요</sub>"
+    if by and "|" in by:  # "제안한 사람|승인한 사람"
+        p, a = by.split("|", 1)
+        return f"\n\n<sub>— 제안: {p} · 승인: {a} · Bento가 남겼어요</sub>" if p and p != a else f"\n\n<sub>— {a}님 승인으로 Bento가 남겼어요</sub>"
     return f"\n\n<sub>— {by}님 승인으로 Bento가 남겼어요</sub>" if by else FOOTER
 
 
