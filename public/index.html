@@ -506,7 +506,8 @@ function logSay(who, text) {
   try { const k = "log:" + projKey(); const l = store.get(k, []); l.push({ w: who, t: String(text).slice(0, 300), at: Date.now() }); store.set(k, l.slice(-12)); } catch (e) { /* 기록 못 해도 대화는 된다 */ }
 }
 function bot(text) { logSay("b", text); return add(h("div", "bub", text)); }
-function me(text) { logSay("m", text); return add(h("div", "bub me", text)); }
+let saidByUser = null;  // 입력창에 직접 쓴 말: 첫 '내 말'은 미리 정해 둔 문장 대신 이걸 보여 준다
+function me(text) { if (saidByUser) { text = saidByUser; saidByUser = null; } logSay("m", text); return add(h("div", "bub me", text)); }
 function snack(t) { const s = h("div", "snack", t); document.querySelector(".phone").appendChild(s); setTimeout(() => s.remove(), 1800); }
 function chip(label, fn) { const b = add(h("button", "btn", label + " ›")); b.type = "button"; b.style.alignSelf = "flex-start"; b.onclick = () => { b.disabled = true; fn(); }; return b; }
 function link(label, url) { const a = h("a", "btn", label + " ↗"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; return a; }
@@ -1654,14 +1655,46 @@ function reminders() {
 }
 
 /* ---------- 자유 입력 ---------- */
+function dropDraft(d) {
+  // 준비 중인 대회 그만하기: 이 기기의 분석·대화·계획 기록만 지운다 (GitHub에는 아직 아무것도 없다)
+  drafts.splice(drafts.indexOf(d), 1); saveDrafts();
+  try { Object.keys(localStorage).filter((k) => k.includes("d:" + d.id)).forEach((k) => localStorage.removeItem(k)); } catch (e) { /* 무시 */ }
+  delete ROOMS["d:" + d.id];
+  const next = drafts[0] ? { draft: drafts[0].id } : { repo: curRepo() || H.repo };
+  roomKey = null; chat.innerHTML = ""; cur = next; useProject(next, true); intro(); resumeChat(); renderHome();
+  bot(`'${d.title}' 준비를 그만했어요. 이 기기에 있던 분석·대화 기록도 지웠어요.`);
+}
+function cancelFlow(t) {
+  // "취소해 줘", "그만할래", "안 할래": 지금 하던 일을 멈추거나, 준비 중인 대회를 그만둘지 묻는다
+  me(t);
+  const d = curDraft();
+  if (d) {
+    bot(`'${d.title}' 준비를 그만할까요? 아직 GitHub에는 아무것도 없어서, 이 기기의 분석·대화 기록만 지워요. 나중에 다시 하려면 대회 목록에서 고르면 돼요.`);
+    const row = add(h("div", "row-btns")); const y = h("button", "btn primary", "그만하기"), n2 = h("button", "btn", "계속 준비하기"); y.type = n2.type = "button";
+    y.onclick = () => { y.disabled = n2.disabled = true; dropDraft(d); }; n2.onclick = () => { y.disabled = n2.disabled = true; bot("알겠어요, 계속 준비해요."); resumeChat(); };
+    row.append(y, n2); return;
+  }
+  const applied = store.get(doneKey("apply"), null);
+  if (/신청/.test(t) && applied) {
+    bot("신청 완료 기록을 지울까요? 지우면 신청 마감 알림이 다시 와요. GitHub에는 영향이 없어요.");
+    const row = add(h("div", "row-btns")); const y = h("button", "btn primary", "신청 기록 지우기"), n2 = h("button", "btn", "그대로 두기"); y.type = n2.type = "button";
+    y.onclick = () => { y.disabled = n2.disabled = true; try { localStorage.removeItem("bento:" + doneKey("apply")); } catch (e) { /* 무시 */ } renderHome(); bot("신청 완료 기록을 지웠어요."); resumeChat(); };
+    n2.onclick = () => { y.disabled = n2.disabled = true; bot("그대로 둘게요."); }; row.append(y, n2); return;
+  }
+  bot("하던 걸 멈췄어요. 승인하지 않은 제안은 실행되지 않아요. 저장소 팀플을 그만두려면 GitHub에서 Bento 앱 설치를 해제하면 돼요.");
+  chip("다른 걸 할래요", openPicks);
+}
 $("composer").addEventListener("submit", (e) => { e.preventDefault(); const t = $("msg").value.trim(); if (!t) return $("msg").focus(); $("msg").value = ""; showTab("chat"); const n = t.replace(/\s/g, "");
-  if (/찾아|추천|나갈만한|해커톤있|공모전있/.test(n)) return discoverChat();
+  if (/취소|그만|안할래|안해|하지마|멈춰|중단|포기|지워|삭제/.test(n)) return cancelFlow(t);  // 멈추는 말이 먼저
+  saidByUser = t; setTimeout(() => { saidByUser = null; }, 0);  // 바로 이어지는 첫 '내 말'에만 쓴다
+  if (/찾아|추천|나갈만한|해커톤있|공모전있|새대회/.test(n)) return discoverChat();
   if (/늦|지연|진행|재계획|다시계획/.test(n)) return progressCheck(false);
   if (/계획|일정짜|스케줄/.test(n)) return planFlow();
+  if (/신청/.test(n) && extract) { return (me(t), applyFlow(extract)); }
   if (/공고|대회|신청|^https?:/.test(n)) return notice();
   if (/제출|점검/.test(n)) return submit();
   if (/할일|오늘|뭐부터|리뷰|담당|머지|닫|PR|이슈/i.test(n)) return today();
-  me(t); bot("지금은 공고 분석, 오늘 할 일 정리, 제출 점검을 맡을 수 있어요. 아래에서 골라 주세요."); chip("오늘 할 일 정리", today);
+  me(t); bot("무슨 뜻인지 정확히 모르겠어요. 지금은 대회 찾기, 신청, 계획 짜기, 오늘 할 일, 진행 점검, 제출 점검, 그리고 '취소'를 알아들어요. 아래에서 골라 주세요."); chip("할 수 있는 일 보기", openPicks);
 });
 $("plusBtn").onclick = () => { showTab("chat"); openPicks(); };
 $("inviteBtn").onclick = async () => { try { await navigator.clipboard.writeText(location.href); snack("팀원에게 보낼 링크를 복사했어요"); } catch (e) { snack(location.href); } };
