@@ -512,7 +512,7 @@ function saveDrafts() { store.set("drafts", drafts.slice(0, 20)); }
 function curDraft() { return cur && cur.draft ? drafts.find((d) => d.id === cur.draft) || null : null; }
 function curRepo() { return repo || H.repo; }
 function projKey() { return cur && cur.draft ? "d:" + cur.draft : "r:" + curRepo(); }
-function projName() { const d = curDraft(); return d ? d.title : (curRepo() || "").split("/")[1] || "팀플"; }
+function projName() { const d = curDraft(); return d ? d.title : (extract && extract.title) || (curRepo() || "").split("/")[1] || "팀플"; }
 function setExtract(ex) { extract = ex; const d = curDraft(); if (d) { d.extract = ex; saveDrafts(); } else store.set("extract:" + projKey(), ex); renderCal(); }
 function renderHead() {
   const d = curDraft(); const b = $("projBtn"); b.textContent = ""; const dot = h("span", "pdot"); dot.style.background = `var(${colorOf(projKey())})`; b.appendChild(dot); if (d) b.appendChild(h("small", null, "준비 중")); b.appendChild(document.createTextNode(projName() + " ▾"));
@@ -682,7 +682,7 @@ function pickRow(box, title, sub, fn) {
   b.onclick = () => { box.querySelectorAll("button").forEach((x) => (x.disabled = true)); fn(); }; box.appendChild(b); return b;
 }
 function notice(fresh) {
-  if (fresh === true) { me("새 대회 준비할래"); return noticeForm(null); }
+  if (fresh === true) return discoverChat("새 대회 준비할래");
   me("대회 공고 분석해 줘");
   const d = curDraft();
   bot("어떤 팀플의 공고인가요? 새로 나갈 대회인지, 지금 하는 팀플의 공고인지에 따라 하는 일이 달라요.");
@@ -771,15 +771,31 @@ function showExtract(r) {
   if (!ex.submit_deadline_iso) c.appendChild(h("div", "note", "! 제출 마감을 찾지 못했어요. 날짜는 나중에 정할 수 있어요."));
   scroll();
   // 새 팀플: 버튼은 한 번에 하나. 신청 → 저장소 → 앱 설치 → 연결 순서로
-  if (curDraft()) return startPath(curDraft());
+  if (curDraft()) {
+    const d = curDraft();
+    // 아직 신청 전이면 곧바로 참가 자격 확인 → 신청 페이지. 신청이 끝나면 저장소 순서 카드가 이어진다.
+    if (needsApply(ex) && !(d.applied || store.get(doneKey("apply", "d:" + d.id), null))) return applyFlow(ex);
+    return startPath(d);
+  }
   const rb = h("div", "row-btns"); const pl = h("button", "btn", "마감까지 계획 짜기"); pl.type = "button"; pl.disabled = !ex.submit_deadline_iso; rb.appendChild(pl); c.appendChild(rb);
   pl.onclick = () => { pl.disabled = true; planFlow(); };
   offerPlan(r);
 }
-function offerPlan(r) {
-  if (r.plan) { bot(`대회 일정을 GitHub에 적어 둘까요? 마감일을 만들고, 낼 것마다 할 일을 하나씩 만들어요.` + (r.linked && r.linked.length ? `\n이미 있는 할 일 ${r.linked.map((n) => "#" + n).join(", ")}은 그대로 써요.` : "")); approval(r.plan, (ok) => { if (ok) { renderCal(); chip("캘린더 보기", () => showTab("cal")); chip("오늘 할 일 정리", today); } }); }
-  else if (r.repo) { bot(`이미 GitHub에 마감일이 있어서 새로 만들지 않았어요.`); chip("캘린더 보기", () => showTab("cal")); }
+function offerPlan(r, next) {
+  const go = () => next && chip("다음: 누가 할지 나누기", next);
+  if (r.plan) { bot(`대회 일정을 GitHub에 적어 둘까요? 마감일을 만들고, 낼 것마다 할 일을 하나씩 만들어요.` + (r.linked && r.linked.length ? `\n이미 있는 할 일 ${r.linked.map((n) => "#" + n).join(", ")}은 그대로 써요.` : "")); approval(r.plan, (ok) => { if (ok) renderCal(); if (next) go(); else if (ok) { chip("캘린더 보기", () => showTab("cal")); chip("오늘 할 일 정리", today); } }); }
+  else if (r.repo) { bot(`이미 GitHub에 마감일이 있어서 새로 만들지 않았어요.`); if (next) go(); else chip("캘린더 보기", () => showTab("cal")); }
   else bot("저장소를 읽지 못해서 일정은 만들지 않았어요. Bento 앱이 그 저장소에 설치됐는지 확인해 주세요.");
+}
+async function afterTasks() {
+  // 할 일을 GitHub에 적은 다음: 누가 할지 나누고 → 마감까지 계획을 짠다
+  me("누가 할지 나눠 줘");
+  let t; try { t = await thinking("팀원별로 맡은 일을 보고 있어요", api("/triage")); } catch (e) { return fail(e); }
+  lastTriage = t;
+  const it = t.items.find((x) => x.id === "assign");
+  if (it) { bot("맡은 일이 적은 사람부터 하나씩 나눴어요. 확인하고 승인하면 GitHub에 담당자가 지정돼요."); openItem(it); }
+  else bot((t.members || []).length <= 1 ? "팀원이 한 명이라 할 일은 모두 내 일로 둘게요. 팀원이 들어오면 그때 나눠 드릴게요." : "담당자가 비어 있는 할 일이 없어요.");
+  chip("다음: 마감까지 계획 짜기", planFlow);
 }
 function repoSlug(t) { const s = t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); return /[a-z]/.test(s) ? s : `hackathon-${new Date().getFullYear()}`; }
 const PATHS = {};
@@ -870,7 +886,7 @@ async function connectTo(d, repo) {
   if (applied) store.set(doneKey("apply"), applied); else store.set("applyTodo:" + projKey(), 1);
   setExtract(r.extract);
   bot(applied ? `${repo}에 연결했어요. 신청을 마쳤으니 이제 협업 단계예요.` : `${repo}에 연결했어요. 아직 신청 전이라 신청부터 해요.`);
-  offerPlan(r);
+  offerPlan(r, applied ? afterTasks : null);
   if (!applied) chip("신청하러 가기", () => { me("신청할래"); applyFlow(r.extract); });
   renderHome();
 }
@@ -950,17 +966,28 @@ function progressCard(r, auto) {
     if (f.local) { const b = h("button", "btn", "끝났어요"); b.type = "button"; b.style.marginTop = "6px"; b.style.height = "36px"; b.onclick = () => { const t = f.id.slice(6); const pl = store.get("plan:" + key, []); pl.forEach((s2) => { if (s2.title === t) s2.done = true; }); store.set("plan:" + key, pl); b.disabled = true; b.textContent = "완료로 표시했어요"; renderCal(); }; tx.appendChild(b); }
     d.appendChild(tx); t1.appendChild(d); });
   c.appendChild(t1);
-  if (r.moves.length || r.assign.length || r.scope) {
-    const t2 = h("div", "tier yellow"); t2.appendChild(h("b", null, "다시 짠 계획 (제안)"));
+  const hasPlan = r.moves.length || r.assign.length || r.scope;
+  const showPlan = () => {
+    const t2 = h("div", "tier yellow"); t2.appendChild(h("b", null, "다시 짠 계획"));
     const fmt = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
     r.moves.forEach((m) => { const d = h("div", "crow"); d.appendChild(h("span", null, "↻")); const tx = h("div", null, m.title); tx.appendChild(h("small", null, `${fmt(m.old)} → ${fmt(m.new)}${m.repo ? " · GitHub 마일스톤" : " · 이 기기 계획"}`)); d.appendChild(tx); t2.appendChild(d); });
     r.assign.forEach((a) => { const d = h("div", "crow"); d.appendChild(h("span", null, "→")); const tx = h("div", null, `#${a.issue} ${a.title}`); tx.appendChild(h("small", null, `담당자 없음 → ${a.user} (지금 맡은 열린 이슈가 가장 적어요)`)); d.appendChild(tx); t2.appendChild(d); });
     if (r.scope) t2.appendChild(h("div", "note", "✂ " + r.scope));
     c.appendChild(t2);
-  }
+  };
   const applyLocal = () => { if (!r.moves.length) return; const pl = store.get("plan:" + key, []); r.moves.forEach((m) => pl.forEach((s2) => { if (s2.title === m.title) s2.due = m.new; })); pl.sort((a, b) => a.due.localeCompare(b.due)); store.set("plan:" + key, pl); renderCal(); };
-  if (r.proposal) { approval(r.proposal, (ok) => { if (ok) { applyLocal(); bot("다시 짠 계획을 반영했어요. 캘린더에도 바뀐 날짜가 보여요."); chip("캘린더 보기", () => showTab("cal")); } }); }
-  else if (r.moves.length) { const b = h("button", "btn primary", "이 기기 계획 바꾸기"); b.type = "button"; b.onclick = () => { b.disabled = true; applyLocal(); bot("계획을 바꿨어요. 캘린더에서 확인해 보세요."); chip("캘린더 보기", () => showTab("cal")); }; c.appendChild(b); }
+  const done = (ok) => { if (ok) { applyLocal(); bot("다시 짠 계획을 반영했어요. 캘린더와 계획표에 바뀐 날짜가 보여요."); chip("캘린더 보기", () => showTab("cal")); } };
+  if (hasPlan) {
+    // 바로 승인 화면을 띄우지 않고, 먼저 물어본다
+    c.appendChild(h("div", "note", "계획이 늦어졌어요. 남은 시간에 맞게 다시 짜 드릴까요?"));
+    const rb = h("div", "row-btns"); const yes = h("button", "btn primary", "계획 다시 짜기"); yes.type = "button"; rb.appendChild(yes); c.appendChild(rb);
+    yes.onclick = () => {
+      yes.disabled = true; me("계획 다시 짜 줘"); showPlan(); scroll();
+      if (r.proposal) approval(r.proposal, done);
+      else if (r.moves.length) { const b = h("button", "btn primary", "이 계획으로 바꾸기"); b.type = "button"; b.onclick = () => { b.disabled = true; done(true); }; c.appendChild(b); }
+    };
+    scroll(); return;
+  }
   scroll();
 }
 
@@ -1018,7 +1045,7 @@ function renderHome() {
   const soon = freshFinds().filter((y) => { const dl = dleft2(y.deadline_iso); return dl != null && dl <= 7; });
   if (top) {
     lab("늦어진 일", "crit"); body.appendChild(h("b", null, top.title)); body.appendChild(h("small", null, top.why));
-    acts().appendChild(btn(finds[0] ? (lastProgress.proposal || lastProgress.moves.length ? "다시 짠 계획 보기" : "자세히") : "해결하기", true, () => { $("homeBadge").hidden = true; showTab("chat"); if (finds[0]) { me("늦어진 일 보여 줘"); progressCard(lastProgress, true); } else openItem(top); }));
+    acts().appendChild(btn(finds[0] ? (lastProgress.proposal || lastProgress.moves.length ? "계획 다시 짜기" : "자세히") : "해결하기", true, () => { $("homeBadge").hidden = true; showTab("chat"); if (finds[0]) { me("늦어진 일 보여 줘"); progressCard(lastProgress, true); } else openItem(top); }));
   } else if (soon.length) {
     const x = soon[0]; const dl = Math.max(0, dleft2(x.deadline_iso)); heroId = x.id;
     card.classList.add("has-poster"); card.insertBefore(posterEl(x), body);
@@ -1043,7 +1070,7 @@ function renderHome() {
   // Bento가 찾아온 대회
     const finds2 = freshFinds().filter((x) => x.id !== heroId);  // 맨 위 카드에 나온 대회는 목록에서 빼기
     if (finds2.length) {
-      const fh = h("div", "sech"); fh.appendChild(h("h2", null, "새 대회")); const more = h("button", "link", `${finds2.length}개 모두 보기`); more.type = "button"; more.onclick = () => { showTab("chat"); discoverChat(); }; fh.appendChild(more); v.appendChild(fh);
+      const fh = h("div", "sech"); fh.appendChild(h("h2", null, "새 대회")); const more = h("button", "link", `${freshFinds().length}개 모두 보기`); more.type = "button"; more.onclick = () => { showTab("chat"); discoverChat(); }; fh.appendChild(more); v.appendChild(fh);
       finds2.slice(0, 3).forEach((x) => v.appendChild(foundRow(x)));
     }
   };
@@ -1086,7 +1113,7 @@ function freshFinds() {
 function dleft2(iso) { return iso ? ddays(iso) : null; }  // 날짜 기준 (14일에 16일 마감 = 2일 뒤)
 function startFound(x) {
   showTab("chat"); me(`${x.title} 신청 준비할래`);
-  bot(`${x.source_name}에서 찾은 공고예요. 링크를 불러와서 마감·제출물을 정리하고, 새 팀플로 신청부터 도와 드릴게요.`);
+  bot(`${x.source_name}에서 찾은 공고예요. 공고를 읽고 마감과 참가 자격을 바로 확인해 드릴게요.`);
   // 화면을 스크립트로 그리는 사이트는 글을 거의 못 읽는다. 그때는 Bento가 이미 아는 정보로 채운다.
   const fallback = [x.title, x.host ? `주최: ${x.host}` : "", x.deadline_text ? `접수: ~ ${x.deadline_text}` : "", x.tags && x.tags.length ? `분류: ${x.tags.join(", ")}` : ""].filter(Boolean).join("\n");
   noticeForm(null, null, { url: x.url, autoLoad: true, noAi: !x.ai_ok, foundId: x.id, title: x.title, fallback });
@@ -1108,14 +1135,19 @@ function foundRow(x) {
   const tx = h("span"); tx.appendChild(h("b", null, x.title)); tx.appendChild(h("small", null, [x.source_name.replace(/ \(.*\)$/, ""), x.why.find((w) => !w.startsWith("마감"))].filter(Boolean).join(" · ")));
   b.appendChild(tx); b.appendChild(h("span", "chev", "›")); b.onclick = () => startFound(x); return b;
 }
-async function discoverChat() {
-  me("나갈 만한 대회 찾아 줘");
+async function discoverChat(said) {
+  me(typeof said === "string" ? said : "나갈 만한 대회 찾아 줘");
   const r = await working("대회를 찾고 있어요", ["학과 공지·행사 게시판 읽기", "Dev-Event 해커톤 목록 읽기", "마감·관심 분야로 고르기"], loadDiscover(true).then((x) => { if (!x) throw new Error("대회 목록을 불러오지 못했어요"); return x; })).catch((e) => { fail(e); return null; });
   if (!r) return;
   const list = freshFinds();
-  if (!list.length) { bot("지금은 새로 나갈 만한 대회가 없어요. 매일 다시 찾아볼게요."); return; }
-  bot(`마감이 지나지 않은 대회 ${list.length}개를 찾았어요. 관심 분야(${interests().join(", ")})와 마감이 가까운 순서예요.`);
-  const box = add(h("div", "big")); list.slice(0, 8).forEach((x) => box.appendChild(foundRow(x)));
+  const byLink = () => { me("공고 링크로 추가할래"); noticeForm(null); };
+  if (!list.length) { bot("지금은 새로 나갈 만한 대회가 없어요. 매일 다시 찾아볼게요. 나갈 대회가 따로 있으면 공고 링크로 추가할 수 있어요."); chip("공고 링크로 추가", byLink); return; }
+  const FIRST = 8;
+  bot(list.length > FIRST ? `마감이 지나지 않은 대회 ${list.length}개를 찾았어요. 관심 분야(${interests().join(", ")})와 마감이 가까운 ${FIRST}개를 먼저 보여 드려요. 나갈 대회를 눌러 주세요.`
+    : `마감이 지나지 않은 대회 ${list.length}개를 찾았어요. 나갈 대회를 눌러 주세요.`);
+  const box = add(h("div", "big")); list.slice(0, FIRST).forEach((x) => box.appendChild(foundRow(x)));
+  if (list.length > FIRST) { const more = h("button", "btn", `나머지 ${list.length - FIRST}개 더 보기`); more.type = "button"; more.onclick = () => { more.remove(); list.slice(FIRST).forEach((x) => box.appendChild(foundRow(x))); }; box.appendChild(more); }
+  const own = h("button", "link", "목록에 없는 대회예요 · 공고 링크로 추가"); own.type = "button"; own.style.alignSelf = "flex-start"; own.onclick = byLink; add(own);
   const err = Object.keys(r.errors || {}); if (err.length) bot(`일부 출처를 읽지 못했어요: ${err.join(", ")}. 다음에 다시 시도할게요.`);
 }
 
