@@ -163,6 +163,7 @@ textarea { width: 100%; min-height: 80px; resize: vertical; border: 1px solid va
 .tier.yellow { background: var(--warn-soft); } .tier.yellow > b { color: var(--warn); }
 .tier.green { background: var(--ok-soft); } .tier.green summary { color: var(--ok); font-weight: 700; font-size: 13.5px; cursor: pointer; }
 .elig { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
+.elig.flat { border-top: 0; padding-top: 0; }
 .elig .qs { display: flex; flex-direction: column; gap: 8px; }
 .elig .q { display: flex; flex-direction: column; gap: 6px; }
 .elig .opts2 { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -811,7 +812,7 @@ function startPath(d) {
       if (state === "now" && !frozen) {
         const acts = h("div", "path-acts");
         if (st.k === "apply") {
-          body.appendChild(h("small", null, ex.apply_deadline_iso ? `신청 마감 ${dtxt(ex.apply_deadline_iso)} · 조건 확인과 폼 채우기는 Bento가 도와요` : "조건 확인과 폼 채우기는 Bento가 도와요"));
+          body.appendChild(h("small", null, ex.apply_deadline_iso ? `신청 마감 ${dtxt(ex.apply_deadline_iso)} · 참가 자격은 Bento가 확인하고, 신청은 직접 해요` : "참가 자격은 Bento가 확인하고, 신청은 직접 해요"));
           const b = h("button", "btn primary", "신청하기"); b.type = "button"; b.onclick = () => { b.disabled = true; me("신청할래"); applyFlow(ex); }; acts.appendChild(b);
         } else if (st.k === "repo") {
           body.appendChild(h("small", null, "GitHub에서 빈 저장소를 하나 만들어 주세요. 이름은 미리 채워 둘게요."));
@@ -1243,21 +1244,20 @@ async function submit() {
 
 /* ---------- 신청·제출 공통: 정보 · 확인 카드 · 폼 · 증거 ---------- */
 const INFO_FIELDS = {
-  apply: [["team", "팀명"], ["members", "팀원 이름 (쉼표로 구분)"], ["idea", "아이디어 한 줄"]],
   submit: [["team", "팀명"], ["idea", "한 줄 소개"], ["deploy", "배포 링크 (비우면 README에서 찾아요)"], ["video", "시연 영상 링크"], ["slides", "발표 자료 링크"]],
 };
 function info() { return store.get("info:" + projKey(), {}); }
 function noticeUrl() { const d = curDraft(); return (d && d.url) || store.get("noticeUrl:" + projKey(), null); }
-function eligBox(card, membersInput, saved) {
+function eligBox(card, membersInput, saved, title) {
   // 이 공고에 필요한 질문만 묻고, 답할 때마다 조건별 판정을 바로 보여 준다 (규칙 · AI 토큰 0)
-  const box = h("div", "elig"); box.appendChild(h("b", null, "참가 자격 확인")); box.appendChild(h("div", "note", "이 공고에 필요한 것만 물어봐요. 답을 바꾸면 판정이 바로 바뀌어요."));
+  const box = h("div", "elig" + (title ? " flat" : "")); box.appendChild(h("b", null, title || "참가 자격 확인")); box.appendChild(h("div", "note", "이 공고에 필요한 것만 물어봐요. 답을 바꾸면 판정이 바로 바뀌어요."));
   const qs = h("div", "qs"), verdict = h("div", "verdict"); box.appendChild(qs); box.appendChild(verdict); card.appendChild(box);
-  const ans = { ...saved }; let locked = false, timer = 0;
+  const ans = { ...saved }; let locked = false, timer = 0, lastFails = 0;
   const memberCount = () => (membersInput ? membersInput.value.split(",").map((x) => x.trim()).filter(Boolean).length : 0);
   const refresh = async () => {
     let r; try { r = await api("/eligibility", { method: "POST", body: JSON.stringify({ extract, answers: ans, source_url: noticeUrl() }) }); } catch (e) { verdict.textContent = "판정을 불러오지 못했어요"; return; }
     if (!qs.childNodes.length) drawQs(r.questions);
-    verdict.innerHTML = ""; const bad = r.rows.filter((x) => x.status === "fail").length;
+    verdict.innerHTML = ""; const bad = r.rows.filter((x) => x.status === "fail").length; lastFails = bad;
     verdict.appendChild(h("b", null, !r.rows.length ? "이 공고는 따로 확인할 자격 조건이 없어요" : bad ? `${bad}개 조건을 아직 못 채웠어요` : r.rows.some((x) => x.status === "warn") ? "남은 확인이 있어요" : "모든 조건을 채웠어요"));
     r.rows.forEach((x) => verdict.appendChild(crow(x)));
     if (!r.questions.length && !r.rows.length) box.hidden = true;
@@ -1281,7 +1281,7 @@ function eligBox(card, membersInput, saved) {
     qs.appendChild(w);
   });
   refresh();
-  return { answers: () => ({ ...ans }), lock: () => { locked = true; box.querySelectorAll("button").forEach((b) => (b.disabled = true)); } };
+  return { answers: () => ({ ...ans }), fails: () => lastFails, lock: () => { locked = true; box.querySelectorAll("button").forEach((b) => (b.disabled = true)); } };
 }
 function prefillInfo() {
   // 이미 아는 값으로 채워 두기: 팀명 = 저장소 이름, 팀원 = 저장소 팀원 (없으면 로그인한 나)
@@ -1295,7 +1295,7 @@ function infoCard(kind, next) {
   c.appendChild(h("div", "note", "이 기기에만 저장돼요. 학번·연락처 같은 개인정보는 넣지 마세요. 폼에서 직접 입력하게 남겨 둬요."));
   const cur0 = { ...prefillInfo(), ...Object.fromEntries(Object.entries(info()).filter(([, x]) => x)) }; const inputs = {};
   INFO_FIELDS[kind].forEach(([k, lab]) => { const id = `inf${k}${Date.now()}`; const l = h("label", "lab", lab); l.htmlFor = id; const i = h("input", "finput"); i.id = id; i.value = cur0[k] || ""; if (["deploy", "video", "slides"].includes(k)) { i.type = "url"; i.placeholder = "https://"; } c.appendChild(l); c.appendChild(i); inputs[k] = i; });
-  const elig = kind === "apply" && extract ? eligBox(c, inputs.members, cur0.elig || {}) : null;
+  const elig = null;
   const go = h("button", "btn primary", kind === "apply" ? "신청 전 확인하기" : "제출 전 점검하기"); go.type = "button"; c.appendChild(go);
   go.onclick = () => { const v = { ...info() }; Object.entries(inputs).forEach(([k, i]) => (v[k] = i.value.trim())); if (elig) { v.elig = elig.answers(); elig.lock(); } store.set("info:" + projKey(), v); go.disabled = true; Object.values(inputs).forEach((i) => (i.disabled = true)); next(v); };
   scroll(); return c;
@@ -1325,8 +1325,8 @@ const JOURNEY = {};
 function journey(kind) {
   // 신청·제출을 한 장의 단계 카드로: 지금 어디인지, 누가 하는 일인지
   const steps = kind === "apply"
-    ? [["팀 정보", "Bento가 채워요"], ["조건 확인", "Bento"], ["폼 열고 신청", "직접"], ["완료 기록", "직접"]]
-    : [["제출 정보", "Bento가 채워요"], ["제출물 점검", "Bento"], ["팀원 확인", "팀원"], ["폼 열고 제출", "직접"], ["완료 기록", "직접"]];
+    ? [["자격 확인", "Bento"], ["신청 페이지에서 신청", "직접"], ["신청했어요", "직접"]]
+    : [["제출 정보", "Bento가 채워요"], ["제출물 점검", "Bento"], ["팀원 확인", "팀원"], ["직접 제출", "직접"], ["완료 기록", "직접"]];
   document.querySelectorAll(".journey.pin").forEach((x) => x.classList.remove("pin"));
   const ex = extract || {}; const dd = ddays(kind === "apply" ? ex.apply_deadline_iso : ex.submit_deadline_iso);
   const c = add(h("div", "journey pin")); c.setAttribute("role", "group"); c.setAttribute("aria-label", kind === "apply" ? "신청 단계" : "제출 단계");
@@ -1336,7 +1336,7 @@ function journey(kind) {
   const set = (n) => {
     lis.forEach((li, i) => { li.className = i < n ? "done" : i === n ? "now" : ""; li.firstChild.textContent = i < n ? "✓" : String(i + 1); if (i === n) li.setAttribute("aria-current", "step"); else li.removeAttribute("aria-current"); });
     const end = n >= steps.length; st.className = "tag" + (end ? " done" : ""); st.textContent = end ? "완료" : `${n + 1}/${steps.length}`;
-    note.textContent = end ? `${kind === "apply" ? "신청" : "제출"}을 마쳤어요.${kind === "apply" ? " 이제 협업 단계예요." : ""}` : `지금: ${steps[n][0]} · ${steps[n][1] === "직접" ? "이 단계는 직접 해 주세요" : steps[n][1] === "팀원" ? "다른 팀원이 확인해요" : "Bento가 해요"}${dd != null && dd >= 0 ? ` · 마감 D-${dd}` : ""}`;
+    note.textContent = end ? `${kind === "apply" ? "신청" : "제출"}을 마쳤어요.${kind === "apply" ? (curDraft() ? " 다음은 팀 저장소예요." : " 이제 협업 단계예요.") : ""}` : `지금: ${steps[n][0]} · ${steps[n][1] === "직접" ? "이 단계는 직접 해 주세요" : steps[n][1] === "팀원" ? "다른 팀원이 확인해요" : "Bento가 해요"}${dd != null && dd >= 0 ? ` · 마감 D-${dd}` : ""}`;
     if (end) c.classList.remove("pin");
   };
   set(0); JOURNEY[kind] = { set, n: steps.length }; return JOURNEY[kind];
@@ -1353,7 +1353,7 @@ async function runSubmitCheck() {
   // 1) 다른 팀원 확인
   const s1 = stage(cc.card, "3단계 · 다른 팀원 한 명에게 확인 받기", false);
   const conf = r.confirm; const fresh = conf && conf.lock && r.head.sha.startsWith(conf.lock) && !conf.closed;
-  const s2 = stage(cc.card, "4단계 · 폼 열고 직접 제출하기", false);
+  const s2 = stage(cc.card, "4단계 · 제출 페이지에서 직접 제출", false);
   const s3 = stage(cc.card, "5단계 · 제출 완료 기록하기", false);
   const open2 = () => { s2.setAttribute("aria-disabled", "false"); s3.setAttribute("aria-disabled", "false"); J.set(3); };
   if (fresh) {
@@ -1370,67 +1370,55 @@ async function runSubmitCheck() {
     ask.onclick = async () => { ask.disabled = true; let p; try { p = await api("/submit/confirm", { method: "POST", body: JSON.stringify({ repo: curRepo(), title: extract.title, head_sha: r.head.sha, checklist: cc.checked() }) }); } catch (e) { ask.disabled = false; return fail(e); } bot("팀원 확인 요청을 보낼게요. 다른 팀원이 GitHub 이슈에 👍를 누르면 확인된 거예요."); approval(p.proposal, (ok) => { if (ok) chip("확인 상태 보기", runSubmitCheck); else ask.disabled = false; }); };
     skip.onclick = () => { skip.disabled = true; if (!solo) bot("다른 팀원 확인 없이 진행해요. 제출은 되돌리기 어려우니 한 번 더 살펴봐 주세요."); open2(); };
   }
-  formStage(s2, "submit", { ...v, repo: `https://github.com/${curRepo()}`, deploy: v.deploy || r.deploy || "" });
+  s2.appendChild(h("div", "note", "제출 페이지에서 직접 제출해 주세요. 저장소 주소는 아래에서 복사할 수 있어요."));
+  const repoUrl = `https://github.com/${curRepo()}`; const fr = h("div", "frow"); fr.appendChild(h("span", null, repoUrl)); fr.appendChild(copyBtn("복사", () => repoUrl)); s2.appendChild(fr);
+  if (noticeUrl()) s2.appendChild(link("공고·제출 페이지 열기", noticeUrl()));
   proofStage(s3, "submit", fresh ? conf.issue : null);
   scroll();
 }
 
 async function applyFlow(ex) {
+  // 신청은 '자격이 되는지'와 '마감을 놓치지 않게'까지만 돕는다. 폼은 사람이 신청 페이지에서 직접 쓴다.
   ex = ex || extract; if (!ex) { bot("먼저 대회 공고를 분석해 주세요."); chip("대회 공고 분석하기", notice); return; }
   if (store.get(doneKey("apply"), null)) { bot("이미 신청 완료로 기록돼 있어요."); return; }
   const J = journey("apply");
-  bot("Bento가 조건 확인과 폼 채우기까지 해 둘게요. 실명·학번, 개인정보 동의, 신청 버튼은 직접 해 주세요.");
-  infoCard("apply", async (v) => {
-    J.set(1);
-    const fields = ex.apply_fields.length ? ex.apply_fields : ["팀명", "팀원", "아이디어 한 줄"];
-    docs.unshift({ title: `신청서 초안 · ${ex.title}`, body: fields.map((f) => `${f}: ${/팀명/.test(f) ? v.team || "" : /팀원/.test(f) ? v.members || "" : /아이디어|소개/.test(f) ? v.idea || "" : ""}`).join("\n") + `\n\n신청 마감: ${ex.apply_deadline || "공고 확인 필요"}`, at: Date.now() }); saveLists();
-    let r; try { r = await thinking("신청 조건을 확인하고 있어요", api("/apply-check", { method: "POST", body: JSON.stringify({ extract: ex, members: (v.members || "").split(",").map((x) => x.trim()).filter(Boolean), answers: v.elig || {}, source_url: noticeUrl() }) })); } catch (e) { return fail(e); }
-    const cc = checkCard(`2단계 · 신청 조건 확인`, r, (ok) => { s1.setAttribute("aria-disabled", String(!ok)); s2.setAttribute("aria-disabled", String(!ok)); if (ok) J.set(2); });
-    const s1 = stage(cc.card, "3단계 · 폼 열고 직접 신청하기", false);
-    const s2 = stage(cc.card, "4단계 · 신청 완료 기록하기", false);
-    formStage(s1, "apply", { ...v, repo: curDraft() ? "" : `https://github.com/${curRepo()}` });
-    proofStage(s2, "apply", null);
-    bot("신청서 초안은 보관함에도 저장해 뒀어요."); scroll();
-  });
+  bot("참가 자격이 되는지 먼저 볼게요. 신청은 신청 페이지에서 직접 해 주세요.");
+  const c = add(h("div", "task"));
+  const cnt = (prefillInfo().members || "").split(",").map((x) => x.trim()).filter(Boolean).length;
+  const el = eligBox(c, null, { team: cnt || "", ...((info().elig) || {}) }, "1단계 · 참가 자격 확인");
+  const go = h("button", "btn primary", "확인했어요"); go.type = "button"; c.appendChild(go);
+  go.onclick = async () => {
+    go.disabled = true; const ans = el.answers(); el.lock(); store.set("info:" + projKey(), { ...info(), elig: ans });
+    const fails = el.fails(); if (fails) bot(`못 채운 조건이 ${fails}개 있어요. 그대로 신청하기 전에 주최 측에 한 번 확인해 보세요.`);
+    J.set(1); openStep();
+  };
+  const openStep = () => {
+    const c2 = add(h("div", "task")); c2.appendChild(h("b", null, "2단계 · 신청 페이지에서 직접 신청"));
+    c2.appendChild(h("div", "note", (ex.apply_deadline ? `신청 마감 ${ex.apply_deadline}${ex.apply_deadline_iso ? ` (${dtxt(ex.apply_deadline_iso)})` : ""}. ` : "") + "실명·학번과 개인정보 동의는 신청 페이지에서 직접 입력해요."));
+    const url = noticeUrl();
+    if (url) { const a = link("신청 페이지 열기", url); a.classList.add("primary"); a.addEventListener("click", () => J.set(2)); c2.appendChild(a); }
+    else c2.appendChild(h("div", "note", "공고에 나온 신청 방법대로 신청해 주세요."));
+    const done = h("button", "btn" + (url ? "" : " primary"), "신청했어요"); done.type = "button"; c2.appendChild(done);
+    c2.appendChild(h("div", "note", "누르면 신청 마감 알림을 멈추고 다음 단계로 넘어가요."));
+    done.onclick = () => { done.disabled = true; markDone("apply", ""); };
+    scroll();
+  };
 }
 
-function formStage(box, kind, values) {
-  const id = `form${Date.now()}`; const l = h("label", "lab", `${kind === "apply" ? "신청" : "제출"} 폼 주소 (구글 폼이면 값을 미리 채워 드려요)`); l.htmlFor = id;
-  const row = h("div", "urlrow"); const u = h("input"); u.id = id; u.type = "url"; u.placeholder = "https://forms.gle/…"; u.value = store.get(`form:${projKey()}:${kind}`, ""); const b = h("button", "btn", "폼 읽기"); b.type = "button"; row.appendChild(u); row.appendChild(b);
-  const out = h("div", "big"); box.appendChild(l); box.appendChild(row); box.appendChild(out);
-  const copyList = (note) => { out.innerHTML = ""; out.appendChild(h("div", "note", note)); Object.entries(values).filter(([, x]) => x).forEach(([k, x]) => { const fr = h("div", "frow"); fr.appendChild(h("span", null, `${{ team: "팀명", members: "팀원", idea: "소개", repo: "저장소", deploy: "배포 링크", video: "시연 영상", slides: "발표 자료" }[k] || k}: ${x}`)); fr.appendChild(copyBtn("복사", () => x)); out.appendChild(fr); }); if (u.value) out.appendChild(link("폼 열기", u.value)); out.appendChild(h("div", "note", "제출 버튼은 직접 눌러 주세요.")); };
-  const read = async () => {
-    const url = u.value.trim(); if (!/^https?:\/\//.test(url)) return copyList("폼 주소가 없으면 값을 복사해서 넣어 주세요.");
-    store.set(`form:${projKey()}:${kind}`, url); b.disabled = true;
-    try {
-      const r = await api("/form/inspect", { method: "POST", body: JSON.stringify({ url, values }) });
-      if (r.kind !== "google") return copyList(r.note);
-      out.innerHTML = "";
-      const mk = () => r.base + "?" + new URLSearchParams([["usp", "pp_url"], ...r.rows.filter((x) => x.who === "bento" && x.value).map((x) => [`entry.${x.entry}`, x.value])]).toString();
-      const openA = link("값이 채워진 폼 열기", mk());
-      r.rows.forEach((x) => {
-        const fr = h("div", "frow"); const t = h("span", null, x.title + (x.required ? " *" : "")); fr.appendChild(t); fr.appendChild(h("span", x.who === "bento" ? "who-b" : "who-h", x.who === "bento" ? "Bento" : "직접"));
-        if (x.who === "bento") { const i = h("input", "finput"); i.value = x.value; i.setAttribute("aria-label", x.title); i.style.gridColumn = "1 / -1"; i.oninput = () => { x.value = i.value; openA.href = mk(); }; fr.appendChild(i); }
-        fr.appendChild(h("small", null, x.why)); out.appendChild(fr);
-      });
-      out.appendChild(openA); out.appendChild(h("div", "note", `Bento가 ${r.rows.filter((x) => x.who === "bento").length}칸을 채웠어요. 열린 폼이 실제로 제출될 화면이에요. 직접 칸을 채우고 확인한 뒤 제출 버튼을 눌러 주세요.`));
-    } catch (e) { if (e.status === 401) askCode(read); else copyList(e.message + " 대신 값을 복사해서 넣어 주세요."); }
-    finally { b.disabled = false; scroll(); }
-  };
-  b.onclick = read; if (u.value) setTimeout(read);
+function markDone(kind, proof) {
+  store.set(doneKey(kind), { at: Date.now(), proof }); const d = curDraft(); if (d && kind === "apply") { d.applied = Date.now(); saveDrafts(); } if (kind === "apply") { try { localStorage.removeItem("bento:applyTodo:" + projKey()); } catch (e) { /* 무시 */ } if (d) setTimeout(() => { bot("신청을 마쳤어요. 이제 팀 저장소를 준비해요."); startPath(d); }, 300); } const J = JOURNEY[kind]; if (J) J.set(J.n); renderCal(); renderHome(); bot(`${kind === "apply" ? "신청" : "제출"} 완료로 기록했어요. 마감 알림을 멈출게요. 수고하셨어요!`);
 }
 function proofStage(box, kind, issue) {
   const done = store.get(doneKey(kind), null);
   if (done) { box.appendChild(h("div", "note", `✓ ${new Date(done.at).toLocaleString("ko-KR")}에 ${kind === "apply" ? "신청" : "제출"} 완료로 기록했어요 · ${done.proof}`)); return; }
-  const id = `proof${Date.now()}`; const l = h("label", "lab", "접수 번호나 확인 메일 문구"); l.htmlFor = id; const i = h("input", "finput"); i.id = id; i.placeholder = "예: 접수번호 HK-0042 / '응답이 기록되었습니다'";
+  const id = `proof${Date.now()}`; const l = h("label", "lab", "접수 번호나 확인 메일 문구 (선택)"); l.htmlFor = id; const i = h("input", "finput"); i.id = id; i.placeholder = "예: 접수번호 HK-0042 / '응답이 기록되었습니다'";
   const b = h("button", "btn primary", `${kind === "apply" ? "신청" : "제출"} 완료로 기록`); b.type = "button"; box.appendChild(l); box.appendChild(i); box.appendChild(b);
   box.appendChild(h("div", "note", issue ? "기록은 GitHub에 남아서 팀원 모두 볼 수 있어요." : "기록하면 마감 알림을 멈춰요."));
-  const mark = () => { store.set(doneKey(kind), { at: Date.now(), proof: i.value.trim() }); const d = curDraft(); if (d && kind === "apply") { d.applied = Date.now(); saveDrafts(); } if (kind === "apply") { try { localStorage.removeItem("bento:applyTodo:" + projKey()); } catch (e) { /* 무시 */ } if (d) setTimeout(() => { bot("신청을 마쳤어요. 이제 팀 저장소를 준비해요."); startPath(d); }, 300); } const J = JOURNEY[kind]; if (J) J.set(J.n); renderCal(); renderHome(); bot(`${kind === "apply" ? "신청" : "제출"} 완료로 기록했어요. 마감 알림을 멈출게요. 수고하셨어요!`); };
+  const mark = () => markDone(kind, i.value.trim());
   b.onclick = async () => {
-    if (i.value.trim().length < 2) return i.focus();
     b.disabled = i.disabled = true;
     if (!issue) return mark();
-    let p; try { p = await api("/submit/proof", { method: "POST", body: JSON.stringify({ repo: curRepo(), issue, proof: i.value.trim() }) }); } catch (e) { b.disabled = i.disabled = false; return fail(e); }
+    let p; try { p = await api("/submit/proof", { method: "POST", body: JSON.stringify({ repo: curRepo(), issue, proof: i.value.trim() || "제출했어요" }) }); } catch (e) { b.disabled = i.disabled = false; return fail(e); }
     approval(p.proposal, (ok) => { if (ok) mark(); else b.disabled = i.disabled = false; });
   };
 }
@@ -1552,7 +1540,7 @@ function renderCal() {
     const acts = h("div", "acts2");
     const act = (label, s2, fn) => { const t = h("button", "bigrow"); t.type = "button"; const tx = h("span"); tx.appendChild(h("b", null, label)); tx.appendChild(h("small", null, s2)); t.appendChild(tx); t.appendChild(h("span", "chev", "›")); t.onclick = inProject(e.p, fn); acts.appendChild(t); };
     if (e.act === "submit") act("제출 전 점검하기", "제출물과 저장소를 대조해요", submit);
-    if (e.act === "apply") act("신청 확인 시작", "조건 확인 · 미리 채운 폼 · 신청 증거", () => { me("신청 확인할래"); applyFlow(e.p.extract); });
+    if (e.act === "apply") act("신청 확인 시작", "참가 자격 확인 · 신청 페이지 열기", () => { me("신청 확인할래"); applyFlow(e.p.extract); });
     act("오늘 할 일 보기", `${e.p.name}에서 급한 순서대로 정리해요`, today);
     if (e.kind === "step") act("진행 점검·다시 계획", "이 단계가 늦었는지 보고 다시 짜요", () => progressCheck(false));
     b.onclick = () => box.classList.toggle("open");
@@ -1665,7 +1653,7 @@ const ME_PAGES = {
   const c5 = h("div", "card"); const cl = h("button", "btn", "이 기기 기록 지우기"); cl.type = "button"; cl.onclick = () => { if (cl.dataset.sure) { try { Object.keys(localStorage).filter((k) => /^bento:(extract|plan|colors|calHide|progressSeen|info|form|done)/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch (e) { /* 무시 */ } ["tasks", "docs", "drafts"].forEach((k) => store.set(k, [])); store.set("code", ""); tasks.length = 0; docs.length = 0; drafts.length = 0; extract = null; if (cur && cur.draft) { cur = { repo: curRepo() }; store.set("cur", cur); } renderHead(); renderBox(); renderCal(); renderMe(); snack("이 기기 기록을 지웠어요"); } else { cl.dataset.sure = "1"; cl.textContent = "한 번 더 누르면 지워요"; } }; c5.appendChild(cl); v.appendChild(c5);  }],
   help: ["도움말", (v) => {
     const c = h("div", "card"); const p2 = h("div", "note"); p2.style.whiteSpace = "pre-line"; p2.style.fontSize = "14px"; p2.style.color = "var(--ink)";
-    p2.textContent = "1. 홈에서 Bento가 찾아온 대회를 고르거나, 대화에서 공고 링크를 붙여넣어요.\n2. 신청 준비 → 조건 확인 → 미리 채운 폼으로 직접 신청해요.\n3. 팀 저장소를 만들고 Bento 앱을 설치하면 협업을 챙겨요.\n4. Bento가 제안한 일은 승인해야 실행돼요. 머지·푸시·제출은 직접 해요.";
+    p2.textContent = "1. 홈에서 Bento가 찾아온 대회를 고르거나, 대화에서 공고 링크를 붙여넣어요.\n2. 참가 자격을 확인하고, 신청 페이지에서 직접 신청해요.\n3. 팀 저장소를 만들고 Bento 앱을 설치하면 협업을 챙겨요.\n4. Bento가 제안한 일은 승인해야 실행돼요. 머지·푸시·제출은 직접 해요.";
     c.appendChild(p2); v.appendChild(c);
   }],
 };
