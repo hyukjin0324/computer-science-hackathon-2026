@@ -80,6 +80,12 @@ svg { display: block; }
 .view > * { flex-shrink: 0; }
 .view[hidden] { display: none; }
 h1 { margin: 6px 0 8px; font-size: 26px; font-weight: 800; letter-spacing: -.6px; text-wrap: balance; }
+details.history { display: flex; flex-direction: column; gap: 8px; opacity: .55; }
+details.history[open] { opacity: .75; }
+details.history summary { cursor: pointer; text-align: center; font-size: 12.5px; color: var(--muted); min-height: 32px; display: flex; align-items: center; justify-content: center; list-style: none; }
+details.history summary::-webkit-details-marker { display: none; }
+details.history > .bub { margin-top: 8px; }
+.task.resume { border: 1.5px solid var(--ink); }
 .stamp { text-align: center; font-size: 12px; color: var(--muted); margin: 2px 0 4px; }
 .bub { background: var(--surface); border: 1px solid var(--bub-line); border-radius: 20px; padding: 12px 16px; max-width: 92%; white-space: pre-wrap; overflow-wrap: anywhere; align-self: flex-start; }
 .bub ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; white-space: normal; }
@@ -490,8 +496,14 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 function h(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 function scroll() { requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight; }); }
 function add(el) { chat.appendChild(el); scroll(); return el; }
-function bot(text) { return add(h("div", "bub", text)); }
-function me(text) { return add(h("div", "bub me", text)); }
+// 대화 기록: 팀플마다 최근 말 12줄만 이 기기에 남긴다. 다시 열면 흐리게 보여 줘서 이어지는 느낌을 준다
+let logOff = false;
+function logSay(who, text) {
+  if (logOff || !text || typeof projKey !== "function") return;
+  try { const k = "log:" + projKey(); const l = store.get(k, []); l.push({ w: who, t: String(text).slice(0, 300), at: Date.now() }); store.set(k, l.slice(-12)); } catch (e) { /* 기록 못 해도 대화는 된다 */ }
+}
+function bot(text) { logSay("b", text); return add(h("div", "bub", text)); }
+function me(text) { logSay("m", text); return add(h("div", "bub me", text)); }
 function snack(t) { const s = h("div", "snack", t); document.querySelector(".phone").appendChild(s); setTimeout(() => s.remove(), 1800); }
 function chip(label, fn) { const b = add(h("button", "btn", label + " ›")); b.type = "button"; b.style.alignSelf = "flex-start"; b.onclick = () => { b.disabled = true; fn(); }; return b; }
 function link(label, url) { const a = h("a", "btn", label + " ↗"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; return a; }
@@ -528,6 +540,7 @@ function useProject(next, quiet) {
   extract = d ? d.extract || null : store.get("extract:" + projKey(), null);
   calState = null; lastTriage = null; lastProgress = null; renderHead(); renderCal(); renderMe(); renderHome();
   if (!d) { loadCalState(); if (!extract) loadSaved(); }
+  if (quiet && $("resume")) resumeChat();
   if (!quiet) { showTab("chat"); add(h("div", "stamp", `${projName()}(으)로 바꿨어요`)); bot(d ? `'${d.title}' 준비 중이에요. 아직 저장소가 없는 새 팀플이라 신청부터 도와 드려요.` : `${curRepo()} 팀플을 보고 있어요.`); }
 }
 const tasks = store.get("tasks", []);
@@ -568,7 +581,8 @@ function fail(e) { bot(e.message + (e.errors ? "\n· " + e.errors.join("\n· ") 
 function intro() {
   const d = new Date();
   add(h("div", "stamp", `${d.getMonth() + 1}월 ${d.getDate()}일 ${d.getHours() < 12 ? "오전" : "오후"} ${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}`));
-  bot("팀플을 대신 챙겨 드려요. 아래에서 고르거나 편하게 말씀해 주세요.");
+  add(h("div", null)).id = "history";  // 지난 대화 (팀플을 불러온 뒤 채운다)
+  add(h("div", "bub", "팀플을 대신 챙겨 드려요. 아래에서 고르거나 편하게 말씀해 주세요."));
   const p = h("div", "panel"); const ph = h("div", "panel-h"); ph.appendChild(h("b", null, "바로 맡겨 보기")); const pp = h("button", "more"); pp.type = "button"; pp.id = "panelProj"; pp.onclick = openProjects; ph.appendChild(pp); p.appendChild(ph);
   const picks = h("div", "picks");
   [["🏆", "대회 공고 분석하기", "마감·제출물 정리 → 깃허브 일정", notice], ["🗂️", "오늘 팀플 할 일 정리", "급한 순서대로 보여 드려요", today], ["🗓️", "마감까지 계획 짜기", "할 일을 날짜별로 나눠 캘린더에 넣어요", planFlow], ["🔎", "진행 점검·다시 계획", "늦어진 단계를 찾아 남은 시간에 맞게 다시 짜요", () => progressCheck(false)], ["📮", "제출 전 점검하기", "제출물과 저장소를 대조해요", submit]].forEach(([em, t, s, fn]) => {
@@ -576,6 +590,7 @@ function intro() {
     x.onclick = () => { showTab("chat"); fn(); }; picks.appendChild(x);
   });
   p.appendChild(picks); add(p);
+  add(h("div", null)).id = "resume";  // 이어서 하기: 대화창을 열면 맨 아래에 보이게
 }
 
 /* ---------- 승인 카드 ---------- */
@@ -952,7 +967,7 @@ async function progressCheck(auto) {
   const req = api("/progress", { method: "POST", body: JSON.stringify({ repo: curRepo(), plan, deadline_iso: extract && extract.submit_deadline_iso, plan_start_iso: store.get("planAt:" + key, null) }) });
   try { r = await (auto ? req : working("진행을 점검하고 있어요", ["관찰 · 저장소와 계획 읽기", "판단 · 늦은 단계 찾기", "다시 계획 · 남은 시간에 맞추기"], req)); }
   catch (e) { if (!auto) fail(e); return; }
-  lastProgress = r; lastChecked = new Date(); renderHome();
+  lastProgress = r; lastChecked = new Date(); renderHome(); if ($("resume") && $("resume").childNodes.length) resumeChat();  // 늦어진 일이 있으면 다음 할 일도 바뀐다
   if (!r.findings.length) { if (!auto) { bot(plan.length || extract ? "계획대로 가고 있어요. 늦은 단계가 없어요 ✓" : "아직 계획이 없어서 비교할 게 없어요."); if (!plan.length && extract) chip("마감까지 계획 짜기", planFlow); } return; }
   if (auto) { const h2 = hashText(r.summary); if (store.get("progressSeen:" + key, "") !== h2) { store.set("progressSeen:" + key, h2); $("homeBadge").hidden = false; $("homeBadge").textContent = "!"; } return; }
   progressCard(r, false);
@@ -1003,6 +1018,37 @@ function turnLabel(it) {
 let lastTriage = null, lastProgress = null, lastChecked = null;
 function fmtTime(d) { return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
 function refreshHome() { if (curDraft()) return renderHome(); api("/triage").then((t) => { lastTriage = t; renderHome(); }).catch(() => renderHome()); }
+function resumeChat() {
+  const box = $("resume"), hist = $("history"); if (!box) return; box.innerHTML = ""; if (hist) hist.innerHTML = "";
+  // 지난 대화 (흐리게, 맨 위)
+  const log = store.get("log:" + projKey(), []);
+  if (log.length && hist) {
+    const old = h("details", "history"); old.appendChild(h("summary", null, `지난 대화 ${log.length}줄 · ${new Date(log[log.length - 1].at).toLocaleDateString("ko-KR", { month: "long", day: "numeric" })}`));
+    log.forEach((x) => old.appendChild(h("div", "bub" + (x.w === "m" ? " me" : ""), x.t))); hist.appendChild(old);
+  }
+  // 지금 어디까지 왔는지 + 다음 할 일 하나
+  const d = curDraft(); const st = stageOf(); const ex = extract || {};
+  const appD = ddays(ex.apply_deadline_iso), subD = ddays(ex.submit_deadline_iso);
+  let next = null, where = "";
+  if (!extract && !d) { where = "아직 고른 대회가 없어요"; next = ["나갈 대회 고르기", () => discoverChat("새 대회 준비할래")]; }
+  else if (d) {
+    const applied = d.applied || store.get(doneKey("apply"), null);
+    if (needsApply(ex) && !applied) { where = `신청 전${appD != null && appD >= 0 ? ` · 신청 마감 D-${appD}` : ""}`; next = ["신청하기", () => { me("신청할래"); applyFlow(ex); }]; }
+    else { where = "신청 완료 ✓ · 팀 저장소 준비 중"; next = ["다음 단계 보기", () => startPath(d)]; }
+  } else if (st === 0) { where = `저장소 연결됨 · 신청 전${appD != null && appD >= 0 ? ` · 신청 마감 D-${appD}` : ""}`; next = ["신청하기", () => { me("신청할래"); applyFlow(ex); }]; }
+  else if (st >= 3) { where = "제출을 마쳤어요 ✓"; next = ["새 대회 고르기", () => discoverChat("새 대회 준비할래")]; }
+  else {
+    where = `협업 중${subD != null && subD >= 0 ? ` · 제출 마감 D-${subD}` : ""}`;
+    if (lastProgress && lastProgress.findings && lastProgress.findings.length) next = ["늦어진 일 보기", () => { me("늦어진 일 보여 줘"); progressCard(lastProgress, true); }];
+    else if (subD != null && subD >= 0 && subD <= 3) next = ["제출 전 점검하기", submit];
+    else if (!store.get("plan:" + projKey(), null) && ex.submit_deadline_iso) next = ["마감까지 계획 짜기", planFlow];
+    else next = ["오늘 할 일 정리", today];
+  }
+  const c = h("div", "task resume"); const hd = h("div", "task-h"); hd.appendChild(h("b", null, `이어서 하기 · ${projName()}`)); c.appendChild(hd);
+  c.appendChild(h("div", "note", where));
+  if (next) { const b = h("button", "btn primary", next[0]); b.type = "button"; b.onclick = () => { b.disabled = true; showTab("chat"); next[1](); }; c.appendChild(b); }
+  box.appendChild(c); scroll();
+}
 function stageOf() {
   const d = curDraft(); const sub = store.get(doneKey("submit"), null), app = store.get(doneKey("apply"), null);
   if (sub) return 3; if (!extract) return 0; if (d) return app || d.applied ? 1 : 0;
@@ -1764,7 +1810,7 @@ $("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); 
     if (!cur || (cur.draft && !curDraft())) cur = { repo: curRepo() };
     if (!curDraft() && store.get("extract:" + projKey(), null) == null && store.get("extract", null)) store.set("extract:" + projKey(), store.get("extract", null));  // 예전 버전 기록 옮기기
     if (cur && cur.draft && !curDraft()) cur = { repo: curRepo() };
-    useProject(cur, true);
+    useProject(cur, true); resumeChat();
     loadProjects().catch(() => {});  // 팀플 목록을 미리 받아 두면 고르기 화면이 바로 뜬다
     reminders();
     loadDiscover();  // 학과 게시판·해커톤 목록에서 대회를 먼저 찾아온다 (1시간 캐시)
