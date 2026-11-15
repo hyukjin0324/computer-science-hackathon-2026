@@ -1,0 +1,1656 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bento</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap">
+<style>
+/* Layout: 휴대폰 한 화면. 위 고정 머리(메뉴 · Bento · 팀 초대) → 탭별 내용 → 떠 있는 입력창과 아래 탭 막대 */
+/* 밝은 범용 비서 톤: 따뜻한 흰 바탕 · 검정 주 버튼 하나 · 브랜드 노랑은 마스코트와 강조에만 */
+:root {
+  --bg: #FAFAF7; --surface: #FFFFFF; --surface-2: #F2F3EE; --line: #E6E7E1;
+  --ink: #17181C; --muted: #5B5F66; --pop: #FFC83D; --pop-ink: #17181C; --pop-soft: #FFF1C7; --pop-deep: #6B4E00;
+  --primary: #17181C; --primary-ink: #FFFFFF; --green: #1E8A4C; --blue: #2F6FD6;
+  --p0: #B07F00; --p1: #2F6FD6; --p2: #1E8A4C; --p3: #8A4FD8; --p4: #C9600F; --p5: #C2417F;
+  --crit: #B93B27; --crit-soft: #FBE9E5; --ok: #1E7A46; --ok-soft: #E1F3E8; --warn: #8A5A00; --warn-soft: #FFF3D1;
+  --shadow: 0 6px 20px rgb(23 24 28 / .08); --mascot-body: #17181C; --bub-line: var(--line); --found-bg: #17181C;
+  --f-logo: "Noto Sans KR", system-ui, sans-serif;
+  --f-body: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #000000; --surface: #1C1C1E; --surface-2: #2C2C2E; --line: #2C2C2E;
+    --ink: #FFFFFF; --muted: #98989F; --pop: #FFC83D; --pop-ink: #17181C; --pop-soft: #3A3115; --pop-deep: #FFE08A;
+    --primary: #FFFFFF; --primary-ink: #000000; --green: #3DBE7A; --blue: #6EA8FF;
+    --p0: #FFC83D; --p1: #6EA8FF; --p2: #3DBE7A; --p3: #C08CFF; --p4: #FF9F5A; --p5: #FF7EB6;
+    --crit: #FF8A73; --crit-soft: #3A211C; --ok: #6CD49A; --ok-soft: #1B3326; --warn: #F2B653; --warn-soft: #3A2D15;
+    --shadow: none; --mascot-body: #2C2C2E; --bub-line: transparent; --found-bg: #2C2C2E;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #000000; --surface: #1C1C1E; --surface-2: #2C2C2E; --line: #2C2C2E;
+    --ink: #FFFFFF; --muted: #98989F; --pop: #FFC83D; --pop-ink: #17181C; --pop-soft: #3A3115; --pop-deep: #FFE08A;
+    --primary: #FFFFFF; --primary-ink: #000000; --green: #3DBE7A; --blue: #6EA8FF;
+    --p0: #FFC83D; --p1: #6EA8FF; --p2: #3DBE7A; --p3: #C08CFF; --p4: #FF9F5A; --p5: #FF7EB6;
+    --crit: #FF8A73; --crit-soft: #3A211C; --ok: #6CD49A; --ok-soft: #1B3326; --warn: #F2B653; --warn-soft: #3A2D15;
+    --shadow: none; --mascot-body: #2C2C2E; --bub-line: transparent; --found-bg: #2C2C2E;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: 0; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0; }
+button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; padding: 0; }
+button:focus-visible, textarea:focus-visible, input:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+svg { display: block; }
+.phone { position: relative; max-width: 440px; height: 100%; margin: 0 auto; display: flex; flex-direction: column; }
+
+/* 머리: 왼쪽 팀플 칩 · 오른쪽 팀 초대 */
+.head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 0 8px; }
+.round { width: 44px; height: 44px; border-radius: 50%; background: transparent; display: grid; place-items: center; color: var(--ink); }
+.round:hover { background: var(--surface-2); }
+.bento { width: 38px; height: 38px; border-radius: 9px; background: #17181C; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 5px; }
+.bento i { border-radius: 3px; background: #FFFFFF; } .bento i:nth-child(1) { background: #FFC83D; } .bento i:nth-child(4) { background: #3DBE7A; }
+.mascot { display: block; }
+.mascot > rect:first-child { fill: var(--mascot-body); }
+.bento { background: var(--mascot-body) !important; }
+.found:not(.calm) .k .bento { background: #FFFFFF !important; }
+.proj { height: 40px; max-width: 260px; padding: 0 14px; border-radius: 99px; background: var(--surface); border: 1px solid var(--line); color: var(--ink); font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-flex; align-items: center; gap: 6px; }
+.proj .pdot { width: 9px; height: 9px; border-radius: 50%; background: var(--pop); flex: none; }
+.proj small { color: var(--muted); font-weight: 500; }
+.sheet-bg { position: absolute; inset: 0; z-index: 100; background: rgb(23 24 28 / .45); display: flex; align-items: flex-end; margin: 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px))); }
+.sheet { width: 100%; max-height: 86%; overflow-y: auto; background: var(--surface); border-radius: 28px 28px 0 0; padding: 10px 20px max(22px, env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; box-shadow: 0 -8px 30px rgb(23 24 28 / .12); }
+.sheet::before { content: ""; width: 40px; height: 5px; border-radius: 99px; background: var(--line); align-self: center; margin-bottom: 4px; flex: none; }
+.sheet .task { border: 0; padding: 0; background: transparent; }
+.sheet .task-h b { font-size: 20px; font-weight: 800; letter-spacing: -.4px; }
+.sheet h2 { margin: 0 0 4px; font-size: 19px; }
+.sheet .lab { margin-top: 8px; }
+.bigrow.on { box-shadow: inset 0 0 0 2px var(--ink); }
+
+/* 내용 */
+.view { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 170px; display: flex; flex-direction: column; gap: 10px; }
+.view > * { flex-shrink: 0; }
+.view[hidden] { display: none; }
+h1 { margin: 6px 0 8px; font-size: 26px; font-weight: 800; letter-spacing: -.6px; text-wrap: balance; }
+.stamp { text-align: center; font-size: 12px; color: var(--muted); margin: 2px 0 4px; }
+.bub { background: var(--surface); border: 1px solid var(--bub-line); border-radius: 20px; padding: 12px 16px; max-width: 92%; white-space: pre-wrap; overflow-wrap: anywhere; align-self: flex-start; }
+.bub ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; white-space: normal; }
+.bub.me { align-self: flex-end; background: var(--primary); color: var(--primary-ink); border-color: transparent; }
+.bub.typing { color: var(--muted); }
+.typing::after { content: "…"; animation: blink 1.2s infinite; } @keyframes blink { 50% { opacity: .25; } }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; overflow: hidden; }
+.panel-h { display: flex; align-items: center; gap: 8px; padding: 14px 16px 6px; }
+.panel-h b { flex: 1; font-size: 16px; }
+.panel-h .more { color: var(--muted); font-size: 13px; }
+.picks { display: flex; flex-direction: column; padding: 4px 8px 8px; }
+.pick { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; text-align: left; padding: 12px 8px; border-radius: 14px; min-height: 64px; }
+.pick:hover { background: var(--surface-2); }
+.pick .em { width: 40px; height: 40px; border-radius: 12px; background: var(--surface-2); display: grid; place-items: center; font-size: 20px; }
+.pick b { display: block; font-size: 15px; } .pick small { color: var(--muted); font-size: 13px; }
+.chev { color: var(--muted); }
+.apps { display: flex; flex-direction: column; padding: 2px 8px 8px; }
+.app { display: grid; grid-template-columns: 36px 1fr auto; gap: 12px; align-items: center; padding: 10px 8px; }
+.ico { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-weight: 700; font-size: 14px; color: #fff; }
+.app b { font-size: 15px; font-weight: 500; }
+.link { color: var(--blue); font-weight: 600; font-size: 14px; }
+.link.on { color: var(--ok); }
+
+/* 작업 카드 */
+.journey { background: var(--surface); border: 1.5px solid var(--ink); border-radius: 20px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.journey.pin { position: sticky; top: 0; z-index: 3; box-shadow: 0 6px 18px rgba(0,0,0,.08); }
+.journey .j-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .journey .j-h b { font-size: 15.5px; }
+.j-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
+.j-steps li { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; position: relative; }
+.j-steps li + li::before { content: ""; position: absolute; top: 14px; right: calc(50% + 16px); width: calc(100% - 26px); height: 2px; background: var(--line); }
+.j-steps li.done + li::before { background: var(--ok); }
+.j-steps i { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 13px; font-weight: 800; background: var(--surface-2); color: var(--muted); }
+.j-steps li.done i { background: var(--ok-soft); color: var(--ok); } .j-steps li.now i { background: var(--pop); color: var(--pop-ink); box-shadow: 0 0 0 4px var(--pop-soft); }
+.j-steps span { display: flex; flex-direction: column; } .j-steps b { font-size: 12.5px; line-height: 1.3; } .j-steps small { font-size: 11px; color: var(--muted); }
+.j-steps li.now b { color: var(--ink); } .j-steps li:not(.now):not(.done) b { color: var(--muted); }
+.task { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.task-h { display: flex; align-items: center; gap: 8px; }
+.task-h b { flex: 1; font-size: 15px; }
+.tag { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 99px; background: var(--pop-soft); color: var(--pop-deep); white-space: nowrap; }
+.tag.done { background: var(--ok-soft); color: var(--ok); } .tag.skip { background: var(--surface-2); color: var(--muted); }
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.steps li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; font-size: 14px; }
+.steps .dot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-size: 11px; margin-top: 1px; }
+.steps li.run .dot { border-color: var(--ink); border-top-color: transparent; animation: spin .8s linear infinite; }
+.steps li.ok .dot { background: var(--ok); border-color: var(--ok); color: var(--bg); }
+.steps .pick-cb { width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--primary); cursor: pointer; }
+.steps li label { cursor: pointer; }
+.steps li.off label, .steps li.off > div { color: var(--muted); text-decoration: line-through; }
+.steps li.off small { text-decoration: none; }
+.steps small { display: block; color: var(--muted); font-size: 12.5px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; font-size: 14px; }
+.facts dt { color: var(--muted); } .facts dd { margin: 0; }
+textarea { width: 100%; min-height: 80px; resize: vertical; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 14px; background: var(--bg); color: var(--ink); }
+.lab { font-size: 12.5px; color: var(--muted); }
+.row-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { height: 44px; padding: 0 18px; border-radius: 99px; background: var(--surface); border: 1px solid var(--line); font-weight: 600; font-size: 14.5px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: var(--ink); }
+.btn.primary { background: var(--primary); color: var(--primary-ink); border-color: transparent; font-weight: 700; }
+.btn.lg { height: 54px; font-size: 16px; justify-content: center; }
+.btn:disabled { opacity: .5; cursor: default; }
+.note { font-size: 12.5px; color: var(--muted); }
+.big { display: flex; flex-direction: column; gap: 8px; }
+.bigrow { display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: center; text-align: left; background: var(--surface-2); border-radius: 16px; padding: 14px; min-height: 68px; }
+.bigrow:disabled { opacity: .55; cursor: default; }
+.n { width: 26px; height: 26px; border-radius: 50%; background: var(--ink); color: var(--bg); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.bigrow b { display: block; font-size: 15px; } .bigrow small { color: var(--muted); font-size: 13px; }
+.sev { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 6px; margin-right: 6px; }
+.sev.crit { background: var(--crit-soft); color: var(--crit); } .sev.warn { background: var(--warn-soft); color: var(--warn); } .sev.ok { background: var(--ok-soft); color: var(--ok); }
+.tier { border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.tier > b { font-size: 13.5px; }
+.tier.red { background: var(--crit-soft); } .tier.red > b { color: var(--crit); }
+.tier.yellow { background: var(--warn-soft); } .tier.yellow > b { color: var(--warn); }
+.tier.green { background: var(--ok-soft); } .tier.green summary { color: var(--ok); font-weight: 700; font-size: 13.5px; cursor: pointer; }
+.crow { display: grid; grid-template-columns: 20px 1fr; gap: 8px; font-size: 14px; }
+.crow small { display: block; color: var(--muted); font-size: 12.5px; }
+.crow .ev { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; }
+.crow .ev a, .crow .ev span { font-size: 12px; color: var(--blue); text-decoration: none; }
+.crow .ev span { color: var(--muted); }
+.hcheck { display: grid; grid-template-columns: 22px 1fr; gap: 8px; align-items: start; font-size: 14px; cursor: pointer; }
+.hcheck input { width: 20px; height: 20px; margin: 1px 0 0; accent-color: var(--primary); }
+.stage { border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.stage[aria-disabled="true"] { opacity: .5; pointer-events: none; }
+.stage h3 { margin: 0; font-size: 14.5px; }
+.finput { width: 100%; height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); padding: 0 12px; font: inherit; font-size: 14px; }
+.frow { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; padding: 8px 10px; border-radius: 12px; background: var(--surface-2); font-size: 13.5px; }
+.frow small { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
+.who-b { font-size: 11.5px; padding: 2px 8px; border-radius: 99px; background: var(--ok-soft); color: var(--ok); font-weight: 700; }
+.who-h { font-size: 11.5px; padding: 2px 8px; border-radius: 99px; background: var(--warn-soft); color: var(--warn); font-weight: 700; }
+.check { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.check li { display: grid; grid-template-columns: 22px 1fr; gap: 8px; }
+.mk { width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+.mk.ok { background: var(--ok); color: var(--bg); } .mk.no { background: var(--warn-soft); color: var(--warn); }
+.check small { display: block; color: var(--muted); font-size: 12.5px; }
+
+/* 둘러보기 */
+.cats { display: flex; gap: 14px; overflow-x: auto; padding: 4px 0 8px; }
+.cat { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: none; color: var(--muted); font-size: 14px; }
+.cat .c { width: 66px; height: 66px; border-radius: 50%; background: var(--surface); display: grid; place-items: center; font-size: 30px; }
+.cat.sel { color: var(--ink); } .cat.sel .c { background: var(--surface-2); }
+.sec { font-size: 17px; color: var(--muted); font-weight: 600; margin: 14px 0 2px; }
+.feed { display: flex; flex-direction: column; }
+.item { display: grid; grid-template-columns: 52px 1fr; gap: 12px; padding: 18px 0; }
+.item + .item { border-top: 1px solid var(--line); }
+.item .em { font-size: 36px; line-height: 1; }
+.item b { display: block; font-size: 17px; margin-bottom: 4px; }
+.item p { margin: 0; color: var(--muted); font-size: 14.5px; }
+.item .bot { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; gap: 8px; }
+.item .bot span { color: var(--muted); font-size: 13px; }
+
+/* 캘린더 */
+.dday { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+.dday .big-d { font-family: var(--f-logo); font-size: 40px; font-weight: 800; line-height: 1; color: var(--ink); letter-spacing: -1px; }
+.dday-top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.dday-top span { color: var(--muted); font-size: 14px; }
+.month { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; flex-wrap: wrap; gap: 4px 12px; }
+.month b { font-size: 16px; }
+.week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.dow { text-align: center; font-size: 12px; color: var(--muted); padding-bottom: 2px; }
+.day { height: 54px; border-radius: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-variant-numeric: tabular-nums; font-size: 15px; }
+.day.past { color: var(--muted); }
+.day.today { background: var(--surface-2); font-weight: 700; }
+.day.sel { background: var(--pop); color: var(--pop-ink); font-weight: 700; }
+.day .dots { display: flex; gap: 3px; height: 6px; }
+.day .dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); }
+.day .dots i.c-due { background: var(--crit); } .day .dots i.c-issue { background: var(--pop); } .day .dots i.c-meet { background: var(--blue); }
+.day.sel .dots i { background: var(--pop-ink); }
+.day .dots i.sq { border-radius: 1px; width: 6px; height: 6px; }
+.pfilter { display: flex; gap: 6px; flex-wrap: wrap; }
+.pfilter button { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 99px; background: var(--surface); border: 1px solid var(--line); font-size: 13px; font-weight: 600; max-width: 100%; }
+.pfilter button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pfilter button::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; }
+.pfilter button[aria-pressed="false"] { opacity: .45; text-decoration: line-through; }
+.plan { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.plan li { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); }
+.plan li b { font-size: 14.5px; } .plan li small { grid-column: 1; color: var(--muted); font-size: 12.5px; }
+.plan input[type=date] { grid-row: 1 / span 2; grid-column: 2; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); padding: 0 8px; font: inherit; font-size: 13.5px; }
+.urlrow { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.urlrow input { min-width: 0; height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); padding: 0 12px; font: inherit; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; background: var(--c); }
+.listhead { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; }
+.listhead b { font-size: 16px; }
+.listhead button { color: var(--blue); font-size: 13.5px; font-weight: 600; }
+.evts { display: flex; flex-direction: column; gap: 8px; }
+.evt { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.evt > button { width: 100%; text-align: left; display: grid; grid-template-columns: 48px 4px 1fr auto; gap: 12px; align-items: center; padding: 14px 14px; }
+.evt .when { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); line-height: 1.3; }
+.evt .when b { display: block; color: var(--ink); font-size: 15px; }
+.evt .bar2 { width: 4px; align-self: stretch; border-radius: 4px; background: var(--c); }
+.evt .what b { display: block; font-size: 15px; }
+.evt .what small { color: var(--muted); font-size: 13px; }
+.evt .acts2 { display: none; padding: 0 14px 14px; flex-direction: column; gap: 8px; }
+.evt.open .acts2 { display: flex; }
+.evt .acts2 .bigrow { grid-template-columns: 1fr auto; min-height: 56px; }
+
+/* 보관함 */
+.seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--surface); border: 1px solid var(--line); border-radius: 99px; padding: 4px; }
+.seg button { height: 44px; border-radius: 99px; font-weight: 600; color: var(--muted); }
+.seg button.sel { background: var(--surface-2); color: var(--ink); }
+.empty { text-align: center; padding: 70px 20px; display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--muted); }
+.empty b { color: var(--ink); font-size: 17px; }
+.list { display: flex; flex-direction: column; gap: 8px; }
+.li { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.li-top { display: flex; align-items: center; gap: 8px; } .li-top b { flex: 1; font-size: 15px; }
+.li small { color: var(--muted); font-size: 13px; white-space: pre-wrap; }
+.fab { position: absolute; right: 0; bottom: 160px; box-shadow: var(--shadow); width: 56px; height: 56px; border-radius: 50%; background: var(--surface); border: 1px solid var(--line); display: grid; place-items: center; }
+
+/* 나의 Bento */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 16px; }
+.usage-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.usage-top b { font-size: 17px; } .usage-top span { color: var(--muted); font-size: 14px; }
+.bar { height: 8px; border-radius: 99px; background: var(--surface-2); margin: 12px 0; overflow: hidden; } .bar i { display: block; height: 100%; background: var(--pop); border-radius: 99px; }
+.rowlink { display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: center; width: 100%; text-align: left; padding: 14px 0; }
+.rowlink + .rowlink { border-top: 1px solid var(--line); }
+.rowlink > span:first-child { color: var(--ink); display: grid; place-items: center; }
+.rowlink { color: var(--ink); }
+.rowlink b { font-weight: 500; font-size: 15.5px; } .rowlink small { display: block; color: var(--muted); font-size: 13px; }
+.rowlink .val { color: var(--muted); font-size: 14px; display: flex; align-items: center; gap: 6px; }
+.group { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 0 16px; }
+.glabel { color: var(--muted); font-size: 14px; margin: 12px 4px 0; }
+.perm { display: none; font-size: 13.5px; color: var(--muted); padding: 0 0 14px 40px; }
+.perm.open { display: block; }
+.perm b { color: var(--ink); font-weight: 600; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.mini { width: 40px; height: 40px; border-radius: 10px; background: var(--surface-2); display: grid; place-items: center; font-weight: 700; color: #fff; }
+
+/* 아래 고정 */
+.dock { position: absolute; left: 0; right: 0; bottom: 0; padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+.dock > * { pointer-events: auto; }
+.toast { align-self: center; display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 99px; padding: 6px 14px 6px 6px; font-size: 13.5px; max-width: 92%; box-shadow: var(--shadow); }
+.toast .bento { width: 24px; height: 24px; padding: 3px; gap: 2px; border-radius: 6px; }
+.toast span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.composer { display: grid; grid-template-columns: 40px 1fr 44px; align-items: center; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 99px; padding: 5px 5px 5px 8px; box-shadow: var(--shadow); }
+.composer input { min-width: 0; background: none; border: 0; color: var(--ink); font: inherit; font-size: 15px; padding: 8px 4px; outline: none; }
+.composer .ic { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); }
+.composer .go { width: 44px; height: 44px; border-radius: 50%; background: var(--primary); color: var(--primary-ink); display: grid; place-items: center; }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 4px; box-shadow: var(--shadow); }
+.tabs button { height: 54px; border-radius: 18px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; position: relative; color: var(--muted); font-size: 11.5px; font-weight: 600; }
+.tabs button.sel { color: var(--ink); font-weight: 800; }
+.tabs button.sel svg { stroke-width: 2.4; }
+.badge { position: absolute; top: 4px; left: calc(50% + 6px); min-width: 20px; height: 20px; border-radius: 99px; background: var(--crit); color: #FFFFFF; font-size: 12px; font-weight: 700; display: grid; place-items: center; padding: 0 5px; }
+.snack { position: absolute; left: 50%; transform: translateX(-50%); top: 72px; background: var(--primary); color: var(--primary-ink); padding: 8px 14px; border-radius: 99px; font-size: 13.5px; z-index: 5; }
+/* 오늘 (홈 브리핑) */
+.h-date { margin: 4px 0 0; font-size: 14px; color: var(--muted); font-weight: 500; }
+.h-title { margin: 2px 0 4px; font-size: 26px; line-height: 1.3; }
+.stagebar { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.stagebar .bars, .stagebar .labs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.stagebar .bars i { height: 8px; border-radius: 99px; background: var(--surface-2); }
+.stagebar .bars i.done { background: var(--green); } .stagebar .bars i.now { background: var(--pop); }
+.stagebar .labs span { font-size: 12.5px; color: var(--muted); } .stagebar .labs span.now { color: var(--ink); font-weight: 800; }
+.found { background: var(--found-bg); color: #FFFFFF; border-radius: 22px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.found .k { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: #FFE08A; }
+.found .k .bento { width: 22px; height: 22px; padding: 3px; gap: 2px; border-radius: 6px; background: #FFFFFF; }
+.found .k .bento i:nth-child(2), .found .k .bento i:nth-child(3) { background: #E6E7E1; }
+.found b { font-size: 18px; line-height: 1.4; }
+.found small { font-size: 13.5px; color: #C9CBD0; }
+.found button { align-self: flex-start; height: 44px; padding: 0 18px; border-radius: 99px; background: #FFC83D; color: #17181C; font-weight: 700; margin-top: 2px; }
+.found.calm { background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+.found.calm .k { color: var(--ok); } .found.calm small { color: var(--muted); }
+.found.calm button { background: var(--primary); color: var(--primary-ink); }
+.sech { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; }
+.sech h2 { margin: 0; font-size: 17px; font-weight: 800; } .sech span { font-size: 13px; color: var(--muted); }
+.arow { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; text-align: left; padding: 12px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); width: 100%; }
+.arow .ai { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 12px; font-weight: 800; line-height: 1.15; text-align: center; word-break: keep-all; }
+.arow .ai.crit { background: var(--crit-soft); color: var(--crit); } .arow .ai.warn { background: var(--warn-soft); color: var(--warn); } .arow .ai.ok { background: var(--ok-soft); color: var(--ok); }
+.arow b { display: block; font-size: 15px; } .arow small { font-size: 13px; color: var(--muted); }
+.log { display: grid; grid-template-columns: 56px 1fr; row-gap: 8px; font-size: 14px; }
+.log span:nth-child(odd) { color: var(--muted); font-variant-numeric: tabular-nums; }
+.quick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.quick button { text-align: left; padding: 14px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); min-height: 56px; display: flex; flex-direction: column; gap: 2px; }
+.quick b { font-size: 14.5px; } .quick small { font-size: 12.5px; color: var(--muted); }
+.whoami { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.whoami .opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.turn { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 99px; background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+.turn.mine { background: var(--primary); color: var(--primary-ink); }
+.turn.open { background: var(--warn-soft); color: var(--warn); }
+.arow .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.found .src { font-size: 12.5px; color: #C9CBD0; }
+.found .row2 { display: flex; gap: 8px; flex-wrap: wrap; }
+.found .ghost { background: transparent; color: #FFFFFF; border: 1px solid rgb(255 255 255 / .25); }
+.found.calm .ghost { color: var(--ink); border-color: var(--line); }
+.chiptog { height: 36px; padding: 0 14px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); font-size: 13.5px; font-weight: 600; }
+.chiptog { color: var(--muted); }
+.chiptog[aria-pressed="true"] { background: var(--primary); color: var(--primary-ink); border-color: transparent; }
+.chiptog[aria-pressed="true"]::before { content: "✓ "; }
+.switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 44px; text-align: left; }
+.switch .knob { width: 52px; height: 32px; border-radius: 99px; background: var(--line); position: relative; flex: none; transition: background .2s; }
+.switch .knob::after { content: ""; position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 1px 3px rgb(0 0 0 / .25); transition: left .2s; }
+.switch[aria-checked="true"] .knob { background: var(--green); }
+.switch[aria-checked="true"] .knob::after { left: 23px; }
+/* 홈 맨 위 카드: 다른 카드와 같은 흰 카드. 라벨은 내용만 */
+.hero { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 16px; display: grid; grid-template-columns: 1fr; gap: 6px; }
+.hero.has-poster { grid-template-columns: 88px 1fr; column-gap: 14px; }
+.hero .body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.hero .lab2 { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.hero .lab2.crit { color: var(--crit); } .hero .lab2.pop { color: var(--pop-deep); } .hero .lab2.ok { color: var(--ok); }
+.hero b { font-size: 18px; line-height: 1.35; }
+.hero small { color: var(--muted); font-size: 13.5px; }
+.hero .acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.poster { width: 100%; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden; background: var(--surface-2); display: grid; place-items: center; color: var(--muted); font-weight: 800; font-size: 20px; position: relative; }
+.poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.arow.frow2 { grid-template-columns: 48px 1fr auto; }
+.arow .dtag { position: absolute; left: 4px; bottom: 4px; font-size: 10.5px; font-weight: 800; padding: 1px 5px; border-radius: 6px; background: var(--surface); color: var(--ink); }
+.arow .dtag.crit { color: var(--crit); }
+/* ☰ 서랍 */
+.drawer-bg { position: absolute; inset: 0; z-index: 150; background: rgb(0 0 0 / .45); margin: 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px))); animation: fade .18s ease-out; }
+.drawer { position: absolute; left: 0; top: 0; bottom: 0; width: min(84%, 340px); background: var(--surface); padding: max(14px, env(safe-area-inset-top, 0px)) 16px 24px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; animation: slidein .2s ease-out; box-shadow: 8px 0 30px rgb(0 0 0 / .2); }
+.drawer-bg.out { opacity: 0; transition: opacity .18s; } .drawer-bg.out .drawer { transform: translateX(-100%); transition: transform .18s; }
+@keyframes slidein { from { transform: translateX(-100%); } } @keyframes fade { from { opacity: 0; } }
+.dw-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.dw-h b { display: flex; align-items: center; gap: 8px; font-size: 22px; font-weight: 800; }
+.dw-item { display: flex; align-items: center; gap: 14px; height: 52px; padding: 0 14px; border-radius: 16px; font-size: 16px; font-weight: 600; text-align: left; color: var(--ink); }
+.dw-item.on { background: var(--surface-2); }
+.drawer hr { border: 0; border-top: 1px solid var(--line); margin: 10px 4px; width: auto; }
+.dw-lab { font-size: 13px; color: var(--muted); margin: 10px 6px 4px; }
+.dw-row { display: flex; align-items: center; gap: 4px; }
+.dw-proj { flex: 1; width: 100%; min-width: 0; display: grid; grid-template-columns: 12px 1fr; gap: 10px; align-items: center; text-align: left; padding: 10px 12px; border-radius: 14px; color: var(--ink); }
+.dw-proj.on { background: var(--surface-2); }
+.dw-proj .pdot { width: 10px; height: 10px; border-radius: 50%; }
+.dw-proj b { display: block; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .dw-proj small { color: var(--muted); font-size: 12.5px; }
+.dw-del { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: var(--muted); flex: none; }
+.dw-del.sure { color: #FFFFFF; background: var(--crit); }
+@media (prefers-reduced-motion: reduce) { .drawer, .drawer-bg { animation: none; } }
+/* 첫 화면 등장: 로고가 튀어나오고 → 칸이 채워지고 → 웃고, 글이 한 줄씩 올라온다 */
+.mascot.anim { animation: popout .7s cubic-bezier(.3, 1.45, .5, 1) both; transform-origin: 50% 80%; }
+.mascot.anim .c { transform-box: fill-box; transform-origin: center; animation: fillin .4s cubic-bezier(.3, 1.4, .5, 1) both; }
+.mascot.anim .c1 { animation-delay: .35s; } .mascot.anim .c2 { animation-delay: .47s; } .mascot.anim .c3 { animation-delay: .59s; } .mascot.anim .c4 { animation-delay: .71s; }
+.mascot.anim .face { animation: fadein .25s .85s both; }
+.mascot.anim .cheek { animation: blush .5s 1.2s both; }
+.mascot.anim .flat { opacity: 0; animation: fadeout .2s 1.05s both; }
+.mascot.anim .mouth { transform-box: fill-box; transform-origin: 50% 0; animation: smile .5s 1.05s cubic-bezier(.3, 1.6, .5, 1) both; }
+@keyframes fadeout { from { opacity: 1; } to { opacity: 0; } }
+@keyframes smile { 0% { opacity: 0; transform: scaleY(.15) scaleX(.9); } 1% { opacity: 1; transform: scaleY(.15) scaleX(.9); } 100% { opacity: 1; transform: none; } }
+.mascot.anim .eye { transform-box: fill-box; transform-origin: center; animation: blink 3.6s 2s infinite; }
+.onb .rise { animation: riseup .55s cubic-bezier(.2, .8, .2, 1) both; }
+.onb h1 .rise { display: block; }
+@keyframes popout { 0% { opacity: 0; transform: translateY(40px) scale(.4) rotate(-10deg); } 60% { opacity: 1; transform: translateY(-6px) scale(1.08) rotate(3deg); } 100% { opacity: 1; transform: none; } }
+@keyframes fillin { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+@keyframes blush { 0% { opacity: 0; } 60% { opacity: 1; } 100% { opacity: .85; } }
+@keyframes blink { 0%, 90%, 100% { transform: scaleY(1); } 94% { transform: scaleY(.1); } }
+@keyframes riseup { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .mascot.anim, .mascot.anim .c, .mascot.anim .face, .mascot.anim .cheek, .mascot.anim .eye, .mascot.anim .mouth, .onb .rise { animation: none !important; opacity: 1 !important; transform: none !important; }
+  .mascot.anim .flat { display: none; }
+}
+/* 첫 방문 */
+body.onboarding .dock { display: none; }  /* 첫 화면 뒤로 아래 막대가 비치지 않게 */
+.onb { position: absolute; inset: 0; z-index: 200; background: var(--bg); display: flex; flex-direction: column; padding: 20px 8px max(24px, env(safe-area-inset-bottom, 0px)); }
+.onb .top { display: flex; align-items: center; gap: 8px; height: 44px; font-weight: 800; font-size: 18px; }
+.onb .mid { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 20px; }
+.onb h1 { margin: 0; font-size: 34px; line-height: 1.25; letter-spacing: -1px; }
+.onb p { margin: 0; font-size: 16px; line-height: 1.6; color: var(--muted); }
+.onb .chips2 { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.onb .chips2 span { padding: 7px 12px; border-radius: 99px; background: var(--surface-2); font-size: 13px; font-weight: 700; }
+.onb .chips2 span:nth-child(2) { background: var(--pop-soft); color: var(--pop-deep); } .onb .chips2 span:nth-child(4) { background: var(--ok-soft); color: var(--ok); }
+.onb .bot2 { display: flex; flex-direction: column; gap: 10px; }
+.onb .fine { font-size: 12.5px; color: var(--muted); text-align: center; }
+/* Bento가 일하는 중 */
+.work { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.work .wt { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 15px; }
+.work.done { padding: 10px 14px; } .work.done .steps { display: none; } .work.done .wt { font-weight: 600; font-size: 13.5px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .typing::after, .steps li.run .dot { animation: none; } }
+</style>
+
+</head>
+<body>
+<div class="phone">
+  <div class="head">
+    <div style="display:flex;align-items:center;gap:2px;min-width:0">
+<button class="round" type="button" aria-label="메뉴 열기" id="menuBtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <button class="round" type="button" aria-label="뒤로" id="backBtn" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <button class="proj" type="button" id="projBtn" aria-label="팀플 바꾸기"><span class="pdot"></span>팀플 불러오는 중</button>
+    </div>
+    <div style="display:flex;gap:2px">
+      <button class="round" type="button" aria-label="팀 초대 링크 복사" id="inviteBtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><path d="M17 8h5M19.5 5.5v5"/></svg></button>
+
+    </div>
+  </div>
+
+  <!-- 오늘 -->
+  <section class="view" id="v-home" aria-live="polite"></section>
+
+  <!-- 채팅 -->
+  <main class="view" id="v-chat" aria-live="polite" hidden></main>
+
+  <!-- 캘린더 -->
+  <section class="view" id="v-cal" hidden>
+    <h1>캘린더</h1>
+    <div id="calBody"></div>
+  </section>
+
+  <!-- 보관함 -->
+  <section class="view" id="v-box" hidden>
+    <h1>보관함</h1>
+    <div class="seg" role="tablist"><button type="button" class="sel" data-seg="tasks">맡긴 일</button><button type="button" data-seg="docs">문서</button></div>
+    <div id="boxBody"></div>
+  </section>
+
+  <!-- 나의 Bento -->
+  <section class="view" id="v-me" hidden></section>
+
+  <button class="fab" type="button" id="fab" hidden aria-label="새로 맡기기"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+
+  <div class="dock">
+    <button class="toast" type="button" id="toast" hidden><div class="bento"><i></i><i></i><i></i><i></i></div><span id="toastTxt"></span></button>
+    <form class="composer" id="composer">
+      <button class="ic" type="button" aria-label="대회 공고 분석" id="plusBtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+      <input id="msg" placeholder="Bento에게 맡기기…" autocomplete="off" aria-label="Bento에게 맡기기">
+      <button class="go" type="submit" aria-label="보내기" id="todayBtn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+    </form>
+    <nav class="tabs" aria-label="탭">
+      <button type="button" data-tab="home" class="sel"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9H4z"/></svg>홈<span class="badge" id="homeBadge" hidden></span></button>
+      <button type="button" data-tab="chat"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 12a8 7 0 1 1 3.5 5.8L4 19.5l1.2-3.6A6.6 6.6 0 0 1 4 12z"/></svg>대화<span class="badge" id="badge" hidden></span></button>
+      <button type="button" data-tab="cal"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>캘린더<span class="badge" id="calBadge" hidden></span></button>
+      <button type="button" data-tab="me"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>나</button>
+    </nav>
+  </div>
+</div>
+
+<script>
+try { const t = JSON.parse(localStorage.getItem("bento:theme") || "null"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) { /* 저장된 화면 모드 없음 */ }
+const $ = (id) => document.getElementById(id);
+const chat = $("v-chat");
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+function h(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function scroll() { requestAnimationFrame(() => { chat.scrollTop = chat.scrollHeight; }); }
+function add(el) { chat.appendChild(el); scroll(); return el; }
+function bot(text) { return add(h("div", "bub", text)); }
+function me(text) { return add(h("div", "bub me", text)); }
+function snack(t) { const s = h("div", "snack", t); document.querySelector(".phone").appendChild(s); setTimeout(() => s.remove(), 1800); }
+function chip(label, fn) { const b = add(h("button", "btn", label + " ›")); b.type = "button"; b.style.alignSelf = "flex-start"; b.onclick = () => { b.disabled = true; fn(); }; return b; }
+function link(label, url) { const a = h("a", "btn", label + " ↗"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; return a; }
+function copyBtn(label, text) { const b = h("button", "btn", label); b.type = "button"; b.onclick = async () => { try { await navigator.clipboard.writeText(text()); b.textContent = "복사했어요"; } catch (e) { b.textContent = "복사하지 못했어요"; } }; return b; }
+
+/* ---------- 이 기기에만 저장하는 값 ---------- */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("bento:" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("bento:" + k, JSON.stringify(v)); } catch (e) { /* 저장 못 해도 화면은 동작 */ } },
+};
+let H = { mode: "?", repo: "", ai: false, discord: false, needs_code: false };
+let repo = store.get("repo", "");
+let extract = null;
+let projects = [];                       // 진행 중인 팀플: Bento 앱이 설치된 저장소 (서버)
+const drafts = store.get("drafts", []).filter((d) => !/\$\{|\{\{/.test(d.title || ""));  // 준비 중인 대회 (이 기기). 예전 버그로 코드 조각이 제목이 된 것은 치운다
+let cur = store.get("cur", null);        // 지금 보고 있는 팀플 {repo} 또는 {draft}
+function saveDrafts() { store.set("drafts", drafts.slice(0, 20)); }
+function curDraft() { return cur && cur.draft ? drafts.find((d) => d.id === cur.draft) || null : null; }
+function curRepo() { return repo || H.repo; }
+function projKey() { return cur && cur.draft ? "d:" + cur.draft : "r:" + curRepo(); }
+function projName() { const d = curDraft(); return d ? d.title : (curRepo() || "").split("/")[1] || "팀플"; }
+function setExtract(ex) { extract = ex; const d = curDraft(); if (d) { d.extract = ex; saveDrafts(); } else store.set("extract:" + projKey(), ex); renderCal(); }
+function renderHead() {
+  const d = curDraft(); const b = $("projBtn"); b.textContent = ""; const dot = h("span", "pdot"); dot.style.background = `var(${colorOf(projKey())})`; b.appendChild(dot); if (d) b.appendChild(h("small", null, "준비 중")); b.appendChild(document.createTextNode(projName() + " ▾"));
+  const pp = $("panelProj"); if (pp) pp.textContent = (d ? "준비 중 · " : "") + projName();
+}
+async function loadSaved() {  // 팀원이 이미 분석해 저장소에 저장한 공고가 있으면 다시 분석하지 않고 가져온다
+  try { const s = await api("/notice/saved"); if (s.extract && !curDraft()) setExtract(s.extract); } catch (e) { /* 없으면 그냥 넘어감 */ }
+}
+function useProject(next, quiet) {
+  cur = next; store.set("cur", cur);
+  if (next.repo) { repo = next.repo; store.set("repo", repo); }
+  const d = curDraft();
+  extract = d ? d.extract || null : store.get("extract:" + projKey(), null);
+  calState = null; lastTriage = null; lastProgress = null; renderHead(); renderCal(); renderMe(); renderHome();
+  if (!d) { loadCalState(); if (!extract) loadSaved(); }
+  if (!quiet) { showTab("chat"); add(h("div", "stamp", `${projName()}(으)로 바꿨어요`)); bot(d ? `'${d.title}' 준비 중이에요. 아직 저장소가 없는 새 팀플이라 신청부터 도와 드려요.` : `${curRepo()} 팀플을 보고 있어요.`); }
+}
+const tasks = store.get("tasks", []);
+const docs = store.get("docs", []);
+function saveLists() { store.set("tasks", tasks.slice(0, 50)); store.set("docs", docs.slice(0, 30)); renderBox(); renderMe(); }
+
+/* ---------- API ---------- */
+let ME = { logged_in: false };  // GitHub로 로그인한 사람 (서버가 확인)
+function meUser() { if (ME.logged_in) return ME.login; return curDraft() || H.login ? null : store.get("me:" + curRepo(), null); }
+function goLogin() { location.href = "/auth/login"; }
+function ghBtn(label, primary) { const b = h("button", "btn" + (primary ? " primary" : "") + " lg"); b.type = "button"; b.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 19c-4 1.3-4-2-6-2.5M15 21v-3.5a3 3 0 0 0-.8-2.3c2.8-.3 5.8-1.4 5.8-6.2a4.8 4.8 0 0 0-1.3-3.3 4.5 4.5 0 0 0-.1-3.3s-1.1-.3-3.5 1.3a12 12 0 0 0-6.2 0C6.5 2.1 5.4 2.4 5.4 2.4a4.5 4.5 0 0 0-.1 3.3A4.8 4.8 0 0 0 4 9c0 4.8 3 5.9 5.8 6.2a3 3 0 0 0-.8 2.3V21"/></svg>`; b.appendChild(document.createTextNode(label)); b.style.justifyContent = "center"; b.onclick = goLogin; return b; }
+function setMe(u) { store.set("me:" + curRepo(), u); renderHome(); renderMe(); }
+async function api(path, opt = {}) {
+  const q = repo && opt.method !== "POST" ? (path.includes("?") ? "&" : "?") + "repo=" + encodeURIComponent(repo) : "";
+  const headers = { "Content-Type": "application/json" };
+  const code = store.get("code", ""); if (code) headers["X-Bento-Code"] = code;
+  const who = typeof meUser === "function" ? meUser() : null; if (who) headers["X-Bento-User"] = who;  // 누가 승인했는지 GitHub에 남긴다
+  const r = await fetch("/api" + path + q, { ...opt, headers });
+  let body = null; try { body = await r.json(); } catch (e) { /* 빈 응답 */ }
+  if (!r.ok) { const d = body && body.detail; const err = new Error(typeof d === "string" ? d : (d && d.message) || `서버 오류 (${r.status})`); err.status = r.status; err.errors = d && d.errors; err.stale = !!(d && d.stale); err.busy = !!(d && d.busy); err.login = !!(d && d.login); throw err; }
+  return body;
+}
+const MASCOT = (size, face, anim) => `<svg class="mascot${anim ? " anim" : ""}" width="${size}" height="${size}" viewBox="0 0 120 120" ${face ? 'role="img" aria-label="Bento 마스코트"' : 'aria-hidden="true"'}><rect x="6" y="6" width="108" height="108" rx="30" fill="#17181C"/><rect class="c c1" x="18" y="18" width="40" height="40" rx="12" fill="#FFC83D"/><rect class="c c2" x="62" y="18" width="40" height="40" rx="12" fill="#FFFFFF"/><rect class="c c3" x="18" y="62" width="40" height="40" rx="12" fill="#FFFFFF"/><rect class="c c4" x="62" y="62" width="40" height="40" rx="12" fill="#3DBE7A"/>${face ? `<g class="face"><circle class="eye" cx="75" cy="35" r="3.4" fill="#17181C"/><circle class="eye" cx="89" cy="35" r="3.4" fill="#17181C"/>${anim ? '<path class="flat" d="M75 46 H89" fill="none" stroke="#17181C" stroke-width="2.8" stroke-linecap="round"/>' : ""}<path class="mouth" d="M74 44 Q82 51 90 44" fill="none" stroke="#17181C" stroke-width="2.8" stroke-linecap="round"/><circle class="cheek" cx="70" cy="41" r="3" fill="#FFB4A8"/><circle class="cheek" cx="94" cy="41" r="3" fill="#FFB4A8"/></g>` : ""}</svg>`;
+// 에이전트가 일하는 과정을 단계로 보여 준다: 관찰 → 판단 → 다시 계획 …
+async function working(title, labels, p) {
+  const c = add(h("div", "work")); const wt = h("div", "wt"); wt.innerHTML = MASCOT(26, false); wt.appendChild(document.createTextNode(title)); c.appendChild(wt);
+  const ol = h("ol", "steps"); const lis = labels.map((l) => { const li = h("li"); li.appendChild(h("span", "dot", "")); li.appendChild(h("div", null, l)); ol.appendChild(li); return li; }); c.appendChild(ol);
+  const ok = (li) => { li.className = "ok"; li.querySelector(".dot").textContent = "✓"; };
+  let k = 0; lis[0].className = "run"; scroll();
+  const tick = setInterval(() => { if (k < lis.length - 2) { ok(lis[k]); k++; lis[k].className = "run"; } }, 550);
+  try { const r = await p; clearInterval(tick); lis.forEach(ok); await wait(350); c.classList.add("done"); wt.lastChild.textContent = `${title} · ${labels.length}단계 끝`; return r; }
+  catch (e) { clearInterval(tick); c.remove(); throw e; }
+}
+async function thinking(text, p) { const b = add(h("div", "bub typing", text)); try { return await p; } finally { b.remove(); } }
+function fail(e) { bot(e.message + (e.errors ? "\n· " + e.errors.join("\n· ") : "")); }
+
+/* ---------- 첫 화면 ---------- */
+function intro() {
+  const d = new Date();
+  add(h("div", "stamp", `${d.getMonth() + 1}월 ${d.getDate()}일 ${d.getHours() < 12 ? "오전" : "오후"} ${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}`));
+  bot("팀플을 대신 챙겨 드려요. 아래에서 고르거나 편하게 말씀해 주세요.");
+  const p = h("div", "panel"); const ph = h("div", "panel-h"); ph.appendChild(h("b", null, "바로 맡겨 보기")); const pp = h("button", "more"); pp.type = "button"; pp.id = "panelProj"; pp.onclick = openProjects; ph.appendChild(pp); p.appendChild(ph);
+  const picks = h("div", "picks");
+  [["🏆", "대회 공고 분석하기", "마감·제출물 정리 → 깃허브 일정", notice], ["🗂️", "오늘 팀플 할 일 정리", "급한 순서대로 보여 드려요", today], ["🗓️", "마감까지 계획 짜기", "할 일을 날짜별로 나눠 캘린더에 넣어요", planFlow], ["🔎", "진행 점검·다시 계획", "늦어진 단계를 찾아 남은 시간에 맞게 다시 짜요", () => progressCheck(false)], ["📮", "제출 전 점검하기", "제출물과 저장소를 대조해요", submit]].forEach(([em, t, s, fn]) => {
+    const x = h("button", "pick"); x.type = "button"; x.appendChild(h("span", "em", em)); const tx = h("span"); tx.appendChild(h("b", null, t)); tx.appendChild(h("small", null, s)); x.appendChild(tx); x.appendChild(h("span", "chev", "›"));
+    x.onclick = () => { showTab("chat"); fn(); }; picks.appendChild(x);
+  });
+  p.appendChild(picks); add(p);
+}
+
+/* ---------- 승인 카드 ---------- */
+function approval(proposal, onDone) {
+  setBadge(1);
+  // 승인은 아래에서 올라오는 시트로 묻는다. 닫으면(나중에) 카드가 대화에 남아 언제든 다시 승인할 수 있다.
+  const c = h("div", "task");
+  const bg = h("div", "sheet-bg"); const sh = h("div", "sheet"); sh.setAttribute("role", "dialog"); sh.setAttribute("aria-modal", "true"); sh.setAttribute("aria-label", proposal.summary); sh.appendChild(c); bg.appendChild(sh);
+  let inSheet = true;
+  const esc = (e) => { if (e.key === "Escape") toChat(); };
+  const toChat = () => { if (!inSheet) return; inSheet = false; document.removeEventListener("keydown", esc); bg.remove(); const lt = c.querySelector(".later"); if (lt) lt.remove(); add(c); };
+  bg.onclick = (e) => { if (e.target === bg) toChat(); }; document.addEventListener("keydown", esc);
+  document.querySelector(".phone").appendChild(bg);
+  const hd = h("div", "task-h"); hd.appendChild(h("b", null, proposal.summary)); const tg = h("span", "tag", "확인이 필요해요"); hd.appendChild(tg); c.appendChild(hd);
+  const multi = proposal.steps.length > 1;
+  const ol = h("ol", "steps"); const lis = []; const boxes = [];
+  const edits = {};
+  const depNote = h("div", "note"); depNote.hidden = true;
+  proposal.steps.forEach((s, i) => {
+    const li = h("li");
+    const id = "s" + Date.now() + "-" + i;
+    if (multi) {
+      const cb = h("input", "pick-cb"); cb.type = "checkbox"; cb.checked = true; cb.id = id; boxes.push(cb);
+      cb.onchange = () => {
+        li.classList.toggle("off", !cb.checked);
+        // 마일스톤 만들기를 빼면 그 마일스톤에 들어갈 일도 같이 뺀다
+        const ms = s.label.match(/^'(.+)' 마감일 만들기/);
+        if (ms && !cb.checked) {
+          let n = 0;
+          proposal.steps.forEach((o, j) => { if (j !== i && boxes[j].checked && ((o.sub || "").includes(`'${ms[1]}'에 넣어요`) || o.label.includes(`'${ms[1]}'에 묶기`))) { boxes[j].checked = false; lis[j].classList.add("off"); n++; } });
+          depNote.textContent = n ? `마감일을 빼면 거기 넣을 할 일 ${n}개도 같이 빠져요.` : ""; depNote.hidden = !n;
+        }
+        go.textContent = `승인하고 실행 (${boxes.filter((b) => b.checked).length})`;
+        go.disabled = !boxes.some((b) => b.checked);
+      };
+      li.appendChild(cb);
+    } else li.appendChild(h("span", "dot", ""));
+    const t = h(multi ? "label" : "div", null, s.label); if (multi) t.htmlFor = id; if (s.sub) t.appendChild(h("small", null, s.sub)); li.appendChild(t); ol.appendChild(li); lis.push(li);
+  });
+  c.appendChild(ol); c.appendChild(depNote);
+  const tas = [];
+  proposal.steps.forEach((s, i) => {
+    if (!s.edit || s.text == null || s.label.startsWith("할 일 추가")) return;
+    const id = "e" + Date.now() + i; const lb = h("label", "lab", `${s.label} · 보내기 전에 고칠 수 있어요`); lb.htmlFor = id;
+    const ta = h("textarea"); ta.id = id; ta.value = s.text; ta.oninput = () => { edits[i] = ta.value; }; tas.push(ta);
+    c.appendChild(lb); c.appendChild(ta);
+  });
+  const note = h("div", "note", H.mode === "live" ? `확인을 누르면 GitHub에 바로 적용돼요` : "데모라 실제 GitHub에는 남지 않아요");
+  c.appendChild(note);
+  const rb = h("div", "row-btns"); rb.style.display = "grid"; rb.style.gridTemplateColumns = "1fr 2fr"; const go = h("button", "btn primary lg", multi ? `승인하고 실행 (${proposal.steps.length})` : "승인하고 실행"); go.type = "button"; const no = h("button", "btn lg", "취소"); no.type = "button"; rb.appendChild(no); rb.appendChild(go); c.appendChild(rb);
+  const later = h("button", "btn later", "나중에 할게요"); later.type = "button"; later.style.alignSelf = "center"; later.style.border = "0"; later.style.color = "var(--muted)"; later.onclick = () => { toChat(); snack("대화에 남겨 뒀어요"); }; c.appendChild(later);
+  setTimeout(() => go.focus(), 50);
+  const lock = () => { if (later.isConnected) later.remove(); go.disabled = no.disabled = true; tas.forEach((t) => (t.disabled = true)); boxes.forEach((b) => (b.disabled = true)); };
+  // 실행이 시작되면 체크박스 자리를 진행 표시(빈칸 → 실행 중 → ✓)로 바꾼다
+  const toDots = () => boxes.forEach((b, i) => { const d = h("span", "dot", b.checked ? "" : "–"); b.replaceWith(d); if (!b.checked) lis[i].lastChild.appendChild(h("small", null, "건너뜀")); });
+  no.onclick = () => { lock(); setBadge(-1); tg.textContent = "취소함"; tg.className = "tag skip"; toChat(); bot("알겠어요. 취소했어요."); if (onDone) onDone(false); };
+  go.onclick = async () => {
+    const skip = boxes.map((b, i) => (b.checked ? -1 : i)).filter((i) => i >= 0);
+    lock(); toDots(); tg.textContent = "실행 중";
+    lis.forEach((li, i) => { if (!skip.includes(i)) li.className = "run"; });
+    try {
+      let r;
+      for (let tries = 0; ; tries++) {  // 다른 팀원의 승인이 실행 중이면 잠깐 기다렸다가 다시 시도
+        try { r = await api("/execute", { method: "POST", body: JSON.stringify({ token: proposal.token, edits, skip }) }); break; }
+        catch (e2) { if (!e2.busy || tries >= 3) throw e2; tg.textContent = "다른 팀원 실행 대기 중"; await wait(2000); tg.textContent = "실행 중"; }
+      }
+      setBadge(-1);
+      r.results.forEach((res) => { const li = lis[res.index ?? 0]; if (!li) return; li.className = res.ok ? "ok" : ""; li.querySelector(".dot").textContent = res.ok ? "✓" : "!"; if (res.note || res.error) li.lastChild.appendChild(h("small", null, res.note || res.error)); if (res.url) { const a = h("a", null, " 열기 ↗"); a.href = res.url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.style.color = "var(--blue)"; li.lastChild.firstChild.after(a); } });
+      lis.forEach((li) => { if (li.className === "run") li.className = ""; });
+      tg.textContent = r.ok ? "완료" : "중간에 멈춤"; tg.className = "tag" + (r.ok ? " done" : "");
+      if (inSheet) { const cl = h("button", "btn primary lg", "확인"); cl.type = "button"; cl.onclick = () => toChat(); rb.replaceWith(cl); cl.focus(); await new Promise((res) => { const iv = setInterval(() => { if (!inSheet) { clearInterval(iv); res(); } }, 120); }); }
+      lastTriage = null; refreshHome();
+      tasks.unshift({ title: proposal.summary, status: r.ok ? "완료" : "중간에 멈춤", detail: r.results.map((x) => (x.ok ? "✓ " : "✕ ") + x.label).join("\n"), at: Date.now() }); saveLists();
+      bot(r.ok ? "끝났어요. 한 일은 보관함에 기록해 뒀어요." : "중간에 멈췄어요. 어디까지 했는지 카드에 표시해 뒀어요.");
+      const skipped = r.results.find((x) => x.skipped);
+      if (skipped) { const t = proposal.steps.find((s) => s.edit === "text"); if (t) add(copyBtn("팀 메시지 복사", () => edits[proposal.steps.indexOf(t)] || t.text)); }
+      if (onDone) onDone(r.ok);
+    } catch (e) {
+      lis.forEach((li) => (li.className = ""));
+      toChat();
+      if (e.stale) { setBadge(-1); tg.textContent = "먼저 처리됨"; tg.className = "tag skip"; bot(`다른 팀원이 먼저 처리해서 실행하지 않았어요. 같은 일을 두 번 하거나 덮어쓰지 않으려고요.${e.errors && e.errors.length ? "\n· " + e.errors.map((x) => x.replace(/^\d+번 행동: /, "")).join("\n· ") : ""}`); lastTriage = null; lastProgress = null; refreshHome(); chip("새 상태로 다시 보기", today); if (onDone) onDone(false); return; }
+      if (e.status === 401 && e.login) { setBadge(-1); tg.textContent = "로그인 필요"; bot("승인하려면 GitHub로 로그인해 주세요. 누가 승인했는지 GitHub에 남아요."); add(ghBtn("GitHub로 로그인", true)); return; }
+      if (e.status === 401) { setBadge(-1); tg.textContent = "접근 코드 필요"; askCode(() => approval(proposal, onDone)); return; }
+      setBadge(-1); tg.textContent = "실행 안 함"; tg.className = "tag skip"; fail(e);
+      if (onDone) onDone(false);
+    }
+  };
+  scroll();
+}
+function askCode(retry) {
+  bot("이 팀은 실행 전에 팀 접근 코드를 확인해요. 팀장에게 받은 코드를 넣어 주세요.");
+  const c = add(h("div", "task")); const inp = h("input"); inp.type = "password"; inp.id = "code" + Date.now(); inp.placeholder = "팀 접근 코드"; inp.autocomplete = "off";
+  Object.assign(inp.style, { height: "44px", borderRadius: "12px", border: "1px solid var(--line)", background: "var(--bg)", color: "var(--ink)", padding: "0 12px", font: "inherit" });
+  const b = h("button", "btn primary", "저장하고 다시 시도"); b.type = "button"; c.appendChild(inp); c.appendChild(b);
+  b.onclick = () => { if (!inp.value.trim()) return; store.set("code", inp.value.trim()); b.disabled = true; retry(); };
+}
+let pending = 0;
+function setBadge(d) { pending = Math.max(0, pending + d); $("badge").hidden = !pending; $("badge").textContent = pending; }
+
+/* ---------- 공고 ---------- */
+function pickRow(box, title, sub, fn) {
+  const b = h("button", "bigrow"); b.type = "button"; b.style.gridTemplateColumns = "1fr auto";
+  const tx = h("span"); tx.appendChild(h("b", null, title)); tx.appendChild(h("small", null, sub)); b.appendChild(tx); b.appendChild(h("span", "chev", "›"));
+  b.onclick = () => { box.querySelectorAll("button").forEach((x) => (x.disabled = true)); fn(); }; box.appendChild(b); return b;
+}
+function notice(fresh) {
+  if (fresh === true) { me("새 대회 준비할래"); return noticeForm(null); }
+  me("대회 공고 분석해 줘");
+  const d = curDraft();
+  bot("어떤 팀플의 공고인가요? 새로 나갈 대회인지, 지금 하는 팀플의 공고인지에 따라 하는 일이 달라요.");
+  const box = add(h("div", "big"));
+  pickRow(box, "새 팀플로 시작", "아직 팀·저장소가 없는 대회예요. 공고를 정리하고 신청부터 도와요", () => { me("새 팀플로 시작"); noticeForm(null); });
+  if (d) pickRow(box, `'${d.title}' 공고 다시 분석`, "준비 중인 이 대회의 분석을 새 공고로 바꿔요", () => { me("이 대회 공고 다시 분석"); noticeForm(null, d); });
+  else pickRow(box, `지금 팀플에 연결 · ${projName()}`, `마감일과 낼 것 목록을 GitHub에 적어 둬요`, () => { me(`${projName()} 팀플 공고야`); noticeForm(curRepo()); });
+  pickRow(box, "다른 팀플 고르기", "진행 중인 다른 저장소나 준비 중인 대회로 바꿔요", openProjects);
+  scroll();
+}
+function noticeForm(target, draft, opts = {}) {
+  const noAi = !!(opts.noAi || (draft && draft.noAi));
+  bot("공고 링크를 주세요. 읽어 와서 마감·자격·낼 것을 정리해 드릴게요." + (H.ai ? "" : "\n지금은 규칙으로 읽어서 날짜가 맞는지 한 번 확인해 주세요."));
+  const c = add(h("div", "task")); const id = "notice" + Date.now();
+  const ul = h("label", "lab", "공고 링크"); ul.htmlFor = id + "u"; const row = h("div", "urlrow"); const url = h("input"); url.id = ul.htmlFor; url.type = "url"; url.inputMode = "url"; url.placeholder = "https://… 공고 페이지 주소"; url.value = (draft && draft.url) || opts.url || "";
+  const fb = h("button", "btn primary", "분석하기"); fb.type = "button"; row.appendChild(url); row.appendChild(fb);
+  const lb = h("label", "lab", "링크를 읽지 못했어요. 공고 내용을 붙여넣어 주세요"); lb.htmlFor = id;
+  const ta = h("textarea"); ta.id = id; ta.value = (draft && draft.text) || ""; ta.placeholder = "공고 본문을 붙여넣어 주세요"; ta.style.minHeight = "150px";
+  const src = h("div", "note"); src.hidden = true;
+  const rb = h("div", "row-btns"); const go = h("button", "btn primary", "이 내용으로 분석하기"); go.type = "button"; rb.appendChild(go);
+  [ul, row, lb, ta, src, rb].forEach((x) => c.appendChild(x));
+  // 기본은 링크 한 칸. 붙여넣기 칸은 링크를 못 읽었을 때만 보여 준다
+  const showPaste = (on) => { lb.hidden = ta.hidden = rb.hidden = !on; if (on) ta.focus(); };
+  showPaste(false);
+  let pageUrl = (draft && draft.url) || opts.url || null;
+  if (noAi) { src.hidden = false; src.textContent = "이 사이트는 AI 크롤러를 막아 두어서, 이 글은 AI에 보내지 않고 규칙으로만 읽어요."; }
+  const load = async () => {
+    const u = url.value.trim(); if (!/^https?:\/\//i.test(u)) { snack("http로 시작하는 주소를 넣어 주세요"); url.focus(); return false; }
+    fb.disabled = true; fb.textContent = "읽는 중";
+    try {
+      const r = await api("/notice/fetch", { method: "POST", body: JSON.stringify({ url: u }) });
+      const thin = (r.text || "").length < 200;
+      ta.value = thin && opts.fallback ? `${opts.fallback}\n\n${r.text}` : (r.title ? r.title + "\n" : "") + r.text; pageUrl = r.url;
+      if (thin && opts.fallback) r.note = "이 사이트는 화면을 스크립트로 그려서 글을 거의 읽지 못했어요. Bento가 찾아온 정보(제목·주최·마감)로 채웠어요.";
+      src.hidden = false; src.textContent = `읽어 온 페이지: ${r.title || r.url}${r.truncated ? " · 길어서 앞부분만" : ""}${r.note ? "\n" + r.note : ""}${noAi ? "\n이 사이트 글은 AI에 보내지 않고 규칙으로만 읽어요." : ""}`; src.style.whiteSpace = "pre-line";
+      return true;
+    } catch (e) {
+      if (e.status === 401 && e.login) { src.hidden = false; src.textContent = "링크를 불러오려면 GitHub로 로그인해 주세요."; c.appendChild(ghBtn("GitHub로 로그인", false)); }
+      else if (e.status === 401) askCode(load);
+      else if (opts.fallback) { ta.value = opts.fallback; src.hidden = false; src.textContent = "페이지를 읽지 못해서 Bento가 찾아온 정보(제목·주최·마감)로 분석해요."; return true; }
+      else { src.hidden = true; showPaste(true); }
+      return false;
+    }
+    finally { fb.disabled = false; fb.textContent = "분석하기"; }
+  };
+  // 링크 → 읽어 오기 → 바로 분석. 링크가 없고 이미 내용이 있으면(다시 분석) 그 내용으로
+  const run = async () => { if (url.value.trim()) { if (await load()) go.onclick(); } else if (ta.value.trim()) go.onclick(); else { snack("공고 링크를 넣어 주세요"); url.focus(); } };
+  fb.onclick = run; url.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); run(); } });
+  go.onclick = async () => {
+    if (!ta.value.trim()) return showPaste(true);
+    go.disabled = ta.disabled = fb.disabled = url.disabled = true;
+    try {
+      const r = await thinking("공고를 읽고 있어요", api("/notice", { method: "POST", body: JSON.stringify({ text: ta.value, repo: target, new_project: !target, no_ai: noAi }) }));
+      if (opts.title) r.extract.title = opts.title;  // 찾아온 대회는 이미 아는 제목을 쓴다
+      if (!target) {
+        let dd = draft || drafts.find((x) => x.title === r.extract.title);
+        if (!dd) { dd = { id: Date.now().toString(36), at: Date.now() }; drafts.unshift(dd); }
+        Object.assign(dd, { title: r.extract.title, extract: r.extract, text: ta.value, url: pageUrl, noAi, found: opts.foundId || dd.found }); saveDrafts();
+        useProject({ draft: dd.id }, true);
+      } else if (!cur || cur.repo !== target || cur.draft) useProject({ repo: target }, true);
+      setExtract(r.extract);
+      showExtract(r);
+    } catch (e) { fail(e); go.disabled = ta.disabled = fb.disabled = url.disabled = false; }
+  };
+  scroll(); url.focus();
+  if (opts.autoLoad && url.value) setTimeout(load);
+}
+function showExtract(r) {
+  const ex = r.extract;
+  const c = add(h("div", "task")); const hd = h("div", "task-h"); hd.appendChild(h("b", null, ex.title)); hd.appendChild(h("span", "tag done", { claude: "AI 분석", cache: "저장된 분석", repo: "팀이 저장한 분석", sample: "예시 분석", rules: "규칙 분석" }[r.source] || "분석")); c.appendChild(hd);
+  const dl = h("dl", "facts");
+  ex.facts.forEach((f) => { dl.appendChild(h("dt", null, f.label)); const dd = h("dd", null, f.value); const q = h("small", null, `원문 · "${f.quote}"`); q.style.display = "block"; q.style.color = "var(--muted)"; q.style.fontSize = "12px"; dd.appendChild(q); dl.appendChild(dd); });
+  if (ex.deliverables.length) { dl.appendChild(h("dt", null, "제출물")); dl.appendChild(h("dd", null, ex.deliverables.map((d, i) => `${i + 1}. ${d.name}`).join("\n"))); dl.lastChild.style.whiteSpace = "pre-line"; }
+  c.appendChild(dl);
+  if (r.team_ok != null) c.appendChild(h("div", "note", r.team_ok ? `✓ 저장소 팀원 ${r.team_size}명, 참가 조건(${ex.team_min ?? "?"}~${ex.team_max ?? "?"}명)을 충족해요` : `! 저장소 팀원 ${r.team_size}명, 참가 조건(${ex.team_min ?? "?"}~${ex.team_max ?? "?"}명)과 맞지 않아요`));
+  if (r.dropped) c.appendChild(h("div", "note", `원문에서 근거를 찾지 못한 항목 ${r.dropped}개는 뺐어요.`));
+  c.appendChild(h("div", "note", r.usage
+    ? `AI 사용: 입력 ${r.usage.input_tokens.toLocaleString()} · 출력 ${r.usage.output_tokens.toLocaleString()} 토큰 (약 $${r.usage.est_usd})`
+    : r.source === "cache" || r.source === "repo" ? "같은 공고를 이미 분석해 둬서 AI를 다시 부르지 않았어요 · 토큰 0"
+    : r.source === "rules" ? "AI 키가 없어 규칙으로 읽었어요 · 토큰 0. 날짜와 제출물이 원문과 맞는지 꼭 확인해 주세요." : "예시 공고라 AI를 부르지 않았어요 · 토큰 0"));
+  if (!ex.submit_deadline_iso) c.appendChild(h("div", "note", "! 제출 마감을 찾지 못했어요. 계획을 짜려면 마감 날짜가 있는 공고가 필요해요."));
+  const rb = h("div", "row-btns"); const a = h("button", "btn", "신청 준비하기"); a.type = "button"; rb.appendChild(a);
+  const pl = h("button", "btn", "마감까지 계획 짜기"); pl.type = "button"; pl.disabled = !ex.submit_deadline_iso; rb.appendChild(pl); c.appendChild(rb);
+  a.onclick = () => { a.disabled = true; me("신청할래"); applyFlow(ex); };
+  pl.onclick = () => { pl.disabled = true; planFlow(); };
+  scroll();
+  if (curDraft()) draftNext();
+  else offerPlan(r);
+}
+function offerPlan(r) {
+  if (r.plan) { bot(`대회 일정을 GitHub에 적어 둘까요? 마감일을 만들고, 낼 것마다 할 일을 하나씩 만들어요.` + (r.linked && r.linked.length ? `\n이미 있는 할 일 ${r.linked.map((n) => "#" + n).join(", ")}은 그대로 써요.` : "")); approval(r.plan, (ok) => { if (ok) { renderCal(); chip("캘린더 보기", () => showTab("cal")); chip("오늘 할 일 정리", today); } }); }
+  else if (r.repo) { bot(`이미 GitHub에 마감일이 있어서 새로 만들지 않았어요.`); chip("캘린더 보기", () => showTab("cal")); }
+  else bot("저장소를 읽지 못해서 일정은 만들지 않았어요. Bento 앱이 그 저장소에 설치됐는지 확인해 주세요.");
+}
+function repoSlug(t) { const s = t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); return /[a-z]/.test(s) ? s : `hackathon-${new Date().getFullYear()}`; }
+function draftNext() {
+  const d = curDraft(); if (!d) return;
+  bot(`'${d.title}'은(는) 새 팀플이라 아직 저장소가 없어요. 순서는 이래요:\n1. 신청하기\n2. 팀 저장소 만들고 Bento 앱 설치하기\n3. 연결하면 마감일과 할 일을 GitHub에 적어 둬요`);
+  const c = add(h("div", "task")); c.appendChild(h("b", null, "팀 저장소 준비"));
+  const rb = h("div", "row-btns"); rb.appendChild(link("저장소 만들기", "https://github.com/new?name=" + encodeURIComponent(repoSlug(d.title))));
+  if (H.install_url) { const ins = link("Bento 앱 설치", H.install_url); ins.addEventListener("click", () => store.set("connectAfterInstall", d.id)); rb.appendChild(ins); } c.appendChild(rb);
+  const go = h("button", "btn primary", "만든 저장소 연결하기"); go.type = "button"; go.onclick = () => { go.disabled = true; connectDraft(); }; c.appendChild(go);
+  c.appendChild(h("div", "note", "저장소 만들기와 앱 설치는 직접 해 주세요. 설치 화면에서 방금 만든 저장소를 고르면 Bento로 돌아와 바로 연결돼요."));
+  scroll();
+}
+async function connectTo(d, repo) {
+  me(`${repo}에 연결해 줘`);
+  let r; try { r = await thinking("대회 일정을 정리하고 있어요", api("/notice", { method: "POST", body: JSON.stringify({ text: d.text, repo, no_ai: !!d.noAi }) })); } catch (e) { return fail(e); }
+  const pl = store.get("plan:d:" + d.id, null); try { localStorage.removeItem("bento:plan:d:" + d.id); } catch (e) { /* 무시 */ }
+  const applied = store.get(doneKey("apply", "d:" + d.id), null) || (d.applied ? { at: d.applied, proof: "" } : null);
+  const info0 = store.get("info:d:" + d.id, null);
+  drafts.splice(drafts.indexOf(d), 1); saveDrafts();
+  useProject({ repo }, true); if (pl) store.set("plan:" + projKey(), pl); if (info0) store.set("info:" + projKey(), info0);
+  // 신청 기록을 그대로 들고 간다. 아직 신청 전이면 협업으로 넘기지 않는다.
+  if (applied) store.set(doneKey("apply"), applied); else store.set("applyTodo:" + projKey(), 1);
+  setExtract(r.extract);
+  bot(applied ? `${repo}에 연결했어요. 신청을 마쳤으니 이제 협업 단계예요.` : `${repo}에 연결했어요. 아직 신청 전이라 신청부터 해요.`);
+  offerPlan(r);
+  if (!applied) chip("신청하러 가기", () => { me("신청할래"); applyFlow(r.extract); });
+  renderHome();
+}
+async function connectDraft() {
+  const d = curDraft(); if (!d) return;
+  me("저장소 연결해 줘");
+  let ps; try { ps = await thinking("Bento 앱이 설치된 저장소를 찾고 있어요", loadProjects()); } catch (e) { return fail(e); }
+  if (!ps.length) { bot("아직 Bento 앱이 설치된 저장소가 없어요. 저장소를 만들고 앱을 설치한 뒤 다시 눌러 주세요."); chip("다시 확인", connectDraft); return; }
+  const free = ps.filter((p) => !p.notice);
+  bot(free.length ? `'${d.title}'을(를) 어느 저장소에 연결할까요? 아직 공고가 없는 저장소를 위에 뒀어요.` : `어느 저장소에 연결할까요? 모든 저장소에 이미 다른 공고가 연결돼 있어요.`);
+  const box = add(h("div", "big"));
+  [...free, ...ps.filter((p) => p.notice)].forEach((p) => pickRow(box, p.repo, projSub(p), () => connectTo(d, p.repo)));
+  chip("다시 확인", connectDraft);
+  scroll();
+}
+function needRepo(ask) {
+  const d = curDraft(); if (!d) return false;
+  me(ask); bot(`'${d.title}'은(는) 아직 저장소가 없는 준비 단계라 살펴볼 저장소가 없어요. 저장소를 연결하거나 진행 중인 팀플로 바꿔 주세요.`);
+  chip("저장소 연결하기", connectDraft); chip("진행 중인 팀플로 바꾸기", openProjects); return true;
+}
+
+/* ---------- 마감까지 계획 ---------- */
+async function planFlow() {
+  me("마감까지 계획 짜 줘");
+  if (!extract) { bot("먼저 공고를 분석해야 마감을 알 수 있어요."); chip("대회 공고 분석하기", notice); return; }
+  let r; try { r = await thinking("마감에서 거꾸로 계획을 짜고 있어요", api("/schedule", { method: "POST", body: JSON.stringify({ extract }) })); } catch (e) { return fail(e); }
+  if (!r.steps.length) { bot("제출 마감이 없거나 이미 지나서 계획을 짤 수 없어요."); return; }
+  bot(`${projName()}의 제출 마감에서 거꾸로 ${r.steps.length}단계로 나눴어요. 날짜는 바꿀 수 있어요. AI를 쓰지 않아서 토큰은 0이에요.`);
+  const c = add(h("div", "task")); const hd = h("div", "task-h"); hd.appendChild(h("b", null, `${projName()} · 작업 계획`)); const tg = h("span", "tag skip", "초안"); hd.appendChild(tg); c.appendChild(hd);
+  const ol = h("ol", "plan"); const rows = r.steps.map((s, i) => {
+    const li = h("li"); li.style.borderLeft = `4px solid var(${colorOf(projKey())})`; li.appendChild(h("b", null, s.title));
+    const inp = h("input"); inp.type = "date"; inp.value = s.due.slice(0, 10); inp.id = `plan${Date.now()}_${i}`; inp.setAttribute("aria-label", `${s.title} 날짜`); inp.max = r.steps[r.steps.length - 1].due.slice(0, 10);
+    if (s.kind !== "step") { inp.disabled = true; inp.title = "공고에 적힌 날짜예요"; }
+    li.appendChild(inp); li.appendChild(h("small", null, s.note + (s.kind === "step" ? "" : " · 공고 날짜"))); ol.appendChild(li); return { s, inp };
+  });
+  c.appendChild(ol);
+  const rb = h("div", "row-btns"); const save = h("button", "btn primary", "캘린더에 넣기"); save.type = "button"; rb.appendChild(save); c.appendChild(rb);
+  save.onclick = () => {
+    const steps = rows.map(({ s, inp }) => ({ ...s, due: (inp.value || s.due.slice(0, 10)) + s.due.slice(10) })).sort((a, b) => a.due.localeCompare(b.due));
+    rows.forEach(({ inp }) => (inp.disabled = true)); save.disabled = true; tg.className = "tag done"; tg.textContent = "캘린더에 넣음";
+    store.set("plan:" + projKey(), steps); store.set("planAt:" + projKey(), new Date().toISOString()); renderCal();
+    bot(`캘린더에 넣었어요. 팀플마다 색을 다르게 보여 드려요.` + (curDraft() ? " 저장소를 연결하면 GitHub에도 적어 둘 수 있어요." : ""));
+    chip("캘린더 보기", () => showTab("cal"));
+    if (!curDraft()) chip("GitHub에도 적어 두기", () => planToGithub(steps));
+  };
+  scroll();
+}
+async function planToGithub(steps) {
+  me("계획을 GitHub에도 적어 줘");
+  let r; try { r = await thinking("저장소와 대조하고 있어요", api("/schedule/github", { method: "POST", body: JSON.stringify({ repo: curRepo(), steps: steps.filter((s) => s.kind === "step").map((s) => ({ title: s.title, due: s.due })) }) })); } catch (e) { return fail(e); }
+  if (!r.proposal) return bot(r.message);
+  bot(`단계마다 마감일을 GitHub에 적어 둘게요. 팀원 모두 같은 계획을 보게 돼요.`);
+  approval(r.proposal, (ok) => { if (ok) { loadCalState(); chip("캘린더 보기", () => showTab("cal")); } });
+}
+
+/* ---------- 진행 점검 → 다시 계획 (에이전트 루프) ---------- */
+function hashText(t) { let x = 0; for (const ch of t) x = (x * 31 + ch.charCodeAt(0)) | 0; return String(x); }
+async function progressCheck(auto) {
+  if (curDraft()) { if (!auto) needRepo("진행 점검해 줘"); return; }
+  if (!auto) me("진행 점검해 줘");
+  const key = projKey(); const plan = store.get("plan:" + key, []);
+  let r;
+  const req = api("/progress", { method: "POST", body: JSON.stringify({ repo: curRepo(), plan, deadline_iso: extract && extract.submit_deadline_iso, plan_start_iso: store.get("planAt:" + key, null) }) });
+  try { r = await (auto ? req : working("진행을 점검하고 있어요", ["관찰 · 저장소와 계획 읽기", "판단 · 늦은 단계 찾기", "다시 계획 · 남은 시간에 맞추기"], req)); }
+  catch (e) { if (!auto) fail(e); return; }
+  lastProgress = r; lastChecked = new Date(); renderHome();
+  if (!r.findings.length) { if (!auto) { bot(plan.length || extract ? "계획대로 가고 있어요. 늦은 단계가 없어요 ✓" : "아직 계획이 없어서 비교할 게 없어요."); if (!plan.length && extract) chip("마감까지 계획 짜기", planFlow); } return; }
+  if (auto) { const h2 = hashText(r.summary); if (store.get("progressSeen:" + key, "") !== h2) { store.set("progressSeen:" + key, h2); $("homeBadge").hidden = false; $("homeBadge").textContent = "!"; } return; }
+  progressCard(r, false);
+}
+function progressCard(r, auto) {
+  const key = projKey();
+  bot(auto ? `아무도 묻지 않았지만, ${projName()} 진행을 점검하다가 먼저 발견한 게 있어요.` : "계획과 실제 진행을 비교했어요.");
+  const c = add(h("div", "task")); const hd = h("div", "task-h"); hd.appendChild(h("b", null, auto ? "Bento가 먼저 발견했어요" : "진행 점검 결과")); hd.appendChild(h("span", "tag", `${r.findings.length}개`)); c.appendChild(hd);
+  const t1 = h("div", "tier red"); t1.appendChild(h("b", null, "관찰한 것"));
+  r.findings.forEach((f) => { const d = h("div", "crow"); d.appendChild(h("span", null, f.sev === "긴급" ? "✕" : "!")); const tx = h("div", null, f.title); tx.appendChild(h("small", null, f.why));
+    if (f.local) { const b = h("button", "btn", "끝났어요"); b.type = "button"; b.style.marginTop = "6px"; b.style.height = "36px"; b.onclick = () => { const t = f.id.slice(6); const pl = store.get("plan:" + key, []); pl.forEach((s2) => { if (s2.title === t) s2.done = true; }); store.set("plan:" + key, pl); b.disabled = true; b.textContent = "완료로 표시했어요"; renderCal(); }; tx.appendChild(b); }
+    d.appendChild(tx); t1.appendChild(d); });
+  c.appendChild(t1);
+  if (r.moves.length || r.assign.length || r.scope) {
+    const t2 = h("div", "tier yellow"); t2.appendChild(h("b", null, "다시 짠 계획 (제안)"));
+    const fmt = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+    r.moves.forEach((m) => { const d = h("div", "crow"); d.appendChild(h("span", null, "↻")); const tx = h("div", null, m.title); tx.appendChild(h("small", null, `${fmt(m.old)} → ${fmt(m.new)}${m.repo ? " · GitHub 마일스톤" : " · 이 기기 계획"}`)); d.appendChild(tx); t2.appendChild(d); });
+    r.assign.forEach((a) => { const d = h("div", "crow"); d.appendChild(h("span", null, "→")); const tx = h("div", null, `#${a.issue} ${a.title}`); tx.appendChild(h("small", null, `담당자 없음 → ${a.user} (지금 맡은 열린 이슈가 가장 적어요)`)); d.appendChild(tx); t2.appendChild(d); });
+    if (r.scope) t2.appendChild(h("div", "note", "✂ " + r.scope));
+    c.appendChild(t2);
+  }
+  const applyLocal = () => { if (!r.moves.length) return; const pl = store.get("plan:" + key, []); r.moves.forEach((m) => pl.forEach((s2) => { if (s2.title === m.title) s2.due = m.new; })); pl.sort((a, b) => a.due.localeCompare(b.due)); store.set("plan:" + key, pl); renderCal(); };
+  if (r.proposal) { approval(r.proposal, (ok) => { if (ok) { applyLocal(); bot("다시 짠 계획을 반영했어요. 캘린더에도 바뀐 날짜가 보여요."); chip("캘린더 보기", () => showTab("cal")); } }); }
+  else if (r.moves.length) { const b = h("button", "btn primary", "이 기기 계획 바꾸기"); b.type = "button"; b.onclick = () => { b.disabled = true; applyLocal(); bot("계획을 바꿨어요. 캘린더에서 확인해 보세요."); chip("캘린더 보기", () => showTab("cal")); }; c.appendChild(b); }
+  scroll();
+}
+
+/* ---------- 오늘 (홈 브리핑) ---------- */
+function turnLabel(it) {
+  const me2 = meUser(); const age = Math.floor(it.age_hours || 0);
+  if (it.lazy && it.lazy.status === "vetoed") return [`${it.lazy.vetoed_by.join(", ")}님 반대로 보류`, ""];
+  if (it.lazy && it.lazy.status === "waiting") { const left = Math.max(0, Math.ceil((new Date(it.lazy.executes_at) - Date.now()) / 36e5)); return [`반대 없으면 ${left}시간 뒤 실행`, "open"]; }
+  if (it.level >= 2) return [`누구나 승인 가능 · ${age}시간째`, "open"];
+  if (it.owner && it.owner === me2) return ["내 차례", "mine"];
+  return [it.owner ? `${it.owner}님 차례${it.level ? ` · ${age}시간째` : ""}` : "팀 확인", ""];
+}
+let lastTriage = null, lastProgress = null, lastChecked = null;
+function fmtTime(d) { return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
+function refreshHome() { if (curDraft()) return renderHome(); api("/triage").then((t) => { lastTriage = t; renderHome(); }).catch(() => renderHome()); }
+function stageOf() {
+  const d = curDraft(); const sub = store.get(doneKey("submit"), null), app = store.get(doneKey("apply"), null);
+  if (sub) return 3; if (!extract) return 0; if (d) return app || d.applied ? 1 : 0;
+  // 저장소가 있어도 신청 기록이 없으면 신청 단계: 연결할 때 신청 전이었거나, 신청 마감이 아직 남은 대회
+  const appLeft = ddays(extract.apply_deadline_iso);
+  return !app && (store.get("applyTodo:" + projKey(), null) || (appLeft != null && appLeft >= 0)) ? 0 : 1;
+}
+function ddays(iso) { if (!iso) return null; const n = new Date(); n.setHours(0, 0, 0, 0); const d = new Date(iso); d.setHours(0, 0, 0, 0); return Math.round((d - n) / 864e5); }
+function renderHome() {
+  const v = $("v-home"); if (!v) return; v.innerHTML = "";
+  const d = curDraft(); const now = new Date();
+  const items = lastTriage ? lastTriage.items : []; const finds = lastProgress ? lastProgress.findings : [];
+  const me2 = meUser(); const mineN = items.filter((i) => i.owner === me2 || i.level >= 2).length;
+  const todo = (d ? 0 : (me2 ? mineN : items.length)) + finds.length;
+  const subD = extract ? ddays(extract.submit_deadline_iso) : null, appD = extract ? ddays(extract.apply_deadline_iso) : null;
+  v.appendChild(h("p", "h-date", now.toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "long" })));
+  const t = h("h1", "h-title");
+  const lead = !extract ? "나갈 대회를 골라 볼까요?" : todo ? `${me2 ? "내가 " : "오늘 "}챙길 일 ${todo}개` : "오늘은 막힌 곳이 없어요";
+  const needApply = stageOf() === 0 && extract;
+  const tail = needApply && appD != null && appD >= 0 ? `신청까지 D-${appD}` : subD != null && subD >= 0 ? `제출까지 D-${subD}` : "";
+  t.textContent = lead; if (tail) { t.appendChild(h("br")); t.appendChild(document.createTextNode(tail)); } v.appendChild(t);
+  // 누구세요? (승인마다 주인을 정하려면 내가 누구인지 알아야 한다)
+  if (!d && H.login && !ME.logged_in) {
+    const w = h("div", "whoami"); w.appendChild(h("b", null, "GitHub로 로그인하면 내 차례를 알려 드려요")); w.appendChild(ghBtn("GitHub로 로그인", true)); v.appendChild(w);
+  } else if (!d && !me2 && lastTriage && lastTriage.members && lastTriage.members.length) {
+    const w = h("div", "whoami"); w.appendChild(h("b", null, "누구세요?")); w.appendChild(h("div", "note", "승인할 때 이름이 남아요"));
+    const os2 = h("div", "opts"); lastTriage.members.forEach((m) => { const b = h("button", "btn", m); b.type = "button"; b.onclick = () => setMe(m); os2.appendChild(b); }); w.appendChild(os2); v.appendChild(w);
+  }
+  // 단계: 도시락 4칸 = 신청 · 협업 · 제출 · 끝
+  const st = stageOf(); const sb = h("div", "stagebar"); const bars = h("div", "bars"), labs = h("div", "labs");
+  ["신청", "협업", "제출", "끝"].forEach((n, i) => { bars.appendChild(h("i", i < st ? "done" : i === st ? "now" : "")); labs.appendChild(h("span", i === st ? "now" : "", i < st ? `${n} ✓` : i === st ? `${n} 중` : n)); });
+  sb.appendChild(bars); sb.appendChild(labs); sb.setAttribute("aria-label", `지금 단계: ${["신청", "협업", "제출", "끝"][st]}`); v.appendChild(sb);
+  // 맨 위 카드: 지금 가장 중요한 한 가지. 다른 카드와 같은 흰 카드, 라벨은 내용만
+  const top = finds[0] || (!d && items.find((i) => i.sev === "긴급"));
+  const card = h("div", "hero"); const body = h("div", "body"); card.appendChild(body);
+  const lab = (t, c) => body.appendChild(h("span", "lab2" + (c ? " " + c : ""), t));
+  const acts = () => { const a = h("div", "acts"); body.appendChild(a); return a; };
+  const btn = (t, primary, fn) => { const b = h("button", "btn" + (primary ? " primary" : ""), t); b.type = "button"; b.onclick = fn; return b; };
+  let heroId = null;
+  const soon = freshFinds().filter((y) => { const dl = dleft2(y.deadline_iso); return dl != null && dl <= 7; });
+  if (top) {
+    lab("늦어진 일", "crit"); body.appendChild(h("b", null, top.title)); body.appendChild(h("small", null, top.why));
+    acts().appendChild(btn(finds[0] ? (lastProgress.proposal || lastProgress.moves.length ? "다시 짠 계획 보기" : "자세히") : "해결하기", true, () => { $("homeBadge").hidden = true; showTab("chat"); if (finds[0]) { me("늦어진 일 보여 줘"); progressCard(lastProgress, true); } else openItem(top); }));
+  } else if (soon.length) {
+    const x = soon[0]; const dl = Math.max(0, dleft2(x.deadline_iso)); heroId = x.id;
+    card.classList.add("has-poster"); card.insertBefore(posterEl(x), body);
+    lab(`새 대회 · ${dl === 0 ? "오늘 마감" : `D-${dl}`}`, "pop"); body.appendChild(h("b", null, x.title));
+    body.appendChild(h("small", null, `신청 ${x.deadline_text} · ${x.source_name.replace(/ \(.*\)$/, "")}`));
+    const a = acts(); a.appendChild(btn("신청 준비", true, () => startFound(x))); a.appendChild(btn("관심 없음", false, () => dismissFound(x)));
+  } else if (!extract) {
+    lab("시작"); body.appendChild(h("b", null, "나갈 대회 공고를 알려 주세요")); acts().appendChild(btn("공고 분석", true, () => { showTab("chat"); notice(); }));
+  } else if (d) {
+    lab(d.applied ? "신청 완료" : "신청 준비", "pop"); body.appendChild(h("b", null, d.applied ? "팀 저장소를 연결해 주세요" : d.title));
+    acts().appendChild(btn(d.applied ? "저장소 연결" : "신청 준비", true, () => { showTab("chat"); d.applied ? connectDraft() : (me("신청할래"), applyFlow(extract)); }));
+  } else if (needApply) {
+    lab(appD != null && appD >= 0 ? `신청 · D-${appD}` : "신청 전", "pop"); body.appendChild(h("b", null, extract.title || "대회 신청"));
+    body.appendChild(h("small", null, "저장소는 연결됐어요. 신청을 마쳐야 협업 단계로 넘어가요."));
+    acts().appendChild(btn("신청하러 가기", true, () => { showTab("chat"); me("신청할래"); applyFlow(extract); }));
+  } else {
+    lab("진행 중", "ok"); body.appendChild(h("b", null, "계획대로 가고 있어요")); if (!lastProgress) body.appendChild(h("small", null, "확인하는 중…"));
+    acts().appendChild(btn("진행 점검", false, () => { showTab("chat"); progressCheck(false); }));
+  }
+  v.appendChild(card);
+  const contestBlock = () => {
+  // Bento가 찾아온 대회
+    const finds2 = freshFinds().filter((x) => x.id !== heroId);  // 맨 위 카드에 나온 대회는 목록에서 빼기
+    if (finds2.length) {
+      const fh = h("div", "sech"); fh.appendChild(h("h2", null, "새 대회")); const more = h("button", "link", `${finds2.length}개 모두 보기`); more.type = "button"; more.onclick = () => { showTab("chat"); discoverChat(); }; fh.appendChild(more); v.appendChild(fh);
+      finds2.slice(0, 3).forEach((x) => v.appendChild(foundRow(x)));
+    }
+  };
+  if (!extract) contestBlock();  // 대회를 먼저 정하고 → 저장소 → 협업. 아직 대회가 없으면 찾아온 대회가 먼저
+  // 승인 대기 = 저장소에서 찾은 할 일
+  if (!d && items.length) {
+    const mine = items.filter((i) => me2 && (i.owner === me2 || i.level >= 2)), rest = items.filter((i) => !mine.includes(i));
+    const row = (it) => { const b = h("button", "arow"); b.type = "button"; b.appendChild(h("span", "ai " + ({ "긴급": "crit", "주의": "warn" }[it.sev] || "ok"), it.sev)); const tx = h("span"); tx.appendChild(h("b", null, it.title)); const [tl, tc] = turnLabel(it); const meta = h("span", "meta"); meta.appendChild(h("span", "turn " + tc, tl)); tx.appendChild(meta); b.appendChild(tx); b.appendChild(h("span", "chev", "›")); b.onclick = () => { showTab("chat"); openItem(it); }; v.appendChild(b); };
+    if (mine.length) { const sh = h("div", "sech"); sh.appendChild(h("h2", null, "내 차례")); sh.appendChild(h("span", null, `${mine.length}개`)); v.appendChild(sh); mine.forEach(row); }
+    if (rest.length) { const sh = h("div", "sech"); sh.appendChild(h("h2", null, me2 ? "팀원 차례" : "챙길 일")); sh.appendChild(h("span", null, lastTriage.duty ? `오늘의 당번 ${lastTriage.duty}` : `${rest.length}개`)); v.appendChild(sh); rest.slice(0, 3).forEach(row); }
+    if (rest.length > 3) { const m = h("button", "btn", `${rest.length - 3}개 더 보기`); m.type = "button"; m.style.alignSelf = "flex-start"; m.onclick = () => { showTab("chat"); today(); }; v.appendChild(m); }
+  }
+  if (extract) contestBlock();
+  // 바로 맡기기
+  const qh = h("div", "sech"); qh.appendChild(h("h2", null, "바로 맡기기")); v.appendChild(qh);
+  const q = h("div", "quick");
+  [["대회 찾아오기", "학과 공지·해커톤 목록", discoverChat], ["대회 공고 분석", "링크나 본문으로", notice], ["마감까지 계획", "날짜별로 나눠요", planFlow], [d ? "신청 준비" : "제출 전 점검", d ? "조건·폼·증거" : "링크·버전·확인", d ? () => { me("신청할래"); applyFlow(extract); } : submit], ["진행 점검", "늦은 단계 다시 짜기", () => progressCheck(false)]]
+    .forEach(([a, b2, fn]) => { const x = h("button"); x.type = "button"; x.appendChild(h("b", null, a)); x.onclick = () => { showTab("chat"); fn(); }; q.appendChild(x); });
+  v.appendChild(q);
+  // 'Bento가 한 일' 기록은 보관함에 있다. 홈에는 Bento가 지켜보고 있다는 한 줄만 남긴다.
+  if (lastChecked) { const lc = h("div", "note", `${fmtTime(lastChecked)} 확인${tasks.length ? ` · 실행한 일 ${tasks.length}개는 보관함에` : ""}`); lc.style.textAlign = "center"; lc.style.margin = "6px 0 0"; v.appendChild(lc); }
+}
+
+/* ---------- 대회 먼저 찾아오기 ---------- */
+let lastDiscover = null;
+const INTERESTS = ["AI", "웹", "앱", "보안", "데이터", "게임", "블록체인", "핀테크", "클라우드"];
+function interests() { return store.get("interests", ["AI"]); }
+async function loadDiscover(force) {
+  try { lastDiscover = await api(`/discover?interests=${encodeURIComponent(interests().join(","))}${force ? "&force=true" : ""}`); } catch (e) { lastDiscover = null; }
+  // 같은 사이트는 10초 간격이라, 아직 못 읽은 곳이 있으면 11초 뒤에 한 번 더 묻는다
+  if (lastDiscover && lastDiscover.pending && lastDiscover.pending.length && !loadDiscover.retrying) { loadDiscover.retrying = true; setTimeout(() => { loadDiscover().finally(() => { loadDiscover.retrying = false; }); }, 11000); }
+  renderHome(); return lastDiscover;
+}
+function freshFinds() {
+  if (!lastDiscover) return [];
+  const gone = new Set(store.get("dismissed", [])); const mine = new Set(drafts.map((d2) => d2.found).filter(Boolean));
+  const titles = new Set(drafts.map((d2) => d2.title));
+  return lastDiscover.items.filter((x) => !gone.has(x.id) && !mine.has(x.id) && !titles.has(x.title));
+}
+function dleft2(iso) { return iso ? ddays(iso) : null; }  // 날짜 기준 (14일에 16일 마감 = 2일 뒤)
+function startFound(x) {
+  showTab("chat"); me(`${x.title} 신청 준비할래`);
+  bot(`${x.source_name}에서 찾은 공고예요. 링크를 불러와서 마감·제출물을 정리하고, 새 팀플로 신청부터 도와 드릴게요.`);
+  // 화면을 스크립트로 그리는 사이트는 글을 거의 못 읽는다. 그때는 Bento가 이미 아는 정보로 채운다.
+  const fallback = [x.title, x.host ? `주최: ${x.host}` : "", x.deadline_text ? `접수: ~ ${x.deadline_text}` : "", x.tags && x.tags.length ? `분류: ${x.tags.join(", ")}` : ""].filter(Boolean).join("\n");
+  noticeForm(null, null, { url: x.url, autoLoad: true, noAi: !x.ai_ok, foundId: x.id, title: x.title, fallback });
+}
+function dismissFound(x) { const g = store.get("dismissed", []); g.push(x.id); store.set("dismissed", g.slice(-200)); renderHome(); }
+// 포스터: 화면에 보이는 대회만, 하나씩 차례로 부른다 (서버가 사이트마다 간격을 지킨다)
+let posterQ = Promise.resolve();
+function posterEl(x) {
+  const box = h("div", "poster"); box.textContent = (x.title || "?").trim().slice(0, 1);
+  const show = (src) => { if (!src) return; const im = h("img"); im.src = src; im.alt = ""; im.loading = "lazy"; im.referrerPolicy = "no-referrer"; im.onerror = () => im.remove(); box.textContent = ""; box.appendChild(im); };
+  const known = store.get("poster:" + x.id, undefined);
+  if (known !== undefined) { show(known); return box; }
+  const load = (retry) => { posterQ = posterQ.then(() => api(`/poster?id=${encodeURIComponent(x.id)}`)).then((r) => { if (r.pending && retry) return setTimeout(() => load(false), 11000); store.set("poster:" + x.id, r.image || null); show(r.image); }).catch(() => {}); };
+  load(true); return box;
+}
+function foundRow(x) {
+  const b = h("button", "arow frow2"); b.type = "button"; const dl = dleft2(x.deadline_iso);
+  const pe = posterEl(x); pe.style.width = "48px"; pe.style.fontSize = "16px"; pe.appendChild(h("span", "dtag" + (dl != null && dl <= 3 ? " crit" : ""), dl != null ? `D-${Math.max(0, dl)}` : "상시")); b.appendChild(pe);
+  const tx = h("span"); tx.appendChild(h("b", null, x.title)); tx.appendChild(h("small", null, [x.source_name.replace(/ \(.*\)$/, ""), x.why.find((w) => !w.startsWith("마감"))].filter(Boolean).join(" · ")));
+  b.appendChild(tx); b.appendChild(h("span", "chev", "›")); b.onclick = () => startFound(x); return b;
+}
+async function discoverChat() {
+  me("나갈 만한 대회 찾아 줘");
+  const r = await working("대회를 찾고 있어요", ["학과 공지·행사 게시판 읽기", "Dev-Event 해커톤 목록 읽기", "마감·관심 분야로 고르기"], loadDiscover(true).then((x) => { if (!x) throw new Error("대회 목록을 불러오지 못했어요"); return x; })).catch((e) => { fail(e); return null; });
+  if (!r) return;
+  const list = freshFinds();
+  if (!list.length) { bot("지금은 새로 나갈 만한 대회가 없어요. 매일 다시 찾아볼게요."); return; }
+  bot(`마감이 지나지 않은 대회 ${list.length}개를 찾았어요. 관심 분야(${interests().join(", ")})와 마감이 가까운 순서예요.`);
+  const box = add(h("div", "big")); list.slice(0, 8).forEach((x) => box.appendChild(foundRow(x)));
+  const err = Object.keys(r.errors || {}); if (err.length) bot(`일부 출처를 읽지 못했어요: ${err.join(", ")}. 다음에 다시 시도할게요.`);
+}
+
+/* ---------- 첫 방문 ---------- */
+function onboarding() {
+  // 앱을 열 때마다 첫 화면을 보여 준다. GitHub 로그인을 막 마치고 돌아온 직후만 건너뛴다.
+  if (new URLSearchParams(location.search).get("login") === "ok") { try { history.replaceState(history.state, "", location.pathname + location.hash); } catch (e) { /* 무시 */ } return; }
+  const o = h("div", "onb"); o.setAttribute("role", "dialog"); o.setAttribute("aria-label", "Bento 시작하기");
+  document.body.classList.add("onboarding");
+  const top = h("div", "top"); top.innerHTML = MASCOT(26, false); top.appendChild(document.createTextNode("Bento")); o.appendChild(top);
+  const mid = h("div", "mid"); const m = h("div"); m.innerHTML = MASCOT(132, true, true); mid.appendChild(m);
+  const rise = (el, delay) => { el.classList.add("rise"); el.style.animationDelay = delay + "s"; return el; };
+  const t = h("h1"); ["Bento,", "팀플을 대신", "챙겨주는 AI"].forEach((x, i) => t.appendChild(rise(h("span", null, x), .55 + i * .12))); mid.appendChild(t);
+  const pp = rise(h("p"), .95); pp.append("공고를 읽고, 계획을 짜고,", h("br"), "늦어지면 먼저 알려 드려요."); mid.appendChild(pp);
+  const ch = h("div", "chips2"); ["신청", "협업", "제출", "완료"].forEach((x, i) => ch.appendChild(rise(h("span", null, x), 1.1 + i * .07))); mid.appendChild(ch); o.appendChild(mid);
+  const bt = rise(h("div", "bot2"), 1.35);
+  const done = (fn) => { o.remove(); document.body.classList.remove("onboarding"); fn && fn(); };
+  let a;
+  if (H.login && !ME.logged_in) {  // GitHub 로그인을 켠 서버: 로그인하면 누구인지 따로 고를 필요가 없다
+    a = ghBtn("GitHub로 시작하기", true);
+    bt.append(a, h("div", "fine", "GitHub에서는 아이디만 확인해요. 승인한 일만 실행해요.")); o.appendChild(bt);
+    document.querySelector(".phone").appendChild(o); a.focus(); return;
+  }
+  a = h("button", "btn primary lg", "시작하기"); a.type = "button"; a.onclick = () => done(() => showTab("home"));
+  // 하나뿐인 큰 버튼. 팀플이 있든 없든 홈이 '챙길 일'과 '찾아온 대회'를 함께 보여 준다.
+  if (ME.logged_in) {  // 이미 로그인: 누구로 들어가는지 보여 주고 시작하기
+    const who = h("div", "fine"); who.style.display = "flex"; who.style.alignItems = "center"; who.style.justifyContent = "center"; who.style.gap = "8px";
+    if (ME.avatar) { const im = h("img"); im.src = ME.avatar; im.alt = ""; im.width = 22; im.height = 22; im.style.borderRadius = "50%"; im.referrerPolicy = "no-referrer"; who.appendChild(im); }
+    who.appendChild(document.createTextNode(`@${ME.login}로 로그인돼 있어요`));
+    bt.append(a, who); o.appendChild(bt);
+    document.querySelector(".phone").appendChild(o); a.focus(); return;
+  }
+  const sub = H.mode === "live" ? `${H.repo.split("/")[1]} 저장소와 연결돼 있어요` : "GitHub 저장소 연결은 나중에 해도 돼요";
+  bt.append(a, h("div", "fine", sub), h("div", "fine", "승인한 일만 실행해요. 머지·푸시·코드 수정은 하지 않아요.")); o.appendChild(bt);
+  document.querySelector(".phone").appendChild(o); a.focus();
+}
+
+/* ---------- 팀플 고르기 ---------- */
+function dtxt(iso) { if (!iso) return ""; const n = new Date(); n.setHours(0, 0, 0, 0); const d = new Date(iso); d.setHours(0, 0, 0, 0); const k = Math.round((d - n) / 864e5); return k >= 0 ? `D-${k}` : `D+${-k}`; }
+function projSub(p) { if (p.error) return "저장소를 읽지 못했어요"; return [p.notice || "연결된 공고 없음", p.due ? `제출 ${dtxt(p.due)}` : "", p.total ? `제출물 ${p.done}/${p.total}` : ""].filter(Boolean).join(" · "); }
+function draftSub(d) { const ex = d.extract || {}; return [d.applied ? "신청 완료" : "신청 준비", ex.apply_deadline_iso ? `신청 ${dtxt(ex.apply_deadline_iso)}` : "", ex.submit_deadline_iso ? `제출 ${dtxt(ex.submit_deadline_iso)}` : ""].filter(Boolean).join(" · "); }
+async function loadProjects() { const r = await api("/projects"); projects = r.projects; if (r.install_url) H.install_url = r.install_url; return projects; }
+async function openProjects() {  // ☰ 메뉴: 왼쪽에서 나오는 서랍. 화면 이동과 팀플 바꾸기를 한곳에서
+  const bg = h("div", "drawer-bg"); const dw = h("nav", "drawer"); dw.setAttribute("aria-label", "메뉴"); bg.appendChild(dw);
+  const close = () => { bg.classList.add("out"); document.removeEventListener("keydown", esc); setTimeout(() => bg.remove(), 180); }; const esc = (e) => { if (e.key === "Escape") close(); };
+  bg.onclick = (e) => { if (e.target === bg) close(); }; document.addEventListener("keydown", esc);
+  const hd = h("div", "dw-h"); const ttl = h("b"); ttl.innerHTML = MASCOT(26, false); ttl.appendChild(document.createTextNode("Bento")); hd.appendChild(ttl);
+  const xb = h("button", "round"); xb.type = "button"; xb.setAttribute("aria-label", "메뉴 닫기"); xb.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>'; xb.onclick = close; hd.appendChild(xb); dw.appendChild(hd);
+  const curTab = [...document.querySelectorAll(".view")].find((x) => !x.hidden)?.id?.slice(2);
+  [["home", "홈", '<path d="M4 11l8-7 8 7v9H4z"/>'], ["chat", "대화", '<path d="M4 12a8 7 0 1 1 3.5 5.8L4 19.5l1.2-3.6A6.6 6.6 0 0 1 4 12z"/>'], ["cal", "캘린더", '<rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/>'], ["me", "나의 Bento", ICO.user]].forEach(([t, n, d]) => {
+    const b = h("button", "dw-item" + (curTab === t ? " on" : "")); b.type = "button"; b.innerHTML = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`; b.appendChild(document.createTextNode(n));
+    b.onclick = () => { close(); if (t === "me") mePage = null; showTab(t); if (t === "me") renderMe(); }; dw.appendChild(b);
+  });
+  dw.appendChild(h("hr"));
+  const proj = (title, sub, color, on, fn) => { const b = h("button", "dw-proj" + (on ? " on" : "")); b.type = "button"; const dot = h("span", "pdot"); dot.style.background = `var(${color})`; b.appendChild(dot); const tx = h("span"); tx.appendChild(h("b", null, title)); tx.appendChild(h("small", null, sub)); b.appendChild(tx); b.onclick = () => { close(); if (!on) fn(); }; return b; };
+  dw.appendChild(h("div", "dw-lab", "진행 중인 팀플"));
+  const live = h("div"); live.appendChild(h("div", "note", "불러오는 중…")); dw.appendChild(live);
+  dw.appendChild(h("div", "dw-lab", "준비 중인 대회"));
+  if (!drafts.length) dw.appendChild(h("div", "note", "아직 없어요. 홈에서 찾아온 대회를 골라 보세요."));
+  drafts.forEach((d) => {
+    const row = h("div", "dw-row"); row.appendChild(proj(d.title, draftSub(d), colorOf("d:" + d.id), !!(cur && cur.draft === d.id), () => useProject({ draft: d.id })));
+    const del = h("button", "dw-del"); del.type = "button"; del.setAttribute("aria-label", `${d.title} 지우기`); del.innerHTML = icon("trash");
+    del.onclick = () => { if (!del.dataset.sure) { del.dataset.sure = "1"; del.classList.add("sure"); del.setAttribute("aria-label", "한 번 더 누르면 지워요"); snack("한 번 더 누르면 지워요"); return; } drafts.splice(drafts.indexOf(d), 1); saveDrafts(); try { localStorage.removeItem("bento:plan:d:" + d.id); } catch (e) { /* 무시 */ } if (cur && cur.draft === d.id) useProject({ repo: curRepo() }, true); row.remove(); snack("지웠어요"); renderHome(); };
+    row.appendChild(del); dw.appendChild(row);
+  });
+  const nb = h("button", "btn primary", "+ 새 대회 준비하기"); nb.type = "button"; nb.style.marginTop = "12px"; nb.onclick = () => { close(); showTab("chat"); notice(true); }; dw.appendChild(nb);
+  document.querySelector(".phone").appendChild(bg); xb.focus();
+  try {
+    await loadProjects(); live.innerHTML = "";
+    if (!projects.length) live.appendChild(h("div", "note", "Bento 앱이 설치된 저장소가 없어요."));
+    projects.forEach((p) => live.appendChild(proj(p.repo.split("/")[1], projSub(p), colorOf("r:" + p.repo), !curDraft() && curRepo() === p.repo, () => useProject({ repo: p.repo }))));
+  } catch (e) { live.innerHTML = ""; live.appendChild(h("div", "note", e.message)); }
+}
+function applyDraft(ex) { applyFlow(ex); }
+
+/* ---------- 오늘 할 일 ---------- */
+async function today() {
+  toastText = ""; $("toast").hidden = true;
+  if (needRepo("오늘 팀플 할 일 정리해 줘")) return;
+  me("오늘 팀플 할 일 정리해 줘");
+  let r;
+  try { r = await working("저장소를 살펴보고 있어요", ["관찰 · PR·이슈·CI 읽기", "판단 · 막힌 곳 찾기", "정리 · 급한 순서로"], api("/triage")); } catch (e) { return fail(e); }
+  lastTriage = r; renderHome();
+  const items = r.items;
+  if (!items.length) { bot("지금은 막힌 곳이 없어요! 제출 전에 점검해 볼까요?"); chip("제출 전 점검하기", submit); return; }
+  bot(`${r.repo}에서 처리할 일 ${items.length}개를 찾았어요. 급한 순서예요. 고르시면 할 수 있는 행동을 보여 드려요.`);
+  const box = add(h("div", "big"));
+  items.forEach((it, i) => {
+    const b = h("button", "bigrow"); b.type = "button"; b.appendChild(h("span", "n", String(i + 1)));
+    const tx = h("span"); const bt = h("b"); bt.appendChild(h("span", "sev " + ({ "긴급": "crit", "주의": "warn" }[it.sev] || "ok"), it.sev)); bt.appendChild(document.createTextNode(it.title)); tx.appendChild(bt); tx.appendChild(h("small", null, it.why)); b.appendChild(tx); b.appendChild(h("span", "chev", "›"));
+    b.onclick = () => { box.querySelectorAll("button").forEach((x) => (x.disabled = true)); openItem(it); };
+    box.appendChild(b);
+  });
+  scroll();
+}
+function openItem(it) {
+  me(it.title);
+  const c = add(h("div", "task")); const hd = h("div", "task-h"); hd.appendChild(h("b", null, it.title)); hd.appendChild(h("span", "tag " + (it.sev === "긴급" ? "" : "skip"), it.sev)); c.appendChild(hd);
+  c.appendChild(h("div", "note", it.why));
+  if (it.owner) { const [tl] = turnLabel(it); const me2 = meUser(); c.appendChild(h("div", "note", it.owner === me2 ? "✓ 내 차례예요. 내가 승인하지 않으면 시간이 지나 팀 전체에 알려져요." : it.level >= 2 ? `${it.owner}님이 ${Math.floor(it.age_hours)}시간째 승인하지 않아서 이제 누구나 승인할 수 있어요.` : `${tl} · 급하면 대신 승인해도 돼요.`)); }
+  if (it.lazy && it.lazy.status === "waiting") { const lz = h("div", "note", `팀 규칙: 반대가 없으면 ${new Date(it.lazy.executes_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}에 실행돼요.`); c.appendChild(lz); if (it.lazy.url) c.appendChild(link("반대하기 (GitHub에서 👎)", it.lazy.url)); }
+  const ev = h("div", "row-btns"); it.evidence.forEach((e) => ev.appendChild(link(e.label, e.url))); c.appendChild(ev);
+  if (it.handoff.length) {
+    c.appendChild(h("div", "lab", "직접 하실 일 · 바로 할 수 있게 준비했어요"));
+    it.handoff.forEach((x) => { if (x.url) c.appendChild(link(x.label, x.url)); if (x.command) { const row = h("div", "row-btns"); const code = h("code", null, x.command); Object.assign(code.style, { padding: "8px 10px", borderRadius: "10px", background: "var(--bg)", fontSize: "12.5px", overflowWrap: "anywhere" }); row.appendChild(code); row.appendChild(copyBtn("복사", () => x.command)); c.appendChild(row); } });
+  }
+  if (it.options.length) {
+    c.appendChild(h("div", "lab", "Bento가 대신 할 수 있는 일"));
+    const tiles = h("div", "big");
+    it.options.forEach((o) => { const t = h("button", "bigrow"); t.type = "button"; t.style.gridTemplateColumns = "1fr auto"; const tx = h("span"); const b = h("b", null, o.label); if (o.recommended) { const tg = h("span", "sev ok", "추천"); tg.style.marginLeft = "6px"; b.appendChild(tg); } tx.appendChild(b); tx.appendChild(h("small", null, o.sub)); t.appendChild(tx); t.appendChild(h("span", "chev", "›"));
+      t.onclick = () => { tiles.querySelectorAll("button").forEach((x) => (x.disabled = true)); me(o.label); approval(o.proposal, (ok) => chip("다음 할 일 보기", today)); }; tiles.appendChild(t); });
+    c.appendChild(tiles);
+  } else { const ok = h("button", "btn", "확인했어요"); ok.type = "button"; ok.onclick = () => { ok.disabled = true; chip("다음 할 일 보기", today); }; c.appendChild(ok); }
+  scroll();
+}
+
+/* ---------- 제출 점검 ---------- */
+async function submit() {
+  if (needRepo("제출 전에 점검해 줘")) return;
+  me("제출 전에 점검해 줘");
+  if (!extract) { bot("먼저 대회 공고를 분석해야 제출물을 알 수 있어요."); chip("대회 공고 분석하기", notice); return; }
+  journey("submit");
+  bot("Bento가 확인할 수 있는 건 전부 확인하고 근거를 붙여요. 다른 팀원 확인과 실제 제출 버튼은 사람이 해요.");
+  infoCard("submit", () => runSubmitCheck());
+}
+
+/* ---------- 신청·제출 공통: 정보 · 확인 카드 · 폼 · 증거 ---------- */
+const INFO_FIELDS = {
+  apply: [["team", "팀명"], ["members", "팀원 이름 (쉼표로 구분)"], ["idea", "아이디어 한 줄"]],
+  submit: [["team", "팀명"], ["idea", "한 줄 소개"], ["deploy", "배포 링크 (비우면 README에서 찾아요)"], ["video", "시연 영상 링크"], ["slides", "발표 자료 링크"]],
+};
+function info() { return store.get("info:" + projKey(), {}); }
+function prefillInfo() {
+  // 이미 아는 값으로 채워 두기: 팀명 = 저장소 이름, 팀원 = 저장소 팀원 (없으면 로그인한 나)
+  const d = curDraft(); const repo = d ? "" : curRepo();
+  const mem = (lastTriage && lastTriage.members && lastTriage.members.length ? lastTriage.members : ME.logged_in ? [ME.login] : []).join(", ");
+  return { team: repo ? repo.split("/")[1] : "", members: mem };
+}
+function doneKey(kind, key) { return `done:${key || projKey()}:${kind}`; }
+function infoCard(kind, next) {
+  const c = add(h("div", "task")); c.appendChild(h("b", null, kind === "apply" ? "1단계 · 팀 정보" : "1단계 · 제출 정보"));
+  c.appendChild(h("div", "note", "이 기기에만 저장돼요. 학번·연락처 같은 개인정보는 넣지 마세요. 폼에서 직접 입력하게 남겨 둬요."));
+  const cur0 = { ...prefillInfo(), ...Object.fromEntries(Object.entries(info()).filter(([, x]) => x)) }; const inputs = {};
+  INFO_FIELDS[kind].forEach(([k, lab]) => { const id = `inf${k}${Date.now()}`; const l = h("label", "lab", lab); l.htmlFor = id; const i = h("input", "finput"); i.id = id; i.value = cur0[k] || ""; if (["deploy", "video", "slides"].includes(k)) { i.type = "url"; i.placeholder = "https://"; } c.appendChild(l); c.appendChild(i); inputs[k] = i; });
+  const go = h("button", "btn primary", kind === "apply" ? "신청 전 확인하기" : "제출 전 점검하기"); go.type = "button"; c.appendChild(go);
+  go.onclick = () => { const v = { ...info() }; Object.entries(inputs).forEach(([k, i]) => (v[k] = i.value.trim())); store.set("info:" + projKey(), v); go.disabled = true; Object.values(inputs).forEach((i) => (i.disabled = true)); next(v); };
+  scroll(); return c;
+}
+function evidence(list) { const ev = h("div", "ev"); (list || []).forEach((e) => { if (e.url) { const a = h("a", null, e.label + " ↗"); a.href = e.url; a.target = "_blank"; a.rel = "noopener noreferrer"; ev.appendChild(a); } else ev.appendChild(h("span", null, e.label)); }); return ev; }
+function crow(r) {
+  const d = h("div", "crow"); d.appendChild(h("span", null, { ok: "✓", warn: "!", fail: "✕" }[r.status] || "·"));
+  const tx = h("div", null, r.name); tx.appendChild(h("small", null, r.detail));
+  if (r.fix) tx.appendChild(h("small", null, "→ " + r.fix.label));
+  const ev = evidence([...(r.evidence || []), ...(r.fix && r.fix.url ? [{ label: r.fix.label, url: r.fix.url }] : [])]); if (ev.childNodes.length) tx.appendChild(ev);
+  d.appendChild(tx); return d;
+}
+function checkCard(title, r, onHuman) {
+  const c = add(h("div", "task")); const hd = h("div", "task-h"); hd.appendChild(h("b", null, title)); const tag = h("span", "tag"); hd.appendChild(tag); c.appendChild(hd);
+  const bad = r.rows.filter((x) => x.status !== "ok"), good = r.rows.filter((x) => x.status === "ok");
+  if (bad.length) { const t = h("div", "tier red"); t.appendChild(h("b", null, `고칠 것 · ${bad.length}개`)); bad.forEach((x) => t.appendChild(crow(x))); c.appendChild(t); }
+  if (good.length) { const t = h("details", "tier green"); t.appendChild(h("summary", null, `Bento가 확인함 · ${good.length}개 통과 (근거 보기)`)); good.forEach((x) => t.appendChild(crow(x))); c.appendChild(t); }
+  const t = h("div", "tier yellow"); t.appendChild(h("b", null, `사람이 확인할 것 · ${r.human.length}개`)); t.appendChild(h("div", "note", "다 체크하면 다음 단계가 열려요"));
+  const boxes = r.human.map((x, i) => { const l = h("label", "hcheck"); const b = h("input"); b.type = "checkbox"; b.id = `hc${Date.now()}_${i}`; l.htmlFor = b.id; l.appendChild(b); l.appendChild(h("span", null, x.text)); t.appendChild(l); return b; });
+  c.appendChild(t);
+  const humanOk = () => boxes.every((b) => b.checked);
+  const upd = () => { const ok = r.ready && humanOk(); tag.className = "tag" + (ok ? " done" : ""); tag.textContent = !r.ready ? `고칠 것 ${r.rows.filter((x) => x.status === "fail").length}개` : ok ? "확인 끝" : "사람 확인 남음"; onHuman && onHuman(ok); };
+  boxes.forEach((b) => (b.onchange = upd)); setTimeout(upd);
+  return { card: c, humanOk, checked: () => r.human.filter((_, i) => boxes[i].checked).map((x) => x.text) };
+}
+const JOURNEY = {};
+function journey(kind) {
+  // 신청·제출을 한 장의 단계 카드로: 지금 어디인지, 누가 하는 일인지
+  const steps = kind === "apply"
+    ? [["팀 정보", "Bento가 채워요"], ["조건 확인", "Bento"], ["폼 열고 신청", "직접"], ["완료 기록", "직접"]]
+    : [["제출 정보", "Bento가 채워요"], ["제출물 점검", "Bento"], ["팀원 확인", "팀원"], ["폼 열고 제출", "직접"], ["완료 기록", "직접"]];
+  document.querySelectorAll(".journey.pin").forEach((x) => x.classList.remove("pin"));
+  const ex = extract || {}; const dd = ddays(kind === "apply" ? ex.apply_deadline_iso : ex.submit_deadline_iso);
+  const c = add(h("div", "journey pin")); c.setAttribute("role", "group"); c.setAttribute("aria-label", kind === "apply" ? "신청 단계" : "제출 단계");
+  const hd = h("div", "j-h"); hd.appendChild(h("b", null, `${kind === "apply" ? "신청하기" : "제출하기"}${ex.title ? " · " + ex.title : ""}`)); const st = h("span", "tag"); hd.appendChild(st); c.appendChild(hd);
+  const ol = h("ol", "j-steps"); const lis = steps.map(([n, who], i) => { const li = h("li"); li.appendChild(h("i", null, String(i + 1))); const t = h("span"); t.appendChild(h("b", null, n)); t.appendChild(h("small", null, who)); li.appendChild(t); ol.appendChild(li); return li; }); c.appendChild(ol);
+  const note = h("div", "note"); c.appendChild(note);
+  const set = (n) => {
+    lis.forEach((li, i) => { li.className = i < n ? "done" : i === n ? "now" : ""; li.firstChild.textContent = i < n ? "✓" : String(i + 1); if (i === n) li.setAttribute("aria-current", "step"); else li.removeAttribute("aria-current"); });
+    const end = n >= steps.length; st.className = "tag" + (end ? " done" : ""); st.textContent = end ? "완료" : `${n + 1}/${steps.length}`;
+    note.textContent = end ? `${kind === "apply" ? "신청" : "제출"}을 마쳤어요.${kind === "apply" ? " 이제 협업 단계예요." : ""}` : `지금: ${steps[n][0]} · ${steps[n][1] === "직접" ? "이 단계는 직접 해 주세요" : steps[n][1] === "팀원" ? "다른 팀원이 확인해요" : "Bento가 해요"}${dd != null && dd >= 0 ? ` · 마감 D-${dd}` : ""}`;
+    if (end) c.classList.remove("pin");
+  };
+  set(0); JOURNEY[kind] = { set, n: steps.length }; return JOURNEY[kind];
+}
+function stage(parent, title, enabled) { const s2 = h("div", "stage"); s2.appendChild(h("h3", null, title)); s2.setAttribute("aria-disabled", String(!enabled)); parent.appendChild(s2); return s2; }
+
+async function runSubmitCheck() {
+  const v = info();
+  const J = JOURNEY.submit || journey("submit"); J.set(1);
+  let r; try { r = await working("제출물을 직접 확인하고 있어요", ["저장소 공개·README 읽기", "링크 직접 열어 보기", "마감·팀원 확인 대조"], api("/submit-check", { method: "POST", body: JSON.stringify({ repo: curRepo(), deliverables: extract.deliverables, deadline_iso: extract.submit_deadline_iso, links: { deploy: v.deploy || "", video: v.video || "", slides: v.slides || "" } }) })); } catch (e) { return fail(e); }
+  const cc = checkCard(`2단계 · 제출물 점검`, r, (ok) => { s1.setAttribute("aria-disabled", String(!ok)); if (ok) J.set(2); });
+  cc.card.appendChild(h("div", "note", `기준 버전: ${r.head.branch} 브랜치 커밋 ${r.head.short}`));
+  const solo = r.members.length <= 1;
+  // 1) 다른 팀원 확인
+  const s1 = stage(cc.card, "3단계 · 다른 팀원 한 명에게 확인 받기", false);
+  const conf = r.confirm; const fresh = conf && conf.lock && r.head.sha.startsWith(conf.lock) && !conf.closed;
+  const s2 = stage(cc.card, "4단계 · 폼 열고 직접 제출하기", false);
+  const s3 = stage(cc.card, "5단계 · 제출 완료 기록하기", false);
+  const open2 = () => { s2.setAttribute("aria-disabled", "false"); s3.setAttribute("aria-disabled", "false"); J.set(3); };
+  if (fresh) {
+    const who = conf.confirmed_by;
+    s1.appendChild(h("div", "note", who.length ? `✓ ${who.join(", ")}님이 이 버전(${conf.lock.slice(0, 7)})을 확인했어요` : `확인 요청을 보냈어요. 아직 확인한 팀원이 없어요.`));
+    s1.appendChild(evidence([{ label: `#${conf.issue} 확인 요청`, url: conf.url }]));
+    const rb = h("div", "row-btns"); const re2 = h("button", "btn", "확인 상태 다시 보기"); re2.type = "button"; re2.onclick = async () => { re2.disabled = true; try { const st = await api(`/submit/status?issue=${conf.issue}`); if (st.changed) { bot("확인 요청 뒤에 저장소가 바뀌었어요. 점검을 다시 할게요."); return runSubmitCheck(); } if (st.confirmed_by.length) { bot(`${st.confirmed_by.join(", ")}님이 확인했어요. 이제 폼을 열어 제출하면 돼요.`); open2(); } else bot("아직 확인한 팀원이 없어요. 팀 채팅으로 한 번 더 알려 주세요."); } catch (e) { fail(e); } re2.disabled = false; }; rb.appendChild(re2);
+    s1.appendChild(rb); if (who.length) open2();
+  } else {
+    if (conf && !conf.closed) s1.appendChild(h("div", "note", "! 예전 버전으로 받은 확인이 있어요. 지금 버전으로 다시 받아야 해요."));
+    s1.appendChild(h("div", "note", solo ? "혼자 하는 팀이라 이 단계는 건너뛰어도 돼요." : "팀원에게 지금 버전을 봐 달라고 부탁해요. 그 뒤에 코드가 바뀌면 Bento가 알려요."));
+    const rb = h("div", "row-btns"); const ask = h("button", "btn primary", "확인 요청 보내기"); ask.type = "button"; rb.appendChild(ask);
+    const skip = h("button", "btn", solo ? "건너뛰기" : "확인 없이 진행"); skip.type = "button"; rb.appendChild(skip); s1.appendChild(rb);
+    ask.onclick = async () => { ask.disabled = true; let p; try { p = await api("/submit/confirm", { method: "POST", body: JSON.stringify({ repo: curRepo(), title: extract.title, head_sha: r.head.sha, checklist: cc.checked() }) }); } catch (e) { ask.disabled = false; return fail(e); } bot("팀원 확인 요청을 보낼게요. 다른 팀원이 GitHub 이슈에 👍를 누르면 확인된 거예요."); approval(p.proposal, (ok) => { if (ok) chip("확인 상태 보기", runSubmitCheck); else ask.disabled = false; }); };
+    skip.onclick = () => { skip.disabled = true; if (!solo) bot("다른 팀원 확인 없이 진행해요. 제출은 되돌리기 어려우니 한 번 더 살펴봐 주세요."); open2(); };
+  }
+  formStage(s2, "submit", { ...v, repo: `https://github.com/${curRepo()}`, deploy: v.deploy || r.deploy || "" });
+  proofStage(s3, "submit", fresh ? conf.issue : null);
+  scroll();
+}
+
+async function applyFlow(ex) {
+  ex = ex || extract; if (!ex) { bot("먼저 대회 공고를 분석해 주세요."); chip("대회 공고 분석하기", notice); return; }
+  if (store.get(doneKey("apply"), null)) { bot("이미 신청 완료로 기록돼 있어요."); return; }
+  const J = journey("apply");
+  bot("Bento가 조건 확인과 폼 채우기까지 해 둘게요. 실명·학번, 개인정보 동의, 신청 버튼은 직접 해 주세요.");
+  infoCard("apply", async (v) => {
+    J.set(1);
+    const fields = ex.apply_fields.length ? ex.apply_fields : ["팀명", "팀원", "아이디어 한 줄"];
+    docs.unshift({ title: `신청서 초안 · ${ex.title}`, body: fields.map((f) => `${f}: ${/팀명/.test(f) ? v.team || "" : /팀원/.test(f) ? v.members || "" : /아이디어|소개/.test(f) ? v.idea || "" : ""}`).join("\n") + `\n\n신청 마감: ${ex.apply_deadline || "공고 확인 필요"}`, at: Date.now() }); saveLists();
+    let r; try { r = await thinking("신청 조건을 확인하고 있어요", api("/apply-check", { method: "POST", body: JSON.stringify({ extract: ex, members: (v.members || "").split(",").map((x) => x.trim()).filter(Boolean) }) })); } catch (e) { return fail(e); }
+    const cc = checkCard(`2단계 · 신청 조건 확인`, r, (ok) => { s1.setAttribute("aria-disabled", String(!ok)); s2.setAttribute("aria-disabled", String(!ok)); if (ok) J.set(2); });
+    const s1 = stage(cc.card, "3단계 · 폼 열고 직접 신청하기", false);
+    const s2 = stage(cc.card, "4단계 · 신청 완료 기록하기", false);
+    formStage(s1, "apply", { ...v, repo: curDraft() ? "" : `https://github.com/${curRepo()}` });
+    proofStage(s2, "apply", null);
+    bot("신청서 초안은 보관함에도 저장해 뒀어요."); scroll();
+  });
+}
+
+function formStage(box, kind, values) {
+  const id = `form${Date.now()}`; const l = h("label", "lab", `${kind === "apply" ? "신청" : "제출"} 폼 주소 (구글 폼이면 값을 미리 채워 드려요)`); l.htmlFor = id;
+  const row = h("div", "urlrow"); const u = h("input"); u.id = id; u.type = "url"; u.placeholder = "https://forms.gle/…"; u.value = store.get(`form:${projKey()}:${kind}`, ""); const b = h("button", "btn", "폼 읽기"); b.type = "button"; row.appendChild(u); row.appendChild(b);
+  const out = h("div", "big"); box.appendChild(l); box.appendChild(row); box.appendChild(out);
+  const copyList = (note) => { out.innerHTML = ""; out.appendChild(h("div", "note", note)); Object.entries(values).filter(([, x]) => x).forEach(([k, x]) => { const fr = h("div", "frow"); fr.appendChild(h("span", null, `${{ team: "팀명", members: "팀원", idea: "소개", repo: "저장소", deploy: "배포 링크", video: "시연 영상", slides: "발표 자료" }[k] || k}: ${x}`)); fr.appendChild(copyBtn("복사", () => x)); out.appendChild(fr); }); if (u.value) out.appendChild(link("폼 열기", u.value)); out.appendChild(h("div", "note", "제출 버튼은 직접 눌러 주세요.")); };
+  const read = async () => {
+    const url = u.value.trim(); if (!/^https?:\/\//.test(url)) return copyList("폼 주소가 없으면 값을 복사해서 넣어 주세요.");
+    store.set(`form:${projKey()}:${kind}`, url); b.disabled = true;
+    try {
+      const r = await api("/form/inspect", { method: "POST", body: JSON.stringify({ url, values }) });
+      if (r.kind !== "google") return copyList(r.note);
+      out.innerHTML = "";
+      const mk = () => r.base + "?" + new URLSearchParams([["usp", "pp_url"], ...r.rows.filter((x) => x.who === "bento" && x.value).map((x) => [`entry.${x.entry}`, x.value])]).toString();
+      const openA = link("값이 채워진 폼 열기", mk());
+      r.rows.forEach((x) => {
+        const fr = h("div", "frow"); const t = h("span", null, x.title + (x.required ? " *" : "")); fr.appendChild(t); fr.appendChild(h("span", x.who === "bento" ? "who-b" : "who-h", x.who === "bento" ? "Bento" : "직접"));
+        if (x.who === "bento") { const i = h("input", "finput"); i.value = x.value; i.setAttribute("aria-label", x.title); i.style.gridColumn = "1 / -1"; i.oninput = () => { x.value = i.value; openA.href = mk(); }; fr.appendChild(i); }
+        fr.appendChild(h("small", null, x.why)); out.appendChild(fr);
+      });
+      out.appendChild(openA); out.appendChild(h("div", "note", `Bento가 ${r.rows.filter((x) => x.who === "bento").length}칸을 채웠어요. 열린 폼이 실제로 제출될 화면이에요. 직접 칸을 채우고 확인한 뒤 제출 버튼을 눌러 주세요.`));
+    } catch (e) { if (e.status === 401) askCode(read); else copyList(e.message + " 대신 값을 복사해서 넣어 주세요."); }
+    finally { b.disabled = false; scroll(); }
+  };
+  b.onclick = read; if (u.value) setTimeout(read);
+}
+function proofStage(box, kind, issue) {
+  const done = store.get(doneKey(kind), null);
+  if (done) { box.appendChild(h("div", "note", `✓ ${new Date(done.at).toLocaleString("ko-KR")}에 ${kind === "apply" ? "신청" : "제출"} 완료로 기록했어요 · ${done.proof}`)); return; }
+  const id = `proof${Date.now()}`; const l = h("label", "lab", "접수 번호나 확인 메일 문구"); l.htmlFor = id; const i = h("input", "finput"); i.id = id; i.placeholder = "예: 접수번호 HK-0042 / '응답이 기록되었습니다'";
+  const b = h("button", "btn primary", `${kind === "apply" ? "신청" : "제출"} 완료로 기록`); b.type = "button"; box.appendChild(l); box.appendChild(i); box.appendChild(b);
+  box.appendChild(h("div", "note", issue ? "기록은 GitHub에 남아서 팀원 모두 볼 수 있어요." : "기록하면 마감 알림을 멈춰요."));
+  const mark = () => { store.set(doneKey(kind), { at: Date.now(), proof: i.value.trim() }); const d = curDraft(); if (d && kind === "apply") { d.applied = Date.now(); saveDrafts(); } if (kind === "apply") { try { localStorage.removeItem("bento:applyTodo:" + projKey()); } catch (e) { /* 무시 */ } } const J = JOURNEY[kind]; if (J) J.set(J.n); renderCal(); renderHome(); bot(`${kind === "apply" ? "신청" : "제출"} 완료로 기록했어요. 마감 알림을 멈출게요. 수고하셨어요!`); };
+  b.onclick = async () => {
+    if (i.value.trim().length < 2) return i.focus();
+    b.disabled = i.disabled = true;
+    if (!issue) return mark();
+    let p; try { p = await api("/submit/proof", { method: "POST", body: JSON.stringify({ repo: curRepo(), issue, proof: i.value.trim() }) }); } catch (e) { b.disabled = i.disabled = false; return fail(e); }
+    approval(p.proposal, (ok) => { if (ok) mark(); else b.disabled = i.disabled = false; });
+  };
+}
+function reminders() {
+  const now = Date.now();
+  allProjects().forEach((p) => {
+    const ex = p.extract; if (!ex) return;
+    [["apply", ex.apply_deadline_iso, "신청"], ["submit", ex.submit_deadline_iso, "제출"]].forEach(([k, iso, nm]) => {
+      if (!iso || store.get(doneKey(k, p.key), null)) return;
+      const left = (new Date(iso) - now) / 36e5; if (!(left > 0 && left <= 24)) return;
+      bot(`⏰ ${p.name} ${nm} 마감까지 ${Math.max(1, Math.round(left))}시간 남았어요. 아직 ${nm} 완료 기록이 없어요.`);
+      chip(`${nm} 확인 시작`, inProject(p, k === "apply" ? () => { me("신청 확인할래"); applyFlow(p.extract); } : submit));
+    });
+  });
+}
+
+/* ---------- 자유 입력 ---------- */
+$("composer").addEventListener("submit", (e) => { e.preventDefault(); const t = $("msg").value.trim(); if (!t) return $("msg").focus(); $("msg").value = ""; showTab("chat"); const n = t.replace(/\s/g, "");
+  if (/찾아|추천|나갈만한|해커톤있|공모전있/.test(n)) return discoverChat();
+  if (/늦|지연|진행|재계획|다시계획/.test(n)) return progressCheck(false);
+  if (/계획|일정짜|스케줄/.test(n)) return planFlow();
+  if (/공고|대회|신청|^https?:/.test(n)) return notice();
+  if (/제출|점검/.test(n)) return submit();
+  if (/할일|오늘|뭐부터|리뷰|담당|머지|닫|PR|이슈/i.test(n)) return today();
+  me(t); bot("지금은 공고 분석, 오늘 할 일 정리, 제출 점검을 맡을 수 있어요. 아래에서 골라 주세요."); chip("오늘 할 일 정리", today);
+});
+$("plusBtn").onclick = () => { showTab("chat"); notice(); };
+$("inviteBtn").onclick = async () => { try { await navigator.clipboard.writeText(location.href); snack("팀원에게 보낼 링크를 복사했어요"); } catch (e) { snack(location.href); } };
+$("menuBtn").onclick = openProjects;
+$("projBtn").onclick = openProjects;
+$("fab").onclick = () => { showTab("chat"); today(); };
+
+/* ---------- 캘린더 ---------- */
+let calSel = null, calState = null;
+function dayKey(d) { return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
+async function loadCalState() { if (curDraft()) { calState = null; return renderCal(); } try { calState = await api("/state"); } catch (e) { calState = null; } renderCal(); }
+const PALETTE = ["--p0", "--p1", "--p2", "--p3", "--p4", "--p5"];
+function colorOf(key) {  // 팀플마다 색을 한 번 정하면 계속 같은 색
+  const map = store.get("colors", {});
+  if (!(key in map)) { const used = Object.values(map); map[key] = PALETTE.findIndex((_, i) => !used.includes(i)); if (map[key] < 0) map[key] = Object.keys(map).length % PALETTE.length; store.set("colors", map); }
+  return PALETTE[map[key]];
+}
+function allProjects() {
+  const out = drafts.map((d) => ({ key: "d:" + d.id, name: d.title, draft: d.id, extract: d.extract || null, plan: store.get("plan:d:" + d.id, []) }));
+  let keys = []; try { keys = Object.keys(localStorage); } catch (e) { /* 저장소를 못 읽으면 지금 팀플만 */ }
+  const repos = new Set(keys.filter((k) => /^bento:(extract|plan):r:/.test(k)).map((k) => k.replace(/^bento:(extract|plan):r:/, "")));
+  if (!curDraft() && curRepo()) repos.add(curRepo());
+  repos.forEach((r) => out.push({ key: "r:" + r, name: r.split("/")[1] || r, repo: r, extract: store.get("extract:r:" + r, null), plan: store.get("plan:r:" + r, []) }));
+  return out;
+}
+function events() {
+  const ev = []; const hide = new Set(store.get("calHide", []));
+  allProjects().forEach((p) => {
+    if (hide.has(p.key)) return;
+    const c = colorOf(p.key);
+    const push = (iso, kind, title, sub, act) => { if (!iso) return; const d = new Date(iso); if (isNaN(d)) return; ev.push({ d, kind, title, sub, act, p, c }); };
+    const ex = p.extract;
+    if (ex) { const dn = (k) => (store.get(doneKey(k, p.key), null) ? " ✓ 완료" : ""); push(ex.apply_deadline_iso, "due", "신청 마감" + dn("apply"), ex.apply_deadline || "", "apply"); push(ex.submit_deadline_iso, "due", "제출 마감" + dn("submit"), ex.submit_deadline || "", "submit"); }
+    const planned = new Set();
+    (p.plan || []).forEach((s) => { if (s.kind !== "step") return; planned.add(s.title); push(s.due, "step", s.title, s.note || "", "today"); });
+    if (p.key === projKey() && calState) calState.milestones.forEach((m) => {
+      if (!m.due_on || planned.has(m.title.replace(/^계획 · /, ""))) return;
+      if (m.title === "해커톤 제출" && ex && ex.submit_deadline_iso) return;  // 제출 마감과 같은 날
+      const its = calState.issues.filter((i) => i.milestone === m.title);
+      push(m.due_on, "step", `마일스톤 · ${m.title}`, `열린 이슈 ${m.open}개 · 닫힌 이슈 ${m.closed}개` + (its.length ? `\n${its.map((i) => `#${i.number} ${i.title}${i.assignees.length ? " (" + i.assignees.join(", ") + ")" : " (담당자 없음)"}`).join("\n")}` : ""), "today");
+    });
+  });
+  return ev.sort((a, b) => a.d - b.d);
+}
+function inProject(p, fn) { return () => { if (p.key !== projKey()) useProject(p.draft ? { draft: p.draft } : { repo: p.repo }, true); showTab("chat"); fn(); }; }
+function renderCal() {
+  const body = $("calBody"); if (!body) return; body.innerHTML = "";
+  const projs = allProjects().filter((p) => p.extract || (p.plan && p.plan.length));
+  const hide = new Set(store.get("calHide", []));
+  if (projs.length) {
+    const f = h("div", "pfilter"); f.setAttribute("aria-label", "보여 줄 팀플");
+    projs.forEach((p) => { const b = h("button"); b.type = "button"; b.style.setProperty("--c", `var(${colorOf(p.key)})`); b.appendChild(h("span", null, (p.draft ? "준비 중 · " : "") + p.name)); b.setAttribute("aria-pressed", String(!hide.has(p.key)));
+      b.onclick = () => { const hs = new Set(store.get("calHide", [])); hs.has(p.key) ? hs.delete(p.key) : hs.add(p.key); store.set("calHide", [...hs]); renderCal(); }; f.appendChild(b); });
+    body.appendChild(f);
+  }
+  const ev = events();
+  if (!ev.length) {
+    const e = h("div", "empty");
+    e.innerHTML = '<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>';
+    e.appendChild(h("b", null, projs.length ? "보여 줄 일정이 없어요" : "아직 일정이 없어요")); e.appendChild(h("span", null, projs.length ? "위에서 꺼 둔 팀플을 다시 켜 보세요." : "대회 공고를 분석하고 계획을 짜면 팀플마다 다른 색으로 여기 채워져요."));
+    if (!projs.length) { const b = h("button", "btn primary", "대회 공고 분석하기"); b.type = "button"; b.style.marginTop = "8px"; b.onclick = () => { showTab("chat"); notice(); }; e.appendChild(b); }
+    body.appendChild(e); return;
+  }
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  const sub = ev.find((e) => e.title === "제출 마감" && e.d >= now);  // 완료한 제출은 D-day에서 뺀다
+  if (sub) { const dd = Math.ceil((new Date(sub.d).setHours(0, 0, 0, 0) - now) / 864e5); const card = h("div", "dday"); const top = h("div", "dday-top"); const big = h("span", "big-d", `D-${dd}`); top.appendChild(big); top.appendChild(h("span", null, `가장 가까운 제출 마감 · ${sub.sub}`)); card.appendChild(top); card.appendChild(h("div", "note", sub.p.name)); body.appendChild(card); }
+  if (extract && !store.get("plan:" + projKey(), []).length && extract.submit_deadline_iso) {
+    const t = h("button", "bigrow"); t.type = "button"; t.style.gridTemplateColumns = "1fr auto"; const tx = h("span"); tx.appendChild(h("b", null, `${projName()} 계획 짜기`)); tx.appendChild(h("small", null, "마감에서 거꾸로 할 일을 날짜별로 나눠 드려요")); t.appendChild(tx); t.appendChild(h("span", "chev", "›")); t.onclick = () => { showTab("chat"); planFlow(); }; body.appendChild(t);
+  }
+  const start = new Date(now); start.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  const mh = h("div", "month"); mh.appendChild(h("b", null, `${start.getFullYear()}년 ${start.getMonth() + 1}월`)); const lg = h("div", "legend");
+  [["var(--muted)", "■ 마감"], ["var(--muted)", "● 할 일"]].forEach(([c, n]) => { const sp = h("span", null, n); sp.style.setProperty("--c", "transparent"); lg.appendChild(sp); }); mh.appendChild(lg); body.appendChild(mh);
+  const wk = h("div", "week"); ["월", "화", "수", "목", "금", "토", "일"].forEach((d) => wk.appendChild(h("div", "dow", d)));
+  for (let k = 0; k < 35; k++) {
+    const d = new Date(start); d.setDate(start.getDate() + k); const key = dayKey(d);
+    const mine = ev.filter((e) => dayKey(e.d) === key);
+    const b = h("button", "day" + (d < now ? " past" : "") + (+d === +now ? " today" : "") + (calSel === key ? " sel" : "")); b.type = "button";
+    b.appendChild(h("span", null, d.getDate() === 1 ? `${d.getMonth() + 1}/1` : String(d.getDate()))); const dots = h("span", "dots");
+    mine.slice(0, 4).forEach((e) => { const i = h("i", e.kind === "due" ? "sq" : null); if (calSel !== key) i.style.background = `var(${e.c})`; dots.appendChild(i); }); b.appendChild(dots);
+    b.setAttribute("aria-label", `${d.getMonth() + 1}월 ${d.getDate()}일, 일정 ${mine.length}개` + (mine.length ? ": " + mine.map((e) => `${e.p.name} ${e.title}`).join(", ") : ""));
+    b.onclick = () => { calSel = calSel === key ? null : key; renderCal(); }; wk.appendChild(b);
+  }
+  body.appendChild(wk);
+  const lh = h("div", "listhead"); lh.appendChild(h("b", null, calSel ? `${calSel.split("-")[1]}월 ${calSel.split("-")[2]}일` : "다가오는 일정"));
+  if (calSel) { const all = h("button", null, "전체 보기"); all.type = "button"; all.onclick = () => { calSel = null; renderCal(); }; lh.appendChild(all); }
+  body.appendChild(lh);
+  const list = h("div", "evts"); const shown = ev.filter((e) => (calSel ? dayKey(e.d) === calSel : e.d >= now));
+  if (!shown.length) list.appendChild(h("div", "note", "일정이 없어요."));
+  shown.forEach((e) => {
+    const box = h("div", "evt"); box.style.setProperty("--c", `var(${e.c})`);
+    const b = h("button"); b.type = "button"; const w = h("span", "when"); w.appendChild(h("b", null, `${e.d.getMonth() + 1}/${e.d.getDate()}`)); w.appendChild(document.createTextNode(`${String(e.d.getHours()).padStart(2, "0")}:${String(e.d.getMinutes()).padStart(2, "0")}`)); b.appendChild(w);
+    b.appendChild(h("span", "bar2")); const what = h("span", "what"); const tt = h("b", null, e.title); if (e.kind === "due") { const tg = h("span", "sev crit", "마감"); tg.style.marginLeft = "6px"; tt.appendChild(tg); } what.appendChild(tt);
+    const sm = h("small", null, `${e.p.draft ? "준비 중 · " : ""}${e.p.name}${e.sub ? " · " + e.sub : ""}`); sm.style.whiteSpace = "pre-line"; what.appendChild(sm); b.appendChild(what); b.appendChild(h("span", "chev", "›"));
+    const acts = h("div", "acts2");
+    const act = (label, s2, fn) => { const t = h("button", "bigrow"); t.type = "button"; const tx = h("span"); tx.appendChild(h("b", null, label)); tx.appendChild(h("small", null, s2)); t.appendChild(tx); t.appendChild(h("span", "chev", "›")); t.onclick = inProject(e.p, fn); acts.appendChild(t); };
+    if (e.act === "submit") act("제출 전 점검하기", "제출물과 저장소를 대조해요", submit);
+    if (e.act === "apply") act("신청 확인 시작", "조건 확인 · 미리 채운 폼 · 신청 증거", () => { me("신청 확인할래"); applyFlow(e.p.extract); });
+    act("오늘 할 일 보기", `${e.p.name}에서 급한 순서대로 정리해요`, today);
+    if (e.kind === "step") act("진행 점검·다시 계획", "이 단계가 늦었는지 보고 다시 짜요", () => progressCheck(false));
+    b.onclick = () => box.classList.toggle("open");
+    box.appendChild(b); box.appendChild(acts); list.appendChild(box);
+  });
+  body.appendChild(list);
+}
+
+/* ---------- 보관함 ---------- */
+let seg = "tasks";
+document.querySelectorAll(".seg button").forEach((b) => (b.onclick = () => { seg = b.dataset.seg; renderBox(); }));
+function renderBox() {
+  document.querySelectorAll(".seg button").forEach((b) => b.classList.toggle("sel", b.dataset.seg === seg));
+  const body = $("boxBody"); body.innerHTML = "";
+  const list = seg === "tasks" ? tasks : docs;
+  if (!list.length) { const e = h("div", "empty"); e.innerHTML = '<svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="7" y="3" width="12" height="15" rx="3"/><path d="M5 7v11a3 3 0 003 3h8"/></svg>'; e.appendChild(h("b", null, seg === "tasks" ? "아직 맡긴 일이 없어요" : "아직 만든 문서가 없어요")); e.appendChild(h("span", null, seg === "tasks" ? "승인해서 실행한 일이 여기 쌓여요." : "신청서·제출 초안이 여기 모여요.")); body.appendChild(e); return; }
+  const l = h("div", "list");
+  list.forEach((x) => { const c = h("div", "li"); const top = h("div", "li-top"); top.appendChild(h("b", null, x.title)); if (x.status) top.appendChild(h("span", "tag" + (x.status === "완료" ? " done" : ""), x.status)); c.appendChild(top); c.appendChild(h("small", null, x.detail || x.body)); if (x.body) { const cb = copyBtn("복사", () => x.body); cb.style.alignSelf = "flex-start"; cb.style.marginTop = "6px"; c.appendChild(cb); } l.appendChild(c); });
+  body.appendChild(l);
+}
+
+/* ---------- 나의 Bento ---------- */
+/* ---------- 나의 Bento: 위에 중요한 카드, 아래는 한 줄 메뉴 묶음. 줄을 누르면 세부 화면 ---------- */
+let mePage = null;
+const ICO = {
+  shield: '<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
+  plug: '<path d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/>',
+  list: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
+  vote: '<path d="M7 11l3 3 7-7"/><rect x="3" y="3" width="18" height="18" rx="4"/>',
+  box: '<path d="M4 12l2-6h12l2 6v6H4z"/><path d="M4 12h5l1 2h4l1-2h5"/>',
+  star: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/>',
+  moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+  trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.5V14M12 17h.01"/>',
+};
+function icon(name) { return `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICO[name]}</svg>`; }
+function meRow(name, title, sub, onClick, right) {
+  const b = h(onClick ? "button" : "div", "rowlink"); if (onClick) { b.type = "button"; b.onclick = onClick; }
+  const ic = h("span"); ic.innerHTML = icon(name); b.appendChild(ic);
+  const tx = h("span"); tx.appendChild(h("b", null, title)); if (sub) tx.appendChild(h("small", null, sub)); b.appendChild(tx);
+  if (right) b.appendChild(right); else if (onClick) b.appendChild(h("span", "chev", "›"));
+  return b;
+}
+function syncNav(tab) {  // 탭 첫 화면은 ☰, 안으로 들어간 화면은 ‹ 뒤로 (같은 자리)
+  tab = tab || [...document.querySelectorAll(".view")].find((x) => !x.hidden)?.id?.slice(2);
+  const sub = tab === "box" || (tab === "me" && !!mePage);
+  $("backBtn").hidden = !sub; $("menuBtn").hidden = sub;
+}
+function openMe(page) { mePage = page; setTimeout(() => syncNav("me")); try { history.pushState({ tab: "me", page }, "", "#me-" + page); } catch (e) { /* 무시 */ } renderMe(); $("v-me").scrollTop = 0; }
+const ME_PAGES = {
+  connect: ["연결된 서비스", (v) => {
+  const c2 = h("div", "card"); c2.appendChild(h("b", null, "연결 상태"));
+  const rows = [["GitHub", H.mode === "live" ? `연결됨 · ${H.repo}` : "데모 저장소 사용 중 (GitHub App 미연결)", H.mode === "live"], ["Claude AI (공고 분석)", H.ai ? "연결됨" : "키 미설정 · 예시 공고만 분석", H.ai], ["디스코드 팀 채널", H.discord ? "연결됨" : "미연결 · 팀 메시지는 복사만 돼요", H.discord], ["팀 접근 코드", H.needs_code ? (store.get("code", "") ? "입력함" : "실행할 때 물어봐요") : "사용 안 함", H.needs_code]];
+  rows.forEach(([n, s, on]) => { const r = h("div", "app"); const ic = h("span", "ico", on ? "✓" : "·"); ic.style.background = on ? "var(--ok)" : "var(--surface-2)"; r.appendChild(ic); const tx = h("span"); tx.appendChild(h("b", null, n)); const sm = h("small", null, s); sm.style.display = "block"; sm.style.color = "var(--muted)"; sm.style.fontSize = "13px"; tx.appendChild(sm); r.appendChild(tx); r.appendChild(h("span")); c2.appendChild(r); });
+  v.appendChild(c2);
+  if (H.mode !== "live") {
+    const c6 = h("div", "card"); c6.appendChild(h("b", null, "데모 저장소")); c6.appendChild(h("div", "note", "가짜 저장소라 실행해도 실제 GitHub에는 남지 않아요. 처음 상태로 되돌릴 수 있어요."));
+    const rs = h("button", "btn", "데모 저장소 초기화"); rs.type = "button"; rs.style.marginTop = "8px"; rs.onclick = async () => { try { await api("/demo/reset", { method: "POST" }); snack("데모 저장소를 처음 상태로 돌렸어요"); loadCalState(); } catch (e) { snack(e.message); } };
+    c6.appendChild(rs); v.appendChild(c6);
+  }
+  }],
+  who: ["내 GitHub 계정", (v) => {
+  if (ME.logged_in) {
+    const c = h("div", "card"); const top = h("div"); top.style.display = "flex"; top.style.alignItems = "center"; top.style.gap = "12px";
+    if (ME.avatar) { const im = h("img"); im.src = ME.avatar; im.alt = ""; im.width = 48; im.height = 48; im.style.borderRadius = "50%"; im.referrerPolicy = "no-referrer"; top.appendChild(im); }
+    const tx = h("div"); tx.appendChild(h("b", null, ME.name || ME.login)); tx.appendChild(h("div", "note", "@" + ME.login)); top.appendChild(tx); c.appendChild(top);
+    const nt = h("div", "note", ME.member === false ? `${curRepo()} 팀원이 아니라서 승인은 할 수 없어요.` : "승인하면 이 계정 이름으로 GitHub에 남아요."); nt.style.marginTop = "10px"; c.appendChild(nt);
+    const lo = h("button", "btn", "로그아웃"); lo.type = "button"; lo.style.marginTop = "10px"; lo.onclick = async () => { try { await fetch("/auth/logout", { method: "POST" }); } catch (e) { /* 무시 */ } ME = { logged_in: false }; mePage = null; renderMe(); renderHome(); snack("로그아웃했어요"); };
+    c.appendChild(lo); v.appendChild(c); return;
+  }
+  if (H.login) { const c = h("div", "card"); c.appendChild(h("div", "note", "GitHub로 로그인하면 누구인지 고를 필요가 없어요.")); const b = ghBtn("GitHub로 로그인", true); b.style.marginTop = "10px"; c.appendChild(b); v.appendChild(c); return; }
+  if (!curDraft() && lastTriage && lastTriage.members) {
+    const cw = h("div", "card"); cw.appendChild(h("b", null, "나는")); const sel = h("select", "finput"); sel.id = "meSel"; sel.style.marginTop = "8px"; sel.setAttribute("aria-label", "내 GitHub 아이디");
+    const o0 = h("option", null, "골라 주세요"); o0.value = ""; sel.appendChild(o0); lastTriage.members.forEach((m) => { const o = h("option", null, m); o.value = m; if (m === meUser()) o.selected = true; sel.appendChild(o); });
+    sel.onchange = () => setMe(sel.value || null); cw.appendChild(sel); cw.appendChild(h("div", "note", `승인하면 'OO님 승인으로'라고 GitHub에 남아요. 오늘의 당번: ${lastTriage.duty || "-"}`)); v.appendChild(cw);
+  }
+    if (curDraft() || !lastTriage) v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 고를 수 있어요."));
+  }],
+  rules: ["반대가 없으면 실행", (v) => {
+  if (!curDraft() && lastTriage && lastTriage.members) {
+    const rules = lastTriage.rules || { lazy: [], hours: 24 };
+    const cr = h("div", "card"); cr.appendChild(h("b", null, "반대가 없으면 실행 (팀 규칙)"));
+    cr.appendChild(h("div", "note", "승인이 12시간 넘게 없으면 Bento가 GitHub에 예고 댓글을 달고, 정한 시간 동안 아무도 👎를 누르지 않으면 실행해요. 위험이 낮은 일만 고를 수 있어요."));
+    const boxes = {}; [["reviewers", "리뷰어 지정"], ["reminders", "리마인드 댓글"]].forEach(([k2, n]) => { const l = h("label", "hcheck"); l.style.marginTop = "8px"; const cb = h("input"); cb.type = "checkbox"; cb.id = "rule-" + k2; cb.checked = rules.lazy.includes(k2); l.htmlFor = cb.id; l.appendChild(cb); l.appendChild(h("span", null, n)); cr.appendChild(l); boxes[k2] = cb; });
+    const hl = h("label", "lab", "기다리는 시간"); hl.htmlFor = "ruleHours"; hl.style.display = "block"; hl.style.marginTop = "10px"; const hs = h("select", "finput"); hs.id = "ruleHours"; [12, 24, 48].forEach((x) => { const o = h("option", null, `${x}시간`); o.value = x; if (x === rules.hours) o.selected = true; hs.appendChild(o); }); cr.appendChild(hl); cr.appendChild(hs);
+    cr.appendChild(h("div", "note", "이슈 닫기·마감 바꾸기·제출은 늘 승인이 필요해요. 규칙을 바꾸는 것도 팀원 승인을 받아요."));
+    const sv = h("button", "btn primary", "팀 규칙 바꾸기"); sv.type = "button"; sv.style.marginTop = "10px";
+    sv.onclick = async () => { sv.disabled = true; try { const r = await api("/team-rules", { method: "POST", body: JSON.stringify({ repo: curRepo(), lazy: Object.keys(boxes).filter((k2) => boxes[k2].checked), hours: +hs.value }) }); approval(r.proposal, (ok) => { if (ok) refreshHome(); }); } catch (e) { snack(e.message); } sv.disabled = false; };
+    cr.appendChild(sv); v.appendChild(cr);
+  }
+    if (curDraft() || !lastTriage) v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 정할 수 있어요."));
+  }],
+  interests: ["관심 분야", (v) => {
+  const ci = h("div", "card"); ci.appendChild(h("b", null, "관심 분야")); ci.appendChild(h("div", "note", "눌러서 고르면, 찾아온 대회에서 이 분야를 먼저 보여 줘요."));
+  const cw2 = h("div", "chips"); INTERESTS.forEach((x) => { const on = interests().includes(x); const b = h("button", "chiptog", x); b.type = "button"; b.setAttribute("aria-pressed", String(on)); b.onclick = () => { const cur2 = interests(); store.set("interests", on ? cur2.filter((y) => y !== x) : [...cur2, x]); renderMe(); loadDiscover(); }; cw2.appendChild(b); }); ci.appendChild(cw2);
+  if (lastDiscover) {
+    const sl = h("div", "note"); sl.style.marginTop = "10px"; sl.style.whiteSpace = "pre-line";
+    sl.textContent = "찾아보는 곳: " + lastDiscover.sources.map((x) => x.name + (x.ai ? "" : " (AI 미사용)")).join(", ") + `\n마지막 확인: ${new Date(lastDiscover.checked_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} · 같은 사이트는 10초 간격, 1시간에 한 번만 읽어요\n` + lastDiscover.not_auto.map((x) => `${x.name}: ${x.why}`).join("\n");
+    ci.appendChild(sl);
+  }
+  v.appendChild(ci);
+  }],
+  perm: ["권한은 이렇게 써요", (v) => {
+  const c4 = h("div", "card"); c4.appendChild(h("b", null, "권한을 이렇게 쓰고 있어요")); const p = h("div", "note"); p.style.marginTop = "6px"; p.style.whiteSpace = "pre-line";
+  p.textContent = "승인받고 직접 하는 일: 리뷰어 지정, 댓글, 이슈·마일스톤 만들기, 담당자 지정, 이슈 닫기, 디스코드 팀 메시지\n하지 않는 일: 머지, 푸시, 코드 수정, 폼 제출. 대신 링크와 명령어를 드려요.\n저장소 글 속에 에이전트에게 하는 지시가 있으면 따르지 않고 표시만 해요.\n팀원 여럿이 같은 제안을 승인해도 한 번만 실행하고, 그사이 다른 팀원이 바꾼 건 덮어쓰지 않아요.";
+  c4.appendChild(p); v.appendChild(c4);
+  }],
+  data: ["이 기기 기록", (v) => {
+  const c5 = h("div", "card"); const cl = h("button", "btn", "이 기기 기록 지우기"); cl.type = "button"; cl.onclick = () => { if (cl.dataset.sure) { try { Object.keys(localStorage).filter((k) => /^bento:(extract|plan|colors|calHide|progressSeen|info|form|done)/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch (e) { /* 무시 */ } ["tasks", "docs", "drafts"].forEach((k) => store.set(k, [])); store.set("code", ""); tasks.length = 0; docs.length = 0; drafts.length = 0; extract = null; if (cur && cur.draft) { cur = { repo: curRepo() }; store.set("cur", cur); } renderHead(); renderBox(); renderCal(); renderMe(); snack("이 기기 기록을 지웠어요"); } else { cl.dataset.sure = "1"; cl.textContent = "한 번 더 누르면 지워요"; } }; c5.appendChild(cl); v.appendChild(c5);  }],
+  help: ["도움말", (v) => {
+    const c = h("div", "card"); const p2 = h("div", "note"); p2.style.whiteSpace = "pre-line"; p2.style.fontSize = "14px"; p2.style.color = "var(--ink)";
+    p2.textContent = "1. 홈에서 Bento가 찾아온 대회를 고르거나, 대화에서 공고 링크를 붙여넣어요.\n2. 신청 준비 → 조건 확인 → 미리 채운 폼으로 직접 신청해요.\n3. 팀 저장소를 만들고 Bento 앱을 설치하면 협업을 챙겨요.\n4. Bento가 제안한 일은 승인해야 실행돼요. 머지·푸시·제출은 직접 해요.";
+    c.appendChild(p2); v.appendChild(c);
+  }],
+};
+function renderMe() {
+  const v = $("v-me"); v.innerHTML = "";
+  if (mePage && ME_PAGES[mePage]) { const [title, build] = ME_PAGES[mePage]; v.appendChild(h("h1", null, title)); build(v); return; }
+  v.appendChild(h("h1", null, "나의 Bento"));
+  // AI 사용량
+  const cu = h("div", "card"); const top = h("div", "usage-top"); top.appendChild(h("b", null, "AI 사용량")); const use = h("span", null, "…"); top.appendChild(use); cu.appendChild(top);
+  const un = h("div", "note", "공고 분석에만 AI를 써요. 같은 공고는 다시 분석하지 않아요."); cu.appendChild(un); v.appendChild(cu);
+  api("/usage").then((u) => { use.textContent = `토큰 ${(u.input_tokens + u.output_tokens).toLocaleString()}`; un.textContent = `AI 분석 ${u.ai_calls}번 · 다시 쓴 분석 ${u.cache_hits}번 · 약 $${u.est_usd.toFixed(2)}`; }).catch(() => { use.textContent = "-"; });
+  // 중요한 줄 세 개
+  const g0 = h("div", "group");
+  g0.appendChild(meRow("shield", "권한은 이렇게 써요", "승인한 일만 · 머지·푸시는 안 해요", () => openMe("perm")));
+  if (ME.logged_in) { const r0 = meRow("user", ME.login, ME.member === false ? "GitHub 로그인 · 이 저장소 팀원 아님" : "GitHub 로그인", () => openMe("who")); if (ME.avatar) { const im = h("img"); im.src = ME.avatar; im.alt = ""; im.width = 26; im.height = 26; im.style.borderRadius = "50%"; im.referrerPolicy = "no-referrer"; r0.firstChild.innerHTML = ""; r0.firstChild.appendChild(im); } g0.appendChild(r0); }
+  else if (H.login) g0.appendChild(meRow("user", "GitHub로 로그인", "승인할 때 누구인지 GitHub가 확인해요", goLogin));
+  else g0.appendChild(meRow("user", meUser() || "내 GitHub 아이디 고르기", meUser() ? "내 GitHub 아이디" : "승인하면 이름이 GitHub에 남아요", () => openMe("who")));
+  const conn = [H.mode === "live", H.ai, H.discord].filter(Boolean).length;
+  g0.appendChild(meRow("plug", `연결된 서비스 ${conn}개`, `GitHub ${H.mode === "live" ? "✓" : "데모"} · Claude ${H.ai ? "✓" : "–"} · 디스코드 ${H.discord ? "✓" : "–"}`, () => openMe("connect")));
+  v.appendChild(g0);
+  // 팀플
+  v.appendChild(h("div", "glabel", "팀플"));
+  const g1 = h("div", "group");
+  g1.appendChild(meRow("list", "팀플 목록", curDraft() ? `${projName()} · 준비 중` : `${projName()} · 진행 중`, openProjects));
+  const rl = lastTriage && lastTriage.rules && lastTriage.rules.lazy.length ? `켜짐 · ${lastTriage.rules.hours}시간` : "꺼짐 · 모두 승인 필요";
+  g1.appendChild(meRow("vote", "반대가 없으면 실행", rl, () => openMe("rules")));
+  g1.appendChild(meRow("box", "보관함", `실행한 일 ${tasks.length}개 · 초안 ${docs.length}개`, () => showTab("box")));
+  v.appendChild(g1);
+  // 앱 사용
+  v.appendChild(h("div", "glabel", "앱 사용"));
+  const g2 = h("div", "group");
+  g2.appendChild(meRow("star", "관심 분야", interests().join(", ") || "고르지 않음", () => openMe("interests")));
+  const isDark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  const knob = h("span", "switch"); knob.setAttribute("aria-hidden", "true"); knob.setAttribute("aria-checked", String(isDark)); knob.style.width = "auto"; knob.appendChild(h("span", "knob"));
+  let dm;
+  const toggle = () => { const next = dm.getAttribute("aria-checked") !== "true"; document.documentElement.dataset.theme = next ? "dark" : "light"; store.set("theme", next ? "dark" : "light"); dm.setAttribute("aria-checked", String(next)); knob.setAttribute("aria-checked", String(next)); };
+  dm = meRow("moon", "다크 모드", null, toggle, knob); dm.setAttribute("role", "switch"); dm.setAttribute("aria-checked", String(isDark)); g2.appendChild(dm);
+  g2.appendChild(meRow("trash", "이 기기 기록", "맡긴 일·초안·계획 지우기", () => openMe("data")));
+  v.appendChild(g2);
+  // 도움
+  v.appendChild(h("div", "glabel", "도움"));
+  const g3 = h("div", "group"); g3.appendChild(meRow("help", "도움말", "Bento는 이렇게 써요", () => openMe("help"))); v.appendChild(g3);
+  const ver = h("div", "note", "Bento 0.1 · 2026 컴퓨터학부 해커톤"); ver.style.textAlign = "center"; ver.style.margin = "14px 0"; v.appendChild(ver);
+}
+
+/* ---------- 탭 ---------- */
+function showTab(tab, segName) {
+  if (segName) seg = segName;
+  ["home", "chat", "cal", "box", "me"].forEach((t) => { $("v-" + t).hidden = t !== tab; });
+  const navTab = tab === "box" ? "me" : tab;
+  document.querySelectorAll(".tabs button").forEach((b) => { b.classList.toggle("sel", b.dataset.tab === navTab); b.setAttribute("aria-current", b.dataset.tab === navTab ? "page" : "false"); });
+  $("composer").hidden = tab !== "chat"; $("toast").hidden = tab !== "chat" || !toastText;
+  syncNav(tab);
+  // 휴대폰 뒤로 가기(제스처·버튼)로 이전 탭에 돌아오게 기록한다
+  if (!showTab.fromPop && (!history.state || history.state.tab !== tab)) { try { history.pushState({ tab }, "", "#" + tab); } catch (e) { /* 기록 못 해도 동작 */ } }
+  $("fab").hidden = tab !== "box";
+  if (tab === "home") { renderHome(); $("homeBadge").hidden = true; }
+  if (tab === "cal") loadCalState();
+  if (tab === "box") renderBox();
+  if (tab === "me") renderMe();
+  if (tab === "chat") scroll();
+}
+document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => { if (b.dataset.tab === "me") { mePage = null; if (!$("v-me").hidden) renderMe(); } showTab(b.dataset.tab); }));
+window.addEventListener("popstate", (e) => { const t = (e.state && e.state.tab) || "home"; mePage = (e.state && e.state.page) || null; showTab.fromPop = true; try { document.querySelectorAll(".sheet-bg, .drawer-bg").forEach((x) => x.click()); showTab(t); if (t === "me") renderMe(); syncNav(t); } finally { showTab.fromPop = false; } });
+$("backBtn").onclick = () => { if (history.state && history.length > 1) history.back(); else { mePage = null; showTab("me"); renderMe(); syncNav("me"); } };
+let toastText = "";
+$("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); };
+
+(async () => {
+  intro(); renderBox(); renderCal(); showTab("home");
+  try {
+    // 서버가 막 다시 켜지는 중이면 잠깐 기다렸다 다시 묻는다. 그냥 넘어가면 로그인 버튼이 사라진 것처럼 보인다.
+    for (let i = 0; ; i++) { try { H = await api("/health"); break; } catch (e) { if (i >= 6) throw e; await new Promise((r) => setTimeout(r, 700)); } }
+    for (let i = 0; i < 3; i++) { try { ME = await api("/me"); break; } catch (e) { ME = { logged_in: false }; await new Promise((r) => setTimeout(r, 500)); } }
+    onboarding();
+    if (!cur || (cur.draft && !curDraft())) cur = { repo: curRepo() };
+    if (!curDraft() && store.get("extract:" + projKey(), null) == null && store.get("extract", null)) store.set("extract:" + projKey(), store.get("extract", null));  // 예전 버전 기록 옮기기
+    if (cur && cur.draft && !curDraft()) cur = { repo: curRepo() };
+    useProject(cur, true);
+    loadProjects().catch(() => {});  // 팀플 목록을 미리 받아 두면 고르기 화면이 바로 뜬다
+    reminders();
+    loadDiscover();  // 학과 게시판·해커톤 목록에서 대회를 먼저 찾아온다 (1시간 캐시)
+    if (!curDraft()) setTimeout(() => progressCheck(true), 400);  // 열 때마다 Bento가 먼저 점검한다
+    const inst = new URLSearchParams(location.search).get("installed");
+    if (inst != null) {
+      try { history.replaceState(history.state, "", location.pathname + location.hash); } catch (e) { /* 무시 */ }
+      const want = store.get("connectAfterInstall", null); try { localStorage.removeItem("bento:connectAfterInstall"); } catch (e) { /* 무시 */ }
+      const d = drafts.find((x) => x.id === want) || curDraft(); const repos = inst.split(",").filter(Boolean);
+      if (d && repos.length) {
+        if (!curDraft() || curDraft().id !== d.id) useProject({ draft: d.id }, true);
+        showTab("chat");
+        if (repos.length === 1) { bot(`Bento 앱을 ${repos[0]}에 설치했어요. 바로 연결할게요.`); connectTo(d, repos[0]); }
+        else { bot(`설치한 저장소가 ${repos.length}개예요. '${d.title}'을(를) 어디에 연결할까요?`); const box = add(h("div", "big")); repos.forEach((r2) => pickRow(box, r2, "방금 설치함", () => connectTo(d, r2))); }
+        return;
+      }
+      if (repos.length) { showTab("chat"); bot(`Bento 앱을 ${repos.join(", ")}에 설치했어요. 위쪽 팀플 이름을 눌러 고를 수 있어요.`); }
+    }
+    if (curDraft()) return;
+    // 알림은 지난번에 열었을 때 없던 긴급한 일이 새로 생겼을 때만 잠깐 띄운다.
+    try { const lz = await api("/lazy/tick", { method: "POST", body: JSON.stringify({ repo: curRepo() }) }); if (lz.ran && lz.ran.length) bot(`반대가 없어서 팀 규칙에 따라 ${lz.ran.length}개를 실행했어요.`); } catch (e) { /* 규칙이 없거나 읽지 못하면 넘어간다 */ }
+    const t = await api("/triage"); lastTriage = t; lastChecked = new Date(); renderHome(); renderMe();
+    const urgent = t.items.filter((i) => i.sev === "긴급");
+    const seen = store.get("seen", null);
+    store.set("seen", urgent.map((i) => i.id));
+    const fresh = seen ? urgent.filter((i) => !seen.includes(i.id)) : [];
+    if (fresh.length && $("v-home").hidden) {
+      toastText = fresh.length > 1 ? `새로 막힌 곳 ${fresh.length}개 · ${fresh[0].title}` : `새로 막힌 곳 · ${fresh[0].title}`;
+      $("toastTxt").textContent = toastText;
+      if (!$("v-chat").hidden) $("toast").hidden = false;
+      setTimeout(() => { toastText = ""; $("toast").hidden = true; }, 8000);
+    }
+  } catch (e) { bot("Bento 서버에 연결하지 못했어요. 잠시 뒤에 새로고침해 주세요."); renderMe(); renderHome(); }
+})();
+</script>
+</body>
+</html>

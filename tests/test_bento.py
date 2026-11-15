@@ -1,0 +1,811 @@
+"""데모 저장소로 감지 → 제안 → 승인 → 실행 흐름과 안전장치를 확인한다."""
+
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app import main
+from app.actions import ActionList, CloseIssue, Comment, RequestReviewers, validate
+from app.notice import SAMPLE_EXTRACT, SAMPLE_NOTICE, NoticeExtract, verify_quotes
+from app.proposals import ProposalError, sign, verify
+from app.state import approvals, ci_status, issue_refs, review_wait_hours
+
+NOW = datetime(2026, 11, 16, 6, 0, tzinfo=timezone.utc)
+ago = lambda h: (NOW - timedelta(hours=h)).strftime("%Y-%m-%dT%H:%M:%SZ")  # noqa: E731
+
+
+@pytest.fixture(autouse=True)
+def fresh(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    import app.submission as sm  # 테스트에서는 실제 링크를 열지 않는다
+    monkeypatch.setattr(sm, "probe", lambda url: {"ok": "broken" not in url, "status": 200 if "broken" not in url else 404, "url": url, "error": None})
+    main._demo.reset()
+    main._EXECUTED.clear()
+    import app.discover as dsc  # 테스트에서는 학과 사이트·GitHub에 실제로 가지 않는다
+    monkeypatch.setattr(dsc, "_get", lambda url, **kw: FAKE_PAGES[url])
+    dsc._CACHE.update(at=0.0, items=[], errors={})
+    dsc._SRC.clear()
+    yield
+
+
+client = TestClient(main.app)
+
+
+FAKE_BOARD = """<table><tbody>
+<tr><td class="td_subject"><div class="bo_tit"><a href="https://aicollege.knu.ac.kr/bbs/board.php?bo_table=sub6_4&amp;wr_id=762">제 1회 하나증권 청년 금융 아이디어 공모전(~11.30(월))</a></div></td><td class="td_datetime rep">2026-11-03</td></tr>
+<tr><td class="td_subject"><div class="bo_tit"><a href="https://aicollege.knu.ac.kr/bbs/board.php?bo_table=sub6_4&amp;wr_id=761">JTI 글로벌 아이디어 공모전 (~ 11.05(목))</a></div></td><td class="td_datetime rep">2026-11-01</td></tr>
+<tr><td class="td_subject"><div class="bo_tit"><a href="https://aicollege.knu.ac.kr/bbs/board.php?bo_table=sub6_4&amp;wr_id=770">LG CNS 현직자 AI 트렌드 특강 안내</a></div></td><td class="td_datetime rep">2026-11-05</td></tr>
+</tbody></table>"""
+FAKE_DEVEVENT = """# Dev-Event
+## `26년 11월`
+- __[Notion AI Hackathon Seoul](https://luma.com/x)__
+  - 분류: `오프라인(서울)`, `무료`, `대회`, `AI`
+  - 주최: Notion
+  - 접수: 11. 01(일) ~ 11. 18(수) 23:00
+- __[Furiosa Developer Meetup](https://luma.com/y)__
+  - 분류: `오프라인(서울)`, `모임`, `AI`
+  - 일시: 11. 12(목) 16:00 ~ 11. 12(목) 19:00
+## 지난 행사 기록
+- __[오래된 해커톤](https://old)__
+"""
+import app.discover as _dsc  # noqa: E402
+FAKE_PAGES = {_dsc.SOURCES[0]["url"]: "<tbody></tbody>", _dsc.SOURCES[1]["url"]: FAKE_BOARD, _dsc.SOURCES[2]["url"]: FAKE_DEVEVENT}
+
+REAL_NOTICE = SAMPLE_NOTICE.replace("[체험용 예시 공고]", "[공고]")  # 예시가 아닌 공고는 AI로 분석한다
+
+
+# ---------- 순수 판단 함수 ----------
+def test_review_wait_counts_from_last_request_until_a_review():
+    tl = [{"event": "review_requested", "created_at": ago(52)}]
+    assert review_wait_hours(tl, [], NOW) == 52
+    assert review_wait_hours(tl, [{"submitted_at": ago(1), "state": "COMMENTED", "user": {"login": "a"}}], NOW) is None
+    assert review_wait_hours([], [], NOW) is None
+
+
+def test_approvals_use_latest_review_per_person():
+    rv = [{"user": {"login": "a"}, "state": "APPROVED", "submitted_at": ago(5)},
+          {"user": {"login": "a"}, "state": "CHANGES_REQUESTED", "submitted_at": ago(1)},
+          {"user": {"login": "b"}, "state": "APPROVED", "submitted_at": ago(2)}]
+    assert approvals(rv) == ["b"]
+
+
+def test_ci_status():
+    assert ci_status([], NOW) == ("none", None)
+    assert ci_status([{"status": "completed", "conclusion": "failure", "completed_at": ago(30)}], NOW) == ("fail", 30)
+    assert ci_status([{"status": "in_progress", "conclusion": None}], NOW)[0] == "pending"
+
+
+def test_issue_refs_ignores_urls():
+    assert issue_refs("fixes #12 and see a/b#3, #40") == {12, 40}
+
+
+# ---------- 공고 ----------
+def test_quotes_not_in_notice_are_dropped():
+    fake = SAMPLE_EXTRACT.model_copy(update={"deliverables": SAMPLE_EXTRACT.deliverables + [type(SAMPLE_EXTRACT.deliverables[0])(name="상금 신청서", quote="상금 신청서 제출")]})
+    clean, dropped = verify_quotes(fake, SAMPLE_NOTICE)
+    assert dropped == 1 and len(clean.deliverables) == 4
+
+
+def test_sample_notice_without_key_and_other_notice_rejected():
+    r = client.post("/api/notice", json={"text": SAMPLE_NOTICE})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["source"] == "sample" and body["team_ok"] is True
+    labels = [s["label"] for s in body["plan"]["steps"]]
+    assert labels[0].startswith("'해커톤 제출' 마감일")
+    assert any("#11" in l and "#13" in l for l in labels)  # README·배포는 기존 이슈를 연결
+    assert not any("#9" in l for l in labels)  # 의심 지시가 있는 이슈는 연결하지 않음
+    assert any("발표 자료 PDF" in l for l in labels) and any("시연 영상" in l for l in labels)
+    other = client.post("/api/notice", json={"text": "다른 공고"}).json()  # 키가 없으면 규칙으로 읽는다
+    assert other["source"] == "rules" and other["extract"]["submit_deadline_iso"] is None
+
+
+def test_notice_plan_executes_and_milestone_shows_up():
+    plan = client.post("/api/notice", json={"text": SAMPLE_NOTICE}).json()["plan"]
+    r = client.post("/api/execute", json={"token": plan["token"]})
+    assert r.status_code == 200 and r.json()["ok"], r.json()
+    st = client.get("/api/state").json()
+    assert st["milestones"][0]["title"] == "해커톤 제출"
+    assert {i["number"] for i in st["issues"] if i["milestone"] == "해커톤 제출"} >= {11, 13}
+    # 같은 제안을 다시 실행하면 마일스톤이 이미 있어서 막힌다
+    again = client.post("/api/execute", json={"token": plan["token"]})
+    assert again.status_code == 409
+
+
+# ---------- 우선순위 ----------
+def test_triage_order_and_reviewer_choice():
+    items = client.get("/api/triage").json()["items"]
+    ids = [i["id"] for i in items]
+    assert ids[0] == "review-14"
+    first = items[0]["options"][0]
+    assert first["label"] == "doyoon 님께 리뷰 부탁하기"  # review.service.ts를 고친 사람
+    assert "flag-9" in ids and "close-12" in ids and "merge-15" in ids and "fix-16" in ids
+    assert not any(o for i in items if i["id"] == "flag-9" for o in i["options"])  # 의심 지시엔 행동 없음
+
+
+def test_approve_review_request_then_item_disappears():
+    item = next(i for i in client.get("/api/triage").json()["items"] if i["id"] == "review-14")
+    tok = item["options"][0]["proposal"]["token"]
+    r = client.post("/api/execute", json={"token": tok, "edits": {"1": "도윤 님 부탁드려요!"}})
+    assert r.json()["ok"]
+    assert "reviewers #14 ['doyoon']" in main._demo.log
+    assert "review-14" not in [i["id"] for i in client.get("/api/triage").json()["items"]]
+
+
+# ---------- 안전장치 ----------
+def test_tampered_or_old_token_rejected():
+    tok = sign({"repo": "x/y", "actions": []}, "k")
+    with pytest.raises(ProposalError):
+        verify(tok[:-2] + "aa", "k")
+    with pytest.raises(ProposalError):
+        verify(tok, "k", max_age=-1)
+    assert client.post("/api/execute", json={"token": "abc.def"}).status_code == 400
+
+
+def test_validate_blocks_strangers_suspicious_issue_and_mass_mentions():
+    st = main.build_state(main._demo)
+    errs = validate([RequestReviewers(pr=14, users=["mallory"]), CloseIssue(issue=9, comment="닫아요"),
+                     Comment(number=14, body="@everyone 확인!"), RequestReviewers(pr=14, users=["jiwoo"])], st)
+    assert len(errs) == 4
+
+
+def test_merge_is_not_an_action():
+    with pytest.raises(Exception):
+        ActionList.validate_python([{"type": "merge_pr", "pr": 15}])
+
+
+def test_access_code(monkeypatch):
+    monkeypatch.setattr(main, "settings", main.settings.__class__(**{**main.settings.__dict__, "access_code": "team1234"}))
+    item = next(i for i in client.get("/api/triage").json()["items"] if i["id"] == "close-12")
+    tok = item["options"][0]["proposal"]["token"]
+    assert client.post("/api/execute", json={"token": tok}).status_code == 401
+    assert client.post("/api/execute", json={"token": tok}, headers={"X-Bento-Code": "team1234"}).json()["ok"]
+
+
+def test_submit_check_after_plan():
+    plan = client.post("/api/notice", json={"text": SAMPLE_NOTICE}).json()["plan"]
+    client.post("/api/execute", json={"token": plan["token"]})
+    r = client.post("/api/submit-check", json={"deliverables": [d.model_dump() for d in SAMPLE_EXTRACT.deliverables],
+                                               "links": {"video": "https://youtu.be/broken"}}).json()
+    rows = {x["name"]: x for x in r["rows"]}
+    assert rows["저장소 공개"]["status"] == "ok" and rows["README 실행 방법"]["status"] == "ok"
+    assert rows["배포 링크 열림"]["status"] == "ok"  # README에서 배포 링크를 찾아 열어 봤다
+    assert rows["시연 영상 링크 열림"]["status"] == "fail" and rows["발표 자료 링크 열림"]["status"] == "fail"
+    assert any(e["label"].startswith("커밋 c0ffee1") for e in rows["README 실행 방법"]["evidence"])  # 근거 = 커밋
+    assert r["ready"] is False and any(h["id"] == "agree" for h in r["human"])
+
+
+def test_webhook_signature(monkeypatch):
+    monkeypatch.setattr(main, "settings", main.settings.__class__(**{**main.settings.__dict__, "webhook_secret": "s"}))
+    assert client.post("/api/github/webhook", content=b"{}", headers={"X-Hub-Signature-256": "sha256=bad"}).status_code == 401
+    import hashlib
+    import hmac
+    sig = "sha256=" + hmac.new(b"s", b"{}", hashlib.sha256).hexdigest()
+    assert client.post("/api/github/webhook", content=b"{}", headers={"X-Hub-Signature-256": sig, "X-GitHub-Event": "ping"}).json()["event"] == "ping"
+
+
+def test_extract_model_roundtrip():
+    assert NoticeExtract.model_validate(SAMPLE_EXTRACT.model_dump()) == SAMPLE_EXTRACT
+
+
+# ---------- 토큰 절약 · 사용량 ----------
+import json as _json
+from types import SimpleNamespace
+
+from app import notice as nm
+
+
+class _FakeClaude:
+    calls = 0
+
+    def __init__(self, *a, **k):
+        self.beta = SimpleNamespace(messages=SimpleNamespace(create=self._create))
+
+    def _create(self, **kw):
+        _FakeClaude.calls += 1
+        ex = SAMPLE_EXTRACT.model_copy(update={"title": "AI가 읽은 해커톤"})
+        return SimpleNamespace(stop_reason="end_turn", model="claude-opus-5-5",
+                               content=[SimpleNamespace(type="text", text=_json.dumps(ex.model_dump(), ensure_ascii=False))],
+                               usage=SimpleNamespace(input_tokens=1200, output_tokens=600))
+
+
+@pytest.fixture
+def fake_ai(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test")
+    monkeypatch.setattr(nm.anthropic, "Anthropic", _FakeClaude)
+    _FakeClaude.calls = 0
+    nm._CACHE.clear()
+    for k in nm.USAGE:
+        nm.USAGE[k] = 0
+    yield
+
+
+def test_same_notice_is_analyzed_once_and_usage_recorded(fake_ai):
+    a = client.post("/api/notice", json={"text": REAL_NOTICE}).json()
+    b = client.post("/api/notice", json={"text": REAL_NOTICE + "\n\n"}).json()  # 공백만 다르면 같은 공고
+    assert a["source"] == "claude" and b["source"] == "cache" and _FakeClaude.calls == 1
+    assert a["usage"]["input_tokens"] == 1200 and a["usage"]["est_usd"] == round(1200 / 1e6 * 4 + 600 / 1e6 * 20, 5)
+    assert b["usage"] is None
+    u = client.get("/api/usage").json()
+    assert u["ai_calls"] == 1 and u["cache_hits"] == 1
+
+
+def test_teammate_reuses_analysis_saved_in_repo(fake_ai):
+    plan = client.post("/api/notice", json={"text": REAL_NOTICE}).json()["plan"]
+    assert client.post("/api/execute", json={"token": plan["token"]}).json()["ok"]
+    nm._CACHE.clear()  # 다른 서버(다른 팀원)라고 치기
+    r = client.post("/api/notice", json={"text": REAL_NOTICE}).json()
+    assert r["source"] == "repo" and r["extract"]["title"] == "AI가 읽은 해커톤" and _FakeClaude.calls == 1
+    saved = client.get("/api/notice/saved").json()["extract"]
+    assert saved["title"] == "AI가 읽은 해커톤"
+
+
+def test_clean_text_trims_noise():
+    raw = "<div>메뉴</div>\n메뉴\n\n\n\n참가 자격:   재학생\n메뉴"
+    assert nm.clean_text(raw) == "메뉴\n\n참가 자격: 재학생"
+
+
+def test_setup_helper_pages(monkeypatch):
+    local = TestClient(main.app, base_url="http://localhost")
+    assert "GitHub에서 앱 만들기" in local.get("/setup").text
+    page = local.get("/setup/github/start", params={"name": "bento-test", "repo": "me/repo"}).text
+    assert "https://github.com/settings/apps/new?state=" in page and "&quot;contents&quot;: &quot;read&quot;" in page
+    assert "&quot;pull_requests&quot;: &quot;write&quot;" in page and "&quot;active&quot;: false" in page
+    # 배포 주소 같은 다른 호스트에서는 막힌다
+    assert TestClient(main.app, base_url="http://bento.example.com").get("/setup").status_code == 403
+    assert local.get("/setup/github/callback", params={"code": "x", "state": "nope"}).status_code == 400
+
+
+def test_skip_lets_people_run_only_some_actions():
+    plan = client.post("/api/notice", json={"text": SAMPLE_NOTICE}).json()["plan"]
+    n = len(plan["steps"])
+    # 제출 폼 이슈(마지막)만 빼고 실행
+    r = client.post("/api/execute", json={"token": plan["token"], "skip": [n - 1]}).json()
+    assert r["ok"] and [x["index"] for x in r["results"]] == list(range(n - 1))
+    assert not any(i["title"] == "[제출] 제출 폼 작성" for i in client.get("/api/state").json()["issues"])
+    # 마일스톤을 빼면 그 마일스톤에 넣을 이슈들이 검증에서 막힌다
+    main._demo.reset()
+    plan = client.post("/api/notice", json={"text": SAMPLE_NOTICE}).json()["plan"]
+    assert client.post("/api/execute", json={"token": plan["token"], "skip": [0]}).status_code == 409
+    assert client.post("/api/execute", json={"token": plan["token"], "skip": list(range(n))}).status_code == 400
+
+
+# ---------- 팀플 구분 ----------
+def test_projects_lists_demo_repo_with_its_notice_state():
+    r = client.get("/api/projects").json()
+    assert [p["repo"] for p in r["projects"]] == [main._demo.repo]
+    assert r["projects"][0]["notice"] is None
+
+
+def test_new_project_notice_does_not_touch_any_repo():
+    r = client.post("/api/notice", json={"text": SAMPLE_NOTICE, "new_project": True}).json()
+    assert r["repo"] is None and "plan" not in r and r["team_size"] is None
+    assert r["extract"]["title"]
+
+
+def test_existing_project_notice_offers_plan_then_shows_in_projects():
+    r = client.post("/api/notice", json={"text": SAMPLE_NOTICE, "repo": main._demo.repo}).json()
+    assert r["repo"] == main._demo.repo and r["plan"]["steps"]
+    assert client.post("/api/execute", json={"token": r["plan"]["token"]}).json()["ok"]
+    p = client.get("/api/projects").json()["projects"][0]
+    assert p["notice"] == r["extract"]["title"] and p["due"] and p["total"] >= 1
+
+
+def test_sample_notice_never_calls_ai(fake_ai):
+    r = client.post("/api/notice", json={"text": SAMPLE_NOTICE, "new_project": True}).json()
+    assert r["source"] == "sample" and _FakeClaude.calls == 0
+
+
+# ---------- 실제 공고: 규칙 분석 · 링크 · 계획 ----------
+from app.fetch import FetchError, fetch_notice, html_to_text  # noqa: E402
+from app.rules import KST, rule_extract  # noqa: E402
+from app.schedule import work_plan  # noqa: E402
+
+REAL = """[공지] 제5회 경북대 SW 아이디어 공모전 안내
+1. 참가 대상: 경북대학교 재학생 (개인 또는 최대 3인 팀)
+2. 접수 기간: 2026. 12. 1.(화) ~ 2026. 12. 15.(화) 오후 6시
+3. 결과물 제출: 2027. 1. 10.(일) 23:59까지 이메일 제출
+4. 제출 서류:
+- 참가신청서 1부
+- 아이디어 기획서(PDF)
+- 시연 영상 링크
+5. 시상: 대상 1팀 100만원
+"""
+
+
+def test_rules_read_dates_team_and_deliverables_from_real_notice():
+    ex = rule_extract(REAL, datetime(2026, 11, 14, tzinfo=KST))
+    assert ex.title == "제5회 경북대 SW 아이디어 공모전 안내"
+    assert ex.apply_deadline_iso == "2026-12-15T18:00:00+09:00"
+    assert ex.submit_deadline_iso == "2027-01-10T23:59:00+09:00"
+    assert ex.team_max == 3
+    assert [d.name for d in ex.deliverables] == ["참가신청서 1부", "아이디어 기획서(PDF)", "시연 영상 링크"]
+    assert not any(f.label == "진행 기간" for f in ex.facts)
+
+
+def test_rules_match_sample_dates():
+    ex = rule_extract(SAMPLE_NOTICE, datetime(2026, 11, 14, tzinfo=KST))
+    assert (ex.apply_deadline_iso, ex.submit_deadline_iso) == (SAMPLE_EXTRACT.apply_deadline_iso, SAMPLE_EXTRACT.submit_deadline_iso)
+    assert ex.apply_fields == ["팀명", "팀원", "아이디어 한 줄"] and (ex.team_min, ex.team_max) == (2, 4)
+
+
+def test_work_plan_runs_backwards_from_deadline_and_stays_in_order():
+    now = datetime(2026, 11, 14, 10, 0, tzinfo=KST)
+    steps = work_plan(SAMPLE_EXTRACT, now)
+    titles = [s["title"] for s in steps]
+    assert titles[-1] == "제출 마감" and "신청서 제출" in titles and "발표 자료 완성" in titles and "시연 영상 촬영" in titles
+    dues = [datetime.fromisoformat(s["due"]) for s in steps]
+    assert dues == sorted(dues) and all(now < d <= datetime.fromisoformat(SAMPLE_EXTRACT.submit_deadline_iso) for d in dues)
+    assert work_plan(SAMPLE_EXTRACT, datetime(2026, 12, 1, tzinfo=KST)) == []  # 마감이 지나면 계획 없음
+
+
+def test_schedule_to_github_is_a_signed_proposal_and_skips_existing():
+    steps = client.post("/api/schedule", json={"extract": SAMPLE_EXTRACT.model_dump()}).json()["steps"]
+    body = [{"title": s["title"], "due": s["due"]} for s in steps if s["kind"] != "due"]
+    p = client.post("/api/schedule/github", json={"steps": body}).json()["proposal"]
+    assert len(p["steps"]) == len(body) and all("계획 · " in s["label"] for s in p["steps"])
+    assert client.post("/api/execute", json={"token": p["token"]}).json()["ok"]
+    again = client.post("/api/schedule/github", json={"steps": body}).json()
+    assert again["proposal"] is None
+
+
+def test_fetch_refuses_internal_addresses_and_odd_schemes():
+    for url in ["http://127.0.0.1:8787/", "http://localhost/", "file:///etc/passwd", "http://169.254.169.254/latest/", "http://user:pw@example.com/"]:
+        with pytest.raises(FetchError):
+            fetch_notice(url)
+
+
+def test_html_to_text_keeps_body_and_drops_scripts():
+    title, text = html_to_text("<html><head><title>공모전 &amp; 해커톤</title><script>alert(1)</script></head>"
+                               "<body><nav>메뉴</nav><p>신청: 12/1까지</p><ul><li>발표 자료</li><li>영상</li></ul></body></html>")
+    assert title == "공모전 & 해커톤" and text == "신청: 12/1까지\n발표 자료\n영상"
+
+
+def test_fetch_endpoint_needs_team_code_when_set(monkeypatch):
+    monkeypatch.setattr(main, "settings", main.settings.__class__(**{**main.settings.__dict__, "access_code": "c0de"}))
+    assert client.post("/api/notice/fetch", json={"url": "http://127.0.0.1/"}).status_code == 401
+    assert client.post("/api/notice/fetch", json={"url": "http://127.0.0.1/"}, headers={"X-Bento-Code": "c0de"}).status_code == 422
+
+
+# ---------- 제출: 팀원 확인 · 버전 고정 · 증거 ----------
+def test_confirm_locks_version_detects_changes_and_records_proof():
+    head = main._demo.d["head"]
+    p = client.post("/api/submit/confirm", json={"title": "2026 해커톤", "head_sha": head, "checklist": ["발표 자료 최신"]}).json()["proposal"]
+    assert [s["label"].split(":")[0] for s in p["steps"]][:1] == ["할 일 추가"]
+    assert client.post("/api/execute", json={"token": p["token"]}).json()["ok"]
+    st = client.get("/api/submit/status").json()
+    assert st["lock"] == head and st["confirmed_by"] == [] and st["changed"] is False
+    n = st["issue"]
+    main._demo.d["reactions"][n] = [{"content": "+1", "user": {"login": "seoyeon"}}, {"content": "+1", "user": {"login": "outsider"}}]
+    main._demo.d["comments"].setdefault(n, []).append({"user": {"login": "doyoon"}, "body": "확인했어요"})
+    assert client.get("/api/submit/status").json()["confirmed_by"] == ["doyoon", "seoyeon"]  # 팀원만 센다
+    main._demo.d["head"] = "beef000000000000"  # 확인 뒤에 누가 푸시함
+    r = client.post("/api/submit-check", json={"deliverables": []}).json()
+    changed = next(x for x in r["rows"] if x["name"] == "확인 요청 뒤 바뀐 것")
+    assert changed["status"] == "fail" and "README.md" in changed["detail"] and r["ready"] is False
+    again = client.post("/api/submit/confirm", json={"title": "2026 해커톤", "head_sha": "beef000000000000"}).json()["proposal"]
+    assert again["steps"][0]["label"].startswith(f"할 일 #{n} 닫기")  # 옛 요청을 닫고 새 버전으로 다시
+    proof = client.post("/api/submit/proof", json={"issue": n, "proof": "접수번호 HK-0042"}).json()["proposal"]
+    assert client.post("/api/execute", json={"token": proof["token"]}).json()["ok"]
+    done = client.get(f"/api/submit/status?issue={n}").json()
+    assert done["closed"] and done["proof"] == "접수번호 HK-0042"
+
+
+def test_apply_check_counts_team_and_keeps_privacy_for_humans():
+    r = client.post("/api/apply-check", json={"extract": SAMPLE_EXTRACT.model_dump(), "members": ["가", "나", "다", "라", "마"]}).json()
+    team = next(x for x in r["rows"] if x["name"] == "팀 인원")
+    assert team["status"] == "fail" and r["ready"] is False
+    assert any(h["id"] == "privacy" for h in r["human"])
+
+
+GFORM = """<html><script>var FB_PUBLIC_LOAD_DATA_ = [null,["설명",[[1,"팀명",null,0,[[111,null,1]]],[2,"대표자 학번",null,0,[[222,null,1]]],
+[3,"GitHub 저장소 링크",null,0,[[333,null,1]]],[4,"시연 영상 (유튜브)",null,0,[[444,null,0]]],[5,"트랙 선택",null,2,[[555,[["A"],["B"]],1]]],
+[6,"안내",null,8,null]],null,null]];</script></html>"""
+
+
+def test_google_form_prefill_skips_personal_and_choice_fields():
+    from app.forms import parse_google_form, prefill_url, suggest
+    rows = suggest(parse_google_form(GFORM), {"team": "컴학감동", "repo": "https://github.com/a/b", "video": "https://youtu.be/x"})
+    by = {r["title"]: r for r in rows}
+    assert by["팀명"]["who"] == "bento" and by["GitHub 저장소 링크"]["value"] == "https://github.com/a/b"
+    assert by["대표자 학번"]["who"] == "human" and "개인정보" in by["대표자 학번"]["why"]
+    assert by["트랙 선택"]["who"] == "human" and "안내" not in by
+    url = prefill_url("https://docs.google.com/forms/d/e/X/viewform", rows)
+    assert "entry.111=" in url and "entry.222" not in url and "entry.555" not in url and url.count("entry.") == 3
+
+
+def test_form_inspect_other_sites_fall_back_to_copy(monkeypatch):
+    r = client.post("/api/form/inspect", json={"url": "https://example.com/apply", "values": {}}).json()
+    assert r["kind"] == "other"
+
+
+# ---------- 에이전트 루프: 관찰 → 판단 → 다시 계획 ----------
+from app import progress as prog  # noqa: E402
+
+
+def _plan_milestone(n, title, hours_from_now):
+    due = (datetime.now(timezone.utc) + timedelta(hours=hours_from_now)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    main._demo.d["milestones"].append({"number": n, "title": title, "due_on": due, "description": "", "html_url": f"https://github.com/x/y/milestone/{n}"})
+    return {"number": n, "title": title}
+
+
+def test_replan_moves_late_steps_forward_and_keeps_order():
+    now = datetime(2026, 11, 20, 9, 0, tzinfo=timezone.utc)
+    deadline = datetime(2026, 11, 24, 3, 0, tzinfo=timezone.utc)
+    steps = [{"title": "아이디어", "due": "2026-11-16T14:00:00+00:00"}, {"title": "MVP", "due": "2026-11-19T14:00:00+00:00"},
+             {"title": "마무리", "due": "2026-11-22T14:00:00+00:00"}, {"title": "최종 점검", "due": "2026-11-24T00:00:00+00:00"}]
+    moves = prog.replan(steps, now, deadline, done={"아이디어"})
+    news = {m["title"]: datetime.fromisoformat(m["new"]) for m in moves}
+    assert "아이디어" not in news and "최종 점검" not in news  # 끝난 단계와 최종 점검은 그대로
+    assert now < news["MVP"] < deadline - timedelta(hours=3)
+    assert "마무리" not in news or news["MVP"] < news["마무리"]
+
+
+def test_progress_finds_late_step_suggests_owner_and_replans():
+    ms = _plan_milestone(1, "계획 · README·배포 정리", -10)  # 10시간 전에 끝났어야 함
+    _plan_milestone(2, "계획 · 발표 자료 완성", 40)
+    main._demo.d["issues"][3]["milestone"] = ms  # #13 README 작성 (담당자 없음)
+    r = client.post("/api/progress", json={"deadline_iso": (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()}).json()
+    late = [f for f in r["findings"] if f["id"] == "late:README·배포 정리"]
+    assert late and late[0]["sev"] == "긴급" and "담당자 없음 1개" in late[0]["why"]
+    assert r["assign"] == [{"issue": 13, "title": "README 작성", "user": "hajun"}]  # 열린 이슈를 가장 적게 맡은 팀원
+    assert any(m["title"] == "README·배포 정리" and m["repo"] for m in r["moves"])
+    labels = [s["label"] for s in r["proposal"]["steps"]]
+    assert any("마감일을" in l for l in labels) and any("#13" in l for l in labels)
+    assert client.post("/api/execute", json={"token": r["proposal"]["token"]}).json()["ok"]
+    again = client.post("/api/progress", json={"deadline_iso": (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()}).json()
+    assert not [f for f in again["findings"] if f["id"].startswith("late:")]  # 다시 짠 뒤에는 늦은 단계가 없다
+
+
+def test_progress_flags_local_steps_and_tight_time():
+    plan = [{"title": "핵심 기능", "due": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(), "kind": "step"},
+            {"title": "발표 자료", "due": (datetime.now(timezone.utc) + timedelta(hours=4)).isoformat(), "kind": "step"}]
+    r = client.post("/api/progress", json={"plan": plan, "deadline_iso": (datetime.now(timezone.utc) + timedelta(hours=10)).isoformat()}).json()
+    assert any(f.get("local") for f in r["findings"]) and r["scope"]  # 10시간에 2단계는 빠듯하다
+    assert r["moves"] and all(not m["repo"] for m in r["moves"])  # 이 기기 계획만 다시 짠다
+    assert r["proposal"] is None  # 저장소에 바꿀 게 없으면 승인할 것도 없다
+
+
+def test_agent_run_needs_secret_and_reports(monkeypatch):
+    assert client.get("/api/agent/run").status_code == 401
+    monkeypatch.setenv("CRON_SECRET", "s3")
+    r = client.get("/api/agent/run", headers={"Authorization": "Bearer s3"}).json()
+    assert r["ok"] and r["report"][0]["notified"] is False  # 디스코드를 연결하지 않으면 보내지 않는다
+
+
+# ---------- 팀원 여럿이 동시에 승인할 때 ----------
+def _option(item_prefix, label_part=None):
+    items = client.get("/api/triage").json()["items"]
+    it = next(i for i in items if i["id"].startswith(item_prefix))
+    return next(o for o in it["options"] if label_part is None or label_part in o["label"])["proposal"]
+
+
+def test_two_teammates_approve_same_suggestion_runs_once():
+    a, b = _option("assign"), _option("assign")  # 두 사람이 각자 화면에서 같은 제안을 봄
+    assert client.post("/api/execute", json={"token": a["token"]}).json()["ok"]
+    r = client.post("/api/execute", json={"token": b["token"]})
+    assert r.status_code == 409 and r.json()["detail"]["stale"] is True
+    assigned = [x for x in main._demo.log if x.startswith("assign")]
+    assert len(assigned) == len(set(assigned))  # 같은 담당 지정이 두 번 일어나지 않음
+
+
+def test_assignment_changed_by_someone_else_is_not_overwritten():
+    p = _option("assign")
+    main._demo.add_assignees(13, ["jiwoo"])  # 그사이 다른 팀원이 GitHub에서 직접 README를 맡음
+    r = client.post("/api/execute", json={"token": p["token"]})
+    assert r.status_code == 409 and r.json()["detail"]["stale"]
+    assert any("#13 담당자가 지금은 jiwoo" in e for e in r.json()["detail"]["errors"])
+
+
+def test_reviewer_and_replan_use_compare_and_swap():
+    p = _option("review")
+    main._demo.request_reviewers(14, ["doyoon"])  # 다른 사람이 먼저 리뷰어를 붙임
+    r = client.post("/api/execute", json={"token": p["token"]})
+    assert r.status_code == 409 and "리뷰어가 지금은" in " ".join(r.json()["detail"]["errors"])
+    _plan_milestone(1, "계획 · MVP", -10)
+    main._demo.d["issues"][3]["milestone"] = {"number": 1, "title": "계획 · MVP"}
+    dl = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+    a = client.post("/api/progress", json={"deadline_iso": dl}).json()["proposal"]
+    b = client.post("/api/progress", json={"deadline_iso": dl}).json()["proposal"]
+    assert client.post("/api/execute", json={"token": a["token"]}).json()["ok"]
+    assert client.post("/api/execute", json={"token": b["token"]}).status_code == 409  # 두 번째 다시 계획은 덮어쓰지 않음
+
+
+# ---------- 서버가 여러 대일 때 (GitHub 라벨로 잠금·기록) ----------
+from app import coord  # noqa: E402
+from app.actions import Comment as _Comment, execute as _execute  # noqa: E402
+
+
+def test_other_server_holding_lock_makes_us_wait():
+    p = _option("assign")
+    main._demo.create_label(coord.LOCK, coord.COLOR, f"{int(__import__('time').time())} 다른 서버")
+    r = client.post("/api/execute", json={"token": p["token"]})
+    assert r.status_code == 409 and r.json()["detail"]["busy"]
+    assert not [x for x in main._demo.log if x.startswith("assign")]  # 아무것도 실행하지 않음
+
+
+def test_stale_lock_from_crashed_server_is_cleared():
+    p = _option("assign")
+    main._demo.create_label(coord.LOCK, coord.COLOR, "100 아주 오래전")
+    assert client.post("/api/execute", json={"token": p["token"]}).json()["ok"]
+    assert coord.LOCK not in main._demo.d["labels"]  # 끝나면 잠금을 푼다
+
+
+def test_same_proposal_on_another_server_is_rejected_by_shared_record():
+    p = _option("assign")
+    assert client.post("/api/execute", json={"token": p["token"]}).json()["ok"]
+    main._EXECUTED.clear()  # 다른 서버라고 치기: 메모리 기록이 없다
+    main._demo.d["issues"][1]["assignees"] = []  # 상태 비교만으로는 못 잡는 경우까지 만들어 둠
+    main._demo.d["issues"][3]["assignees"] = []
+    r = client.post("/api/execute", json={"token": p["token"]})
+    assert r.status_code == 409 and "이미 승인해서 실행" in r.json()["detail"]["message"]
+
+
+def test_comment_is_not_posted_twice_across_servers():
+    acts = [_Comment(number=14, body="리뷰 부탁해요")]
+    first = _execute(acts, main._demo, main.settings, op="abc123")
+    again = _execute(acts, main._demo, main.settings, op="abc123")
+    assert first[0]["ok"] and not first[0].get("skipped")
+    assert again[0]["skipped"] and "이미 있어서" in again[0]["note"]
+    assert len(main._demo.d["comments"][14]) == 1
+
+
+# ---------- 승인이 미뤄지지 않게: 주인 · 단계 · 반대가 없으면 실행 ----------
+from app import ownership as own  # noqa: E402
+
+
+def test_duty_rotates_daily_among_members():
+    ms = ["c", "a", "b"]
+    days = [own.duty(ms, datetime(2026, 11, d, 3, tzinfo=timezone.utc)) for d in (14, 15, 16, 17)]
+    assert sorted(set(days)) == ["a", "b", "c"] and days[0] == days[3]
+
+
+def test_each_waiting_item_has_one_owner_and_escalation_level():
+    t = client.get("/api/triage").json()
+    review = next(i for i in t["items"] if i["id"] == "review-14")
+    assert review["owner"] == "jiwoo" and review["level"] == 2  # PR 작성자가 주인, 52시간째라 누구나 승인 가능
+    assign = next(i for i in t["items"] if i["id"] == "assign")
+    assert assign["owner"] == t["duty"] and assign["owner"] in t["members"]
+
+
+def test_approver_name_is_written_on_github():
+    p = _option("review")
+    r = client.post("/api/execute", json={"token": p["token"]}, headers={"X-Bento-User": "seoyeon"}).json()
+    assert r["ok"] and "seoyeon님 승인으로" in main._demo.d["comments"][14][-1]["body"]
+    p2 = _option("assign")  # 팀원이 아닌 이름은 적지 않는다
+    client.post("/api/execute", json={"token": p2["token"]}, headers={"X-Bento-User": "outsider"})
+    assert all("outsider" not in c["body"] for cs in main._demo.d["comments"].values() for c in cs)
+
+
+def _enable_rules(lazy=("reviewers", "reminders"), hours=24):
+    p = client.post("/api/team-rules", json={"lazy": list(lazy), "hours": hours}).json()["proposal"]
+    assert client.post("/api/execute", json={"token": p["token"]}).json()["ok"]
+
+
+def test_no_objection_runs_after_waiting_time():
+    assert main.lazy_tick(None) == {"posted": [], "ran": [], "vetoed": []}  # 규칙을 켜기 전에는 아무것도 안 함
+    _enable_rules()
+    first = main.lazy_tick(None)
+    assert "review-14" in first["posted"]  # 예고 댓글
+    notice = main._demo.d["comments"][14][-1]["body"]
+    assert "24시간 안에 반대가 없으면" in notice and "@jiwoo" in notice
+    assert main.lazy_tick(None)["ran"] == []  # 아직 시간이 안 됨
+    later = main.lazy_tick(None, now=datetime.now(timezone.utc) + timedelta(hours=25))
+    assert {"id": "review-14", "ok": True} in later["ran"]
+    assert any(x.startswith("reviewers #14") for x in main._demo.log)
+    assert "반대가 없어서, 팀 규칙에 따라" in main._demo.d["comments"][14][-1]["body"]
+
+
+def test_one_thumbs_down_cancels_it():
+    _enable_rules()
+    main.lazy_tick(None)
+    cid = next(c["id"] for c in main._demo.d["comments"][14] if "bento-lazy" in c["body"])
+    main._demo.d.setdefault("comment_reactions", {})[cid] = [{"content": "-1", "user": {"login": "seoyeon"}}]
+    later = main.lazy_tick(None, now=datetime.now(timezone.utc) + timedelta(hours=25))
+    assert "review-14" in later["vetoed"] and "review-14" not in [x["id"] for x in later["ran"]]
+    assert not any(x.startswith("reviewers #14") for x in main._demo.log)  # 반대한 일은 실행하지 않음
+    item = next(i for i in client.get("/api/triage").json()["items"] if i["id"] == "review-14")
+    assert item["lazy"]["status"] == "vetoed" and item["lazy"]["vetoed_by"] == ["seoyeon"]
+
+
+def test_only_low_risk_actions_can_run_without_approval():
+    r = client.post("/api/team-rules", json={"lazy": ["reviewers", "close_issue"], "hours": 24}).json()
+    labels = [s["label"] + s["sub"] for s in r["proposal"]["steps"]]
+    assert "close_issue" not in "".join(labels)  # 위험한 일은 규칙에 넣을 수 없다
+    _enable_rules(lazy=("reviewers",))  # 리마인드 댓글은 빼면, 리뷰어+댓글 묶음은 대상이 아니다
+    assert main.lazy_tick(None)["posted"] == []
+
+
+# ---------- 대회 먼저 찾아오기 ----------
+def test_discover_picks_open_contests_from_board_and_dev_event():
+    from app.rules import KST as _KST
+    r = _dsc.discover(["AI"], force=True, now=datetime(2026, 11, 14, 10, tzinfo=_KST))
+    titles = [x["title"] for x in r["items"]]
+    assert "Notion AI Hackathon Seoul" in titles and any("하나증권" in t for t in titles)
+    assert not any("JTI" in t for t in titles)  # 마감 지난 공모전은 뺀다
+    assert not any("특강" in t or "Meetup" in t for t in titles)  # 대회가 아닌 행사는 뺀다
+    assert "오래된 해커톤" not in titles  # 지난 행사 기록은 읽지 않는다
+    top = r["items"][0]
+    assert top["title"] == "Notion AI Hackathon Seoul" and "해커톤" in top["why"] and top["deadline_text"].startswith("11월 18일")
+    knu = next(x for x in r["items"] if "하나증권" in x["title"])
+    assert knu["ai_ok"] is False and "우리 학과 공지" in knu["why"]  # AI 크롤러를 막은 사이트 글은 AI에 보내지 않는다
+
+
+def test_discover_is_polite_and_cached():
+    import app.discover as dsc
+    calls = []
+    dsc._LAST_HIT.clear()
+    slept = []
+    def fake_get(url):
+        calls.append(url)
+        return FAKE_PAGES[url]
+    dsc.discover(force=True, fetch=fake_get)
+    dsc.discover(fetch=fake_get)  # 1시간 안에는 다시 읽지 않는다
+    assert len(calls) == 3
+    dsc._LAST_HIT["aicollege.knu.ac.kr"] = __import__("time").time()
+    class R:
+        status_code = 200
+        text = "ok"
+    class C:
+        def get(self, u): return R()
+    dsc.polite_get("https://aicollege.knu.ac.kr/x", client=C(), sleep=slept.append)
+    assert slept and 9 <= slept[0] <= 10  # 같은 사이트는 10초 간격
+
+
+def test_no_ai_notice_uses_rules_even_with_key(fake_ai):
+    r = client.post("/api/notice", json={"text": REAL_NOTICE, "new_project": True, "no_ai": True}).json()
+    assert r["source"] == "rules" and _FakeClaude.calls == 0
+
+
+def test_discover_api_and_agent_run_include_contests(monkeypatch):
+    r = client.get("/api/discover?interests=AI").json()
+    assert r["items"] and {s["id"] for s in r["sources"]} == {"knu-notice", "knu-event", "dev-event"}
+    assert any(x["name"] == "링커리어" for x in r["not_auto"])
+
+
+
+def test_serverless_does_not_sleep_but_defers_same_site():
+    import app.discover as dsc
+    dsc._LAST_HIT.clear()
+    calls = []
+    class R:
+        status_code = 200
+        def __init__(self, t): self.text = t
+    class C:
+        def get(self, u):
+            calls.append(u)
+            return R(FAKE_PAGES[u])
+        def close(self): pass
+    monkeypatch_get = lambda url, sleep=None: dsc.polite_get(url, client=C(), sleep=sleep)  # noqa: E731
+    dsc._get = monkeypatch_get
+    first = dsc.refresh(wait=False)
+    assert first["pending"] == ["knu-event"]  # 같은 학과 사이트는 10초 안에 두 번 부르지 않고 미룬다
+    assert len(calls) == 2  # 학과 공지 1 + Dev-Event 1
+    dsc._LAST_HIT["aicollege.knu.ac.kr"] -= 11  # 10초가 지난 뒤 다음 요청
+    second = dsc.refresh(wait=False)
+    assert second["pending"] == [] and len(calls) == 3  # 미뤘던 것만 읽는다
+
+
+
+def test_code_fragments_never_become_titles():
+    from app.fetch import html_to_text
+    _, text = html_to_text("<div>${unit} · ${c.ver}판${d.isEditor ? '편집자' : ''}</div><p>제주 AI 해커톤</p><p>접수: ~ 11.20(금)</p>")
+    assert "${" not in text and text.startswith("제주 AI 해커톤")
+    assert rule_extract("${a} · ${b}\n제주 AI 해커톤\n접수: ~ 11.20(금)").title == "제주 AI 해커톤"
+
+
+
+def test_poster_prefers_post_image_for_board_and_og_for_others():
+    from app.discover import find_poster
+    knu = '<meta property="og:image" content="https://aicollege.knu.ac.kr/images/common/meta.jpg"><div id="bo_v_con"><img src="https://img2.stibee.com/poster.png"></div>'
+    assert find_poster(knu, "https://aicollege.knu.ac.kr/x", prefer_body=True) == "https://img2.stibee.com/poster.png"
+    other = '<meta property="og:image" content="/og/hack.png"><img src="/logo.svg">'
+    assert find_poster(other, "https://hack.example.com/e/1", prefer_body=False) == "https://hack.example.com/og/hack.png"
+    assert find_poster('<img src="http://plain/x.png">', "https://a.b/", False) is None  # https만
+
+
+def test_poster_api_only_for_found_items_and_cached(monkeypatch):
+    import app.discover as dsc
+    r = client.get("/api/discover").json()
+    pid = r["items"][0]["id"]
+    calls = []
+    monkeypatch.setattr(dsc, "_get", lambda url, **kw: (calls.append(url), '<meta property="og:image" content="https://cdn.example.com/p.png">')[1])
+    assert client.get(f"/api/poster?id={pid}").json()["image"] == "https://cdn.example.com/p.png"
+    client.get(f"/api/poster?id={pid}")
+    assert len(calls) == 1  # 하루 동안 다시 읽지 않는다
+    assert client.get("/api/poster?id=evil:http169254").json() == {"image": None, "pending": False}  # 목록에 없는 주소는 열지 않는다
+
+
+# ---------- GitHub 로그인 ----------
+import app.auth as auth_mod  # noqa: E402
+
+
+def _login_on(monkeypatch):
+    monkeypatch.setattr(main, "settings", main.settings.__class__(**{**main.settings.__dict__, "client_id": "Iv1.testclientid", "client_secret": "s" * 40}))
+
+
+def test_login_is_off_until_keys_are_set():
+    assert client.get("/auth/login", follow_redirects=False).status_code == 404
+    assert client.get("/api/me").json() == {"logged_in": False, "login_enabled": False}
+
+
+def test_login_flow_sets_signed_session(monkeypatch):
+    _login_on(monkeypatch)
+    c = TestClient(main.app)
+    r = c.get("/auth/login", follow_redirects=False)
+    assert r.status_code == 302 and "client_id=Iv1.testclientid" in r.headers["location"]
+    state = r.cookies.get(auth_mod.STATE) or c.cookies.get(auth_mod.STATE)
+    monkeypatch.setattr(auth_mod, "exchange_code", lambda code, uri: {"login": "seoyeon", "avatar": "https://a/x.png", "name": "서연"})
+    bad = c.get("/auth/callback?code=x&state=wrong", follow_redirects=False)
+    assert bad.status_code == 400  # 다른 곳에서 시작한 로그인은 받지 않는다
+    ok = c.get(f"/auth/callback?code=x&state={state}", follow_redirects=False)
+    assert ok.status_code == 302
+    me = c.get("/api/me").json()
+    assert me["logged_in"] and me["login"] == "seoyeon"
+    assert c.post("/auth/logout").json()["ok"] and c.get("/api/me").json()["logged_in"] is False
+
+
+def test_with_login_only_logged_in_people_run_and_name_is_real(monkeypatch):
+    _login_on(monkeypatch)
+    p = _option("review")
+    r = client.post("/api/execute", json={"token": p["token"]})
+    assert r.status_code == 401 and r.json()["detail"]["login"]
+    c = TestClient(main.app)
+    c.cookies.set(auth_mod.SESSION, sign({"kind": "session", "login": "seoyeon"}, main.settings.signing_key))
+    ok = c.post("/api/execute", json={"token": p["token"]}, headers={"X-Bento-User": "jiwoo"}).json()
+    assert ok["ok"] and "seoyeon님 승인으로" in main._demo.d["comments"][14][-1]["body"]  # 화면이 보낸 이름이 아니라 로그인한 사람
+
+
+def test_proposal_token_cannot_be_used_as_login(monkeypatch):
+    _login_on(monkeypatch)
+    p = _option("review")
+    c = TestClient(main.app)
+    c.cookies.set(auth_mod.SESSION, p["token"])  # 제안 토큰도 같은 키로 서명돼 있지만 로그인으로 쓸 수 없다
+    assert c.get("/api/me").json()["logged_in"] is False
+
+
+def test_setup_login_page_saves_keys_locally(monkeypatch):
+    import app.setup as setup_mod
+    saved = {}
+    monkeypatch.setattr(setup_mod, "_write_env", lambda d: saved.update(d))
+    monkeypatch.setattr(setup_mod, "load_env_file", lambda **kw: None)
+    local = TestClient(main.app, base_url="http://localhost")
+    assert "Redirect URI" in local.get("/setup/login").text
+    r = local.post("/setup/login", content="client_id=Iv1.abcdefghij&client_secret=" + "x" * 40,
+                   headers={"Content-Type": "application/x-www-form-urlencoded"}, follow_redirects=False)
+    assert r.status_code == 303 and saved["GITHUB_CLIENT_ID"] == "Iv1.abcdefghij"
+    assert TestClient(main.app).get("/setup/login").status_code in (403, 404)  # 이 컴퓨터에서만
+    # GitHub 아이디를 Client ID로 넣는 실수는 막는다
+    bad = local.post("/setup/login", content="client_id=hyukjin0324&client_secret=" + "x" * 40,
+                     headers={"Content-Type": "application/x-www-form-urlencoded"}, follow_redirects=False)
+    assert bad.status_code == 400 and "Iv" in bad.json()["detail"]
+    monkeypatch.setattr(setup_mod, "_app_client_id", lambda s: "Iv23liREAL")
+    wrong = local.post("/setup/login", content="client_id=Iv1.abcdefghij&client_secret=" + "x" * 40,
+                       headers={"Content-Type": "application/x-www-form-urlencoded"}, follow_redirects=False)
+    assert wrong.status_code == 400 and 'value="Iv23liREAL"' in local.get("/setup/login").text
+
+
+def test_install_callback_returns_to_chat_with_new_repo(monkeypatch):
+    import app.github as gh_mod
+    c = TestClient(main.app)
+    r = c.get("/github/installed", params={"installation_id": 5}, follow_redirects=False)
+    assert r.status_code == 302 and r.headers["location"] == "/#chat"  # 데모 모드면 그냥 대화로
+    import dataclasses
+    monkeypatch.setattr(main, "settings", dataclasses.replace(main.settings, app_id="1", private_key="k"))
+    monkeypatch.setattr(gh_mod, "installation_repos", lambda s, i: ["me/team-repo"])
+    r = c.get("/github/installed", params={"installation_id": 5, "setup_action": "install"}, follow_redirects=False)
+    assert r.headers["location"] == "/?installed=me/team-repo#chat"
+    def boom(s, i):
+        raise gh_mod.GitHubError("nope", 404)
+    monkeypatch.setattr(gh_mod, "installation_repos", boom)
+    r = c.get("/github/installed", params={"installation_id": 99}, follow_redirects=False)
+    assert r.headers["location"] == "/?installed=#chat"
+
+
+def test_date_only_deadline_is_read_as_korean_end_of_day():
+    from app.notice import NoticeExtract
+    ex = NoticeExtract(title="t", facts=[], apply_deadline_iso="2099-11-20", submit_deadline_iso="2099-11-25T18:00:00")
+    assert ex.apply_deadline_iso == "2099-11-20T23:59:00+09:00" and ex.submit_deadline_iso.endswith("+09:00")
+    r = TestClient(main.app).post("/api/apply-check", json={"extract": ex.model_dump(), "members": ["a"]})
+    assert r.status_code == 200
