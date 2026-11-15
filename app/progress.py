@@ -104,7 +104,9 @@ def check(state: RepoState, plan: list[dict] | None, deadline_iso: str | None, n
             continue
         for i in state.issues:
             if i.milestone == f["milestone"] and not i.assignees:
-                who = least_loaded(state)
+                from .ownership import pick_by_role
+                from .triage import _load
+                who = pick_by_role(state.members, state.roles, _load(state), i.title)[0] if state.roles else least_loaded(state)
                 if who:
                     given[who] = given.get(who, 0) + 1
                     state_issue_load(state, i, who)

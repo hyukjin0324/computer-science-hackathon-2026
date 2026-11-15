@@ -181,6 +181,7 @@ textarea { width: 100%; min-height: 80px; resize: vertical; border: 1px solid va
 .elig .verdict { display: flex; flex-direction: column; gap: 8px; background: var(--surface-2); border-radius: 14px; padding: 12px; }
 .elig .verdict .crow > span { font-weight: 800; }
 .elig .verdict .crow.fail > span { color: var(--crit); } .elig .verdict .crow.ok > span { color: var(--ok); } .elig .verdict .crow.warn > span { color: var(--warn); }
+.rolerow { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); } .rolerow b { font-size: 14.5px; }
 .crow { display: grid; grid-template-columns: 20px 1fr; gap: 8px; font-size: 14px; }
 .crow small { display: block; color: var(--muted); font-size: 12.5px; }
 .crow .ev { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; }
@@ -1004,7 +1005,7 @@ async function planToGithub(steps) {
   me("계획을 GitHub에 적고 사람별로 나눠 줘");
   let r; try { r = await thinking("저장소와 대조하고 있어요", api("/schedule/github", { method: "POST", body: JSON.stringify({ repo: curRepo(), steps: steps.filter((s) => s.kind === "step").map((s) => ({ title: s.title, due: s.due, note: s.note || "" })) }) })); } catch (e) { return fail(e); }
   if (!r.proposal) return bot(r.message);
-  bot(`단계마다 GitHub에 마감일과 할 일을 만들고, ${r.solo ? "팀원이 한 명이라 모두 내 일로 맡겨" : "지금 맡은 일이 적은 사람부터 한 단계씩 맡겨"} 둘게요. 승인하면 팀원 모두 GitHub에서 같은 계획과 자기 할 일을 봐요.`);
+  bot(`단계마다 GitHub에 마감일과 할 일을 만들고, ${r.solo ? "팀원이 한 명이라 모두 내 일로 맡겨" : r.by_role ? "팀 역할에 맞는 사람에게 한 단계씩 맡겨" : "지금 맡은 일이 적은 사람부터 한 단계씩 맡겨"} 둘게요. 승인하면 팀원 모두 GitHub에서 같은 계획과 자기 할 일을 봐요.`);
   approval(r.proposal, (ok) => { if (ok) { loadCalState(); chip("캘린더 보기", () => showTab("cal")); } });
 }
 
@@ -1822,6 +1823,30 @@ const ME_PAGES = {
   }
     if (curDraft() || !lastTriage) v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 고를 수 있어요."));
   }],
+  roles: ["팀 역할", (v) => {
+  if (curDraft()) { v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 정할 수 있어요.")); return; }
+  const cr = h("div", "card"); cr.appendChild(h("b", null, "팀 역할"));
+  cr.appendChild(h("div", "note", "역할을 정해 두면 계획 단계와 할 일을 역할에 맞는 사람에게 맡기고, 리뷰어도 같은 역할 팀원을 먼저 추천해요. 한 사람이 3개까지 맡을 수 있어요. 바꾸는 것도 팀원 승인을 받아요."));
+  const body = h("div"); body.textContent = "역할표를 불러오고 있어요…"; cr.appendChild(body); v.appendChild(cr);
+  api("/roles").then((r) => {
+    body.textContent = ""; const pick = {}; const ex = (r.members || []);
+    if (!ex.length) { body.textContent = "저장소 팀원을 읽지 못했어요."; return; }
+    ex.forEach((m) => {
+      pick[m] = [...(r.roles[m] || [])];
+      const row = h("div", "rolerow"); row.appendChild(h("b", null, m + (m === meUser() ? " (나)" : "")));
+      const chips = h("div", "chips"); chips.setAttribute("role", "group"); chips.setAttribute("aria-label", `${m} 역할`);
+      Object.entries(r.choices).forEach(([code, name]) => {
+        const b = h("button", "chiptog", name); b.type = "button"; b.setAttribute("aria-pressed", String(pick[m].includes(code)));
+        b.onclick = () => { const on = pick[m].includes(code); if (!on && pick[m].length >= 3) return snack("3개까지 고를 수 있어요"); pick[m] = on ? pick[m].filter((x) => x !== code) : [...pick[m], code]; b.setAttribute("aria-pressed", String(!on)); };
+        chips.appendChild(b);
+      });
+      row.appendChild(chips); body.appendChild(row);
+    });
+    const sv = h("button", "btn primary", "팀원에게 승인받고 저장"); sv.type = "button"; sv.style.marginTop = "12px";
+    sv.onclick = async () => { sv.disabled = true; try { const p = await api("/roles", { method: "POST", body: JSON.stringify({ repo: curRepo(), roles: pick }) }); if (!p.proposal) { snack(p.message); sv.disabled = false; return; } showTab("chat"); bot("팀 역할을 이렇게 정할게요. 승인하면 GitHub에 저장돼서 팀원 모두 같은 역할표를 봐요."); approval(p.proposal, (ok) => { if (ok) { lastTriage = null; refreshHome(); bot("역할을 저장했어요. 이제 계획과 할 일을 역할대로 나눠요."); } }); } catch (e) { sv.disabled = false; fail(e); } };
+    body.appendChild(sv);
+  }).catch((e) => { body.textContent = e.message; });
+  }],
   rules: ["반대가 없으면 실행", (v) => {
   if (!curDraft() && lastTriage && lastTriage.members) {
     const rules = lastTriage.rules || { lazy: [], hours: 24 };
@@ -1881,6 +1906,8 @@ function renderMe() {
   const g1 = h("div", "group");
   g1.appendChild(meRow("list", "팀플 목록", curDraft() ? `${projName()} · 준비 중` : `${projName()} · 진행 중`, openProjects));
   const rl = lastTriage && lastTriage.rules && lastTriage.rules.lazy.length ? `켜짐 · ${lastTriage.rules.hours}시간` : "꺼짐 · 모두 승인 필요";
+  const rc = lastTriage && lastTriage.roles ? Object.keys(lastTriage.roles).length : 0;
+  g1.appendChild(meRow("user", "팀 역할", curDraft() ? "저장소 연결 뒤에 정해요" : rc ? `${rc}명 정함` : "아직 안 정함 · 정하면 역할대로 나눠요", () => openMe("roles")));
   g1.appendChild(meRow("vote", "반대가 없으면 실행", rl, () => openMe("rules")));
   g1.appendChild(meRow("box", "보관함", `실행한 일 ${tasks.length}개 · 초안 ${docs.length}개`, () => showTab("box")));
   v.appendChild(g1);

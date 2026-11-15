@@ -31,6 +31,12 @@ def _pick_reviewer(state: RepoState, pr) -> tuple[str | None, str]:
         for who in state.file_authors.get(f, []):
             if who in state.members and who not in skip:
                 return who, f"{f.split('/')[-1]}을 최근에 고친 적이 있어요"
+    # 파일을 고친 사람이 없으면: 작성자와 같은 역할(예: 프론트엔드)인 팀원 → 맡은 일이 적은 사람
+    mine = set(state.roles.get(pr.author, []))
+    same = sorted((m for m in state.members if m not in skip and mine & set(state.roles.get(m, []))), key=lambda m: load[m])
+    if same:
+        from .ownership import role_names
+        return same[0], f"작성자와 같은 {role_names(sorted(mine & set(state.roles.get(same[0], []))))} 담당이에요"
     cands = sorted((m for m in state.members if m not in skip), key=lambda m: load[m])
     return (cands[0], "지금 맡은 일이 가장 적어요") if cands else (None, "")
 
@@ -65,12 +71,17 @@ def triage(state: RepoState, review_wait_hours: float = 24) -> list[dict]:
                   and not is_submit_act(re.sub(r"^\[[^\]]*\]\s*", "", i.title))]  # 예전에 만든 '[제출] 제출 폼 작성'은 나눌 일이 아니다
     solo = len(state.members) <= 1  # 혼자인 저장소는 다 내 일이라 나누자고 하지 않는다
     if unassigned and not solo:
-        order = sorted(state.members, key=lambda m: load[m])
-        pairs = [(i, order[k % len(order)]) for k, i in enumerate(unassigned)] if order else []
+        from .ownership import pick_by_role
+        pairs, given = [], dict(load)
+        for i in unassigned:  # 역할이 정해져 있으면 그 역할 팀원부터, 아니면 맡은 일이 적은 순서
+            who = pick_by_role(state.members, state.roles, given, i.title)[0]
+            if who:
+                given[who] = given.get(who, 0) + 1
+                pairs.append((i, who))
         items.append({"id": "assign", "sev": "긴급" if _due_soon(state, unassigned) else "주의", "title": f"담당자 없는 이슈 {len(unassigned)}개",
                       "why": ", ".join(f"#{i.number} {i.title}" for i in unassigned[:4]),
                       "evidence": [{"label": f"이슈 #{i.number}", "url": i.url} for i in unassigned[:4]],
-                      "options": [{"label": "맡은 일이 적은 순서로 나누기", "recommended": True,
+                      "options": [{"label": "역할대로 나누기" if state.roles else "맡은 일이 적은 순서로 나누기", "recommended": True,
                                    "sub": " · ".join(f"#{i.number} → {u}" for i, u in pairs[:4]),
                                    "actions": [a for i, u in pairs for a in (AssignIssue(issue=i.number, users=[u], expect_assignees=list(i.assignees)), Comment(number=i.number, body=f"@{u} 님, 이 일을 맡아 주실 수 있을까요? 어려우면 편하게 말씀해 주세요!"))]}]})
 

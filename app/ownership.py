@@ -137,3 +137,72 @@ def lazy_status(gh, item: dict, actions: list, rules: dict, members: list[str], 
     v = vetoed_by(gh, c, members)
     return {"eligible": True, "status": "vetoed" if v else "waiting", "vetoed_by": v, "number": n,
             "executes_at": due.isoformat(), "url": c.get("html_url"), "due": due <= now}
+
+
+# ---------- 팀 역할 (팀원마다 라벨 하나: bento-role:아이디 → "be,fe") ----------
+ROLES = {"pm": "기획·PM", "fe": "프론트엔드", "be": "백엔드", "ds": "디자인", "pt": "발표"}
+ROLE_PREFIX = "bento-role:"
+# 할 일 제목 → 맡을 역할 (위에서부터 먼저 맞는 것)
+_ROLE_RULES = [
+    (r"발표|PPT|슬라이드|피치|시연\s*영상|영상", ["pt", "ds"]),
+    (r"디자인|UI|UX|화면\s*설계|피그마|figma", ["ds", "fe"]),
+    (r"README|배포|서버|API|DB|데이터베이스|백엔드|인프라", ["be"]),
+    (r"프론트|화면|페이지|컴포넌트", ["fe"]),
+    (r"MVP|핵심\s*기능|기능|구현|버그", ["fe", "be"]),
+    (r"아이디어|역할|기획|최종\s*점검|제출|신청|마무리", ["pm"]),
+]
+
+
+def read_roles(gh) -> dict[str, list[str]]:
+    try:
+        labels = gh.labels()
+    except Exception:  # noqa: BLE001 - 못 읽으면 역할 없이
+        return {}
+    out = {}
+    for lb in labels:
+        name = lb.get("name") or ""
+        if name.startswith(ROLE_PREFIX):
+            codes = [c for c in (lb.get("description") or "").split(",") if c in ROLES]
+            if codes:
+                out[name[len(ROLE_PREFIX):]] = codes
+    return out
+
+
+def write_roles(gh, roles: dict[str, list[str]]) -> None:
+    have = read_roles(gh)
+    for login, codes in roles.items():
+        name, desc = ROLE_PREFIX + login, ",".join(codes)
+        if not codes:
+            if login in have:
+                gh.delete_label(name)
+            continue
+        try:
+            gh.update_label(name, desc)
+        except GitHubError:
+            gh.create_label(name, "C5DEF5", desc)
+
+
+def role_codes_for(title: str) -> list[str]:
+    import re
+    for pat, codes in _ROLE_RULES:
+        if re.search(pat, title, re.I):
+            return codes
+    return []
+
+
+def role_names(codes: list[str]) -> str:
+    return "·".join(ROLES[c] for c in codes if c in ROLES)
+
+
+def pick_by_role(members: list[str], roles: dict, load: dict, title: str, skip=()) -> tuple[str | None, str]:
+    """할 일 제목에 맞는 역할의 팀원 중 맡은 일이 가장 적은 사람. 맞는 역할이 없으면 맡은 일이 가장 적은 사람."""
+    codes = role_codes_for(title)
+    pool = [m for m in members if m not in skip]
+    fit = [m for m in pool if set(roles.get(m, [])) & set(codes)]
+    if fit:
+        who = min(fit, key=lambda m: (load.get(m, 0), m))
+        return who, f"{role_names([c for c in codes if c in roles.get(who, [])])} 담당"
+    if pool:
+        who = min(pool, key=lambda m: (load.get(m, 0), m))
+        return who, "맡은 일이 가장 적어요"
+    return None, ""

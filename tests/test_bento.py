@@ -911,3 +911,34 @@ def test_github_milestone_dates_are_korean_dates():
     assert _utc("2026-11-15T23:00:00+09:00") == "2026-11-15T00:00:00Z"  # 날짜가 밀리지 않게 한국 날짜로
     assert _utc("2026-11-20T10:00:00+09:00") == "2026-11-20T00:00:00Z"
     assert ms_due("2026-11-16T00:00:00Z").isoformat() == "2026-11-16T14:59:00+00:00"  # 그 날짜 한국 시간 23:59
+
+
+def test_roles_are_approved_then_used_for_tasks_and_reviewers():
+    import dataclasses
+    from app import ownership as own
+    from app.triage import triage
+    r = client.get("/api/roles").json()
+    m = r["members"]
+    assert set(r["choices"]) == {"pm", "fe", "be", "ds", "pt"}
+    bad = client.post("/api/roles", json={"roles": {m[0]: ["pm", "x"]}}).json()["proposal"]  # 없는 역할은 빼고
+    assert "기획·PM" in bad["steps"][0]["sub"]
+    p = client.post("/api/roles", json={"roles": {m[0]: ["be"], m[1]: ["fe"], m[2]: ["pt", "ds"]}}).json()["proposal"]
+    assert client.post("/api/execute", json={"token": p["token"]}).json()["ok"]
+    roles = client.get("/api/roles").json()["roles"]
+    assert roles[m[0]] == ["be"] and roles[m[2]] == ["pt", "ds"]
+    assert client.post("/api/roles", json={"roles": roles}).json()["proposal"] is None  # 바뀐 게 없으면 승인할 것도 없음
+    # 할 일 제목으로 역할 고르기
+    assert own.role_codes_for("[계획] README·배포 정리") == ["be"] and own.role_codes_for("[제출물] 발표 자료") == ["pt", "ds"]
+    who, why = own.pick_by_role(m, roles, {}, "[제출물] 발표 자료")
+    assert who == m[2] and "발표" in why
+    # 계획을 GitHub에 적을 때도 역할대로
+    steps = [{"title": "README·배포 정리", "due": "2099-01-01T00:00:00+09:00"}, {"title": "발표 자료 완성", "due": "2099-01-02T00:00:00+09:00"}]
+    pr = client.post("/api/schedule/github", json={"steps": steps}).json()
+    subs = [s["sub"] for s in pr["proposal"]["steps"] if s["label"].startswith("할 일 추가")]
+    assert f"담당 {m[0]}" in subs[0] and f"담당 {m[2]}" in subs[1] and pr["by_role"]
+    # 리뷰어: 파일을 고친 사람이 없으면 작성자와 같은 역할
+    st = main.build_state(main._demo)
+    pr0 = dataclasses.replace(st.prs[0], files=["new/file.ts"], reviewers=[], author=m[1], review_wait_hours=99, draft=False)
+    st2 = dataclasses.replace(st, prs=[pr0], roles={m[1]: ["fe"], m[3]: ["fe"]})
+    item = next(i for i in triage(st2) if i["id"].startswith("review-"))
+    assert item["options"][0]["label"].startswith(m[3]) and "프론트엔드" in item["options"][0]["sub"]

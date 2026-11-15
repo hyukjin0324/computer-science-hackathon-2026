@@ -73,6 +73,7 @@ class RepoState:
     milestones: list[Milestone]
     merged_refs: dict[int, int] = field(default_factory=dict)  # 이슈 번호 → 그 이슈를 언급한 머지된 PR
     file_authors: dict[str, list[str]] = field(default_factory=dict)
+    roles: dict[str, list[str]] = field(default_factory=dict)  # 아이디 → 역할 코드 (팀이 승인해서 정한 것)
 
     def pr(self, n: int) -> PR | None:
         return next((p for p in self.prs if p.number == n), None)
@@ -153,4 +154,6 @@ def build_state(gh, now: datetime | None = None) -> RepoState:
         for i in gh.open_issues()
     ]
     milestones = [Milestone(m["number"], m["title"], m.get("due_on"), m.get("open_issues", 0), m.get("closed_issues", 0), m.get("description") or "") for m in gh.milestones()]
-    return RepoState(gh.repo, now, members, prs, issues, milestones, merged_refs, authors)
+    from .ownership import read_roles
+    roles = {m: r for m, r in read_roles(gh).items() if m in members}
+    return RepoState(gh.repo, now, members, prs, issues, milestones, merged_refs, authors, roles)

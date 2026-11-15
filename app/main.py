@@ -22,7 +22,7 @@ from . import coord
 from . import discover as disc
 from . import ownership as own
 from datetime import datetime, timedelta, timezone
-from .actions import SetTeamRules
+from .actions import SetRoles, SetTeamRules
 from .config import load_settings
 from .demo import DemoGitHub
 from .fetch import FetchError, fetch_notice
@@ -183,7 +183,7 @@ def get_triage(repo: str | None = None):
         it["lazy"] = own.lazy_status(gh, it, first["actions"], rules, st.members, now) if first and rules["lazy"] else {"eligible": False}
         it["options"] = [{"label": o["label"], "recommended": o.get("recommended", False), "sub": o.get("sub", ""),
                           "proposal": _proposal(gh.repo, o["label"], o["actions"], it["id"])} for o in it["options"]]
-    return {"repo": gh.repo, "items": items, "members": st.members, "duty": own.duty(st.members, now), "rules": rules}
+    return {"repo": gh.repo, "items": items, "members": st.members, "duty": own.duty(st.members, now), "rules": rules, "roles": st.roles}
 
 
 class NoticeIn(BaseModel):
@@ -281,7 +281,7 @@ def schedule_to_github(body: ScheduleGitHubIn):
             actions.append(CreateMilestone(title=title, due_on=due, description="Bento가 공고 마감에서 거꾸로 짠 작업 계획"))
         issue_title = f"[계획] {s.title.strip()[:60]}"
         if issue_title not in titles:
-            owner = min(load, key=lambda m: (load[m], m)) if load else None
+            owner = own.pick_by_role(st.members, st.roles, load, s.title)[0] if load else None
             if owner:
                 load[owner] += 1
                 who.append(owner)
@@ -290,7 +290,7 @@ def schedule_to_github(body: ScheduleGitHubIn):
     if not actions:
         return {"proposal": None, "message": "계획 단계와 할 일이 이미 모두 저장소에 있어요"}
     return {"proposal": _proposal(gh.repo, "작업 계획을 GitHub에 적고 사람별로 나누기", actions, "schedule"),
-            "assignees": sorted(set(who)), "solo": len(st.members) <= 1}
+            "assignees": sorted(set(who)), "solo": len(st.members) <= 1, "by_role": bool(st.roles)}
 
 
 class ProgressIn(BaseModel):
@@ -330,6 +330,29 @@ class RulesIn(BaseModel):
     repo: str | None = None
     lazy: list[str] = []
     hours: int = 24
+
+
+class RolesIn(BaseModel):
+    repo: str | None = None
+    roles: dict[str, list[str]]
+
+
+@app.get("/api/roles")
+def roles_get(repo: str | None = None):
+    """팀 역할표와 고를 수 있는 역할."""
+    gh, st = state_for(repo)
+    return {"roles": st.roles, "members": st.members, "choices": own.ROLES}
+
+
+@app.post("/api/roles")
+def roles_set(body: RolesIn):
+    """팀 역할 바꾸기. 팀 전체에 영향을 주니 승인을 받는다."""
+    gh, st = state_for(body.repo)
+    roles = {m: [c for c in dict.fromkeys(cs) if c in own.ROLES][:3] for m, cs in body.roles.items() if m in st.members}
+    changed = {m: c for m, c in roles.items() if sorted(c) != sorted(st.roles.get(m, []))}
+    if not changed:
+        return {"proposal": None, "message": "바뀐 역할이 없어요"}
+    return {"proposal": _proposal(gh.repo, "팀 역할 정하기", [SetRoles(roles=changed)], "roles")}
 
 
 @app.post("/api/team-rules")

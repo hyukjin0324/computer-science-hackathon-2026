@@ -162,6 +162,9 @@ class DemoGitHub:
         self.d["labels"][name] = {"name": name, "color": color, "description": description}
         return self.d["labels"][name]
 
+    def labels(self):
+        return [dict(v) for v in self.d["labels"].values()]
+
     def get_label(self, name):
         from .github import GitHubError
         if name not in self.d["labels"]:

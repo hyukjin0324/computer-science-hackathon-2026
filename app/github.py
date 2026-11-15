@@ -130,6 +130,9 @@ class GitHub:
     def create_label(self, name: str, color: str, description: str):
         return self.api("POST", self._r("/labels"), json={"name": name, "color": color, "description": description})
 
+    def labels(self):
+        return self.api("GET", self._r("/labels"), params={"per_page": 100})
+
     def get_label(self, name: str):
         return self.api("GET", self._r(f"/labels/{name}"))
 

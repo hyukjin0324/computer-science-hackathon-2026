@@ -71,6 +71,11 @@ class SetTeamRules(BaseModel):
     hours: int = 24
 
 
+class SetRoles(BaseModel):
+    type: Literal["set_roles"] = "set_roles"
+    roles: dict[str, list[str]]  # 아이디 → 역할 코드
+
+
 class SetMilestone(BaseModel):
     type: Literal["set_milestone"] = "set_milestone"
     issues: list[int]
@@ -82,7 +87,7 @@ class TeamMessage(BaseModel):
     text: str
 
 
-Action = Annotated[Union[RequestReviewers, Comment, CreateIssue, AssignIssue, CloseIssue, CreateMilestone, UpdateMilestone, SetMilestone, SetTeamRules, TeamMessage], Field(discriminator="type")]
+Action = Annotated[Union[RequestReviewers, Comment, CreateIssue, AssignIssue, CloseIssue, CreateMilestone, UpdateMilestone, SetMilestone, SetTeamRules, SetRoles, TeamMessage], Field(discriminator="type")]
 ActionList = TypeAdapter(list[Action])
 
 # 승인 화면에서 사람이 고칠 수 있는 글 필드
@@ -190,6 +195,15 @@ def validate(actions: list, state: RepoState) -> list[str]:
                 bad("반대가 없으면 실행할 수 있는 건 리뷰어 지정과 리마인드 댓글뿐이에요")
             if not 6 <= a.hours <= 72:
                 bad("기다리는 시간은 6~72시간 사이로 정해 주세요")
+        elif isinstance(a, SetRoles):
+            from .ownership import ROLES
+            if not a.roles:
+                bad("정할 역할이 없어요")
+            for who, codes in a.roles.items():
+                if who not in state.members:
+                    bad(f"{who}님은 이 저장소 팀원이 아니에요")
+                if not set(codes) <= set(ROLES) or len(codes) > 3:
+                    bad("역할은 기획·PM, 프론트엔드, 백엔드, 디자인, 발표 중에서 3개까지 골라 주세요")
         elif isinstance(a, TeamMessage):
             if p := _text_problem(a.text, 1800):
                 bad(p)
@@ -225,6 +239,9 @@ def label(a, discord: bool) -> tuple[str, str]:
     if isinstance(a, SetTeamRules):
         names = {"reviewers": "리뷰어 지정", "reminders": "리마인드 댓글"}
         return "Bento · 팀 규칙 바꾸기", ("반대가 없으면 실행: " + ", ".join(names[c] for c in a.lazy) + f" · {a.hours}시간 기다림") if a.lazy else "반대가 없으면 실행: 끄기 (모두 승인 필요)"
+    if isinstance(a, SetRoles):
+        from .ownership import role_names
+        return "Bento · 팀 역할 정하기", " · ".join(f"{w} {role_names(c) or '역할 없음'}" for w, c in a.roles.items())
     if isinstance(a, TeamMessage):
         return ("디스코드 팀 채널에 메시지", "") if discord else ("팀 메시지 (메신저 미연결)", "디스코드를 연결하기 전까지는 보내지 않고 복사만 할 수 있어요")
     return "알 수 없는 행동", ""
@@ -284,6 +301,10 @@ def execute(actions: list, gh, settings, op: str | None = None, by: str | None =
             elif isinstance(a, SetTeamRules):
                 from .ownership import write_rules
                 write_rules(gh, a.lazy, a.hours)
+                url = gh.html("/labels")
+            elif isinstance(a, SetRoles):
+                from .ownership import write_roles
+                write_roles(gh, a.roles)
                 url = gh.html("/labels")
             elif isinstance(a, TeamMessage):
                 if not settings.discord_webhook:
