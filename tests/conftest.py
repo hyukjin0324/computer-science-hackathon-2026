@@ -3,5 +3,6 @@
 import os
 
 os.environ["BENTO_NO_DOTENV"] = "1"
+os.environ["BENTO_NO_RENDER"] = "1"  # 테스트에서는 브라우저를 띄우지 않는다
 for k in ("GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY", "GITHUB_APP_PRIVATE_KEY_FILE", "BENTO_ACCESS_CODE", "BENTO_REPO", "ANTHROPIC_API_KEY", "DISCORD_WEBHOOK_URL", "GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET", "BENTO_PUBLIC_URL"):
     os.environ.pop(k, None)

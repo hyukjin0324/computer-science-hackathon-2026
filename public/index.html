@@ -1354,6 +1354,22 @@ function eligBox(card, membersInput, saved, title) {
     if (!locked && r.rows.some((x) => x.name === "참가 자격" && x.status === "warn")) {
       const pid = "eligpaste" + Date.now(); const pl = h("label", "lab", "공고의 참가 자격 문장 붙여넣기"); pl.htmlFor = pid;
       const ta = h("textarea"); ta.id = pid; ta.placeholder = "예: 일반인, 학생 등 누구나 대회 참가 가능"; ta.style.minHeight = "64px";
+      const src2 = noticeUrl();
+      if (src2) {  // 공고를 다시 읽어 온다 (화면을 스크립트로 그리는 사이트도 이 컴퓨터에서는 브라우저로 연다)
+        const rb2 = h("button", "btn primary", "공고 다시 읽기"); rb2.type = "button";
+        rb2.onclick = async () => {
+          rb2.disabled = true; rb2.textContent = "읽는 중…";
+          try {
+            const f = await api("/notice/fetch", { method: "POST", body: JSON.stringify({ url: src2 }) });
+            const r2 = await api("/notice", { method: "POST", body: JSON.stringify({ text: (f.title ? f.title + "\n" : "") + f.text, repo: null, new_project: true }) });
+            const got = (r2.extract.facts || []).filter((x) => x.label === "참가 자격");
+            if (!got.length && r2.extract.team_min == null && r2.extract.team_max == null) { rb2.textContent = "이번에도 못 읽었어요 · 아래에 붙여넣어 주세요"; return; }
+            setExtract({ ...extract, facts: [...(extract.facts || []).filter((x) => x.label !== "참가 자격"), ...got], team_min: extract.team_min ?? r2.extract.team_min, team_max: extract.team_max ?? r2.extract.team_max, source_url: src2 });
+            qs.innerHTML = ""; refresh();
+          } catch (e) { rb2.disabled = false; rb2.textContent = "공고 다시 읽기"; if (e.status === 401) askCode(() => rb2.onclick()); else snack(e.message); }
+        };
+        verdict.appendChild(rb2);
+      }
       const pb = h("button", "btn", "이 문장으로 판정하기"); pb.type = "button";
       pb.onclick = () => { const t = ta.value.trim(); if (t.length < 4) return ta.focus(); setExtract({ ...extract, facts: [...(extract.facts || []).filter((f) => f.label !== "참가 자격"), { label: "참가 자격", value: t.slice(0, 200), quote: t.slice(0, 200) }] }); qs.innerHTML = ""; refresh(); };
       verdict.append(pl, ta, pb);

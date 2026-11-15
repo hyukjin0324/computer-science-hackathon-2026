@@ -24,6 +24,14 @@ FACT_LABELS = [("참가 자격", re.compile(r"자격|대상")), ("심사 기준"
 TITLE_HINT = re.compile(r"대회|해커톤|공모전|경진|챌린지|해카톤|아이디어톤|hackathon|contest", re.I)
 
 
+def _heading(line: str) -> str:
+    """'[참가 자격]', '■ 참가 대상', '참가 자격' 처럼 내용 없이 제목만 있는 줄이면 그 제목."""
+    t = line.strip()
+    if m := re.match(r"^[\[【<■□▶◆●○#\s]*([가-힣A-Za-z ]{2,12}?)\s*[\]】>]?\s*$", t):
+        return m.group(1).strip()
+    return ""
+
+
 def _label(line: str) -> tuple[str, str]:
     """'신청: 11/18까지' → ('신청', '11/18까지'). 라벨이 없으면 ('', 줄)."""
     m = re.match(r"^\s*[\[【<(]?\s*([^:：\]】>)]{1,14}?)\s*[\]】>)]?\s*[:：]\s*(.*)$", line)
@@ -116,6 +124,11 @@ def rule_extract(text: str, now: datetime | None = None) -> NoticeExtract:
                 continue
             if lab and rx.search(lab) and body and not any(f.label == name for f in facts):
                 facts.append(Fact(label=name, value=body[:120], quote=line[:120]))
+            elif not lab and (hd := _heading(line)) and rx.search(hd) and not any(f.label == name for f in facts):
+                # '[참가 자격]' 같은 제목 줄 다음 줄에 내용이 오는 공고
+                nxt = next((x.strip() for x in lines[i + 1:i + 4] if x.strip()), "")
+                if nxt and not _heading(nxt):
+                    facts.append(Fact(label=name, value=BULLET.sub("", nxt).strip()[:120], quote=nxt[:120]))
     apply = max(apply_hits, default=None)
     submit = max(submit_hits, default=None)
     if apply:

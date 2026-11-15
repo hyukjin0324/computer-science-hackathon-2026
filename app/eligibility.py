@@ -161,9 +161,9 @@ def judge(ex: NoticeExtract, answers: dict, url: str | None = None) -> list[dict
             rows.append(_row("소속", "fail", f"{name} 소속이 아닌 팀원이 있어요", _ev(r["dept"]["quote"], url),
                              {"label": "주최 측에 다른 학과 참여가 되는지 문의하기"}))
 
-    if r.get("open") and not rows:
+    if r.get("open"):
         q0 = _find(_quotes(ex), r"누구나|제한")
-        rows.append(_row("참가 자격", "ok", "누구나 참가할 수 있어요", _ev(q0, url)))
+        rows.insert(0, _row("참가 자격", "ok", "누구나 참가할 수 있어요", _ev(q0, url)))
 
     for c in r["unclear"]:
         rows.append(_row("주최 측 확인 필요", "warn", f"'{c}' · 공고만으로는 판단하기 어려워요", _ev(c, url),

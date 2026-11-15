@@ -887,4 +887,12 @@ def test_eligibility_open_to_anyone_and_pasted_team_size():
     assert rows[0]["status"] == "ok" and rows[0]["detail"] == "누구나 참가할 수 있어요"
     pasted = _elig_ex("누구나 참가 가능, 2~4인 팀")  # 공고 분석이 팀 인원을 못 읽었어도 붙여넣은 문장에서 읽는다
     assert [q["key"] for q in el.questions(pasted)] == ["team"]
-    assert {r["name"]: r for r in el.judge(pasted, {"team": 5})}["팀 인원"]["status"] == "fail"
+    both = {r["name"]: r for r in el.judge(pasted, {"team": 5})}
+    assert both["팀 인원"]["status"] == "fail" and both["참가 자격"]["status"] == "ok"
+
+
+
+def test_rules_read_bracket_heading_then_next_line():
+    from app.rules import rule_extract
+    ex = rule_extract("제주 AI 챌린지\n[참가 자격]\n\n일반인, 학생 등 누구나 대회 참가 가능\n[문의처]\n게시판")
+    assert any(f.label == "참가 자격" and "누구나" in f.value for f in ex.facts)

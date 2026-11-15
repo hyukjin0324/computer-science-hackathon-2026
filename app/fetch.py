@@ -164,9 +164,21 @@ def fetch_notice(url: str, client: httpx.Client | None = None) -> dict:
         page_title, text = html_to_text(part)
         title = main_title or page_title
         imgs = len(re.findall(r"<img\b", part, re.I))
+    rendered = False
+    if len(text) < 200:  # 화면을 스크립트로 그리는 사이트: 브라우저처럼 열어서 다시 읽는다 (이 컴퓨터에서만)
+        from . import render
+        if render.available():
+            try:
+                rt, rtext = render.render_text(url)
+                if len(rtext) > len(text):
+                    title, text, rendered, imgs = (title or rt), rtext, True, 0
+            except Exception:  # noqa: BLE001 - 못 열면 처음 읽은 글로 계속한다
+                pass
     if title and title not in text[:200]:
         text = f"{title}\n{text}"
     if len(text) < 80 and not title:
         raise FetchError("페이지에서 본문을 거의 읽지 못했어요. 로그인이 필요하거나 화면을 스크립트로 그리는 사이트일 수 있어요. 본문을 복사해 붙여 주세요")
     note = "본문 대부분이 이미지(포스터)라서 글자로 읽을 수 있는 게 적어요. 마감은 제목에서 가져왔어요" if imgs and len(text) < 400 else None
-    return {"url": url, "title": title, "text": text[:MAX_TEXT], "truncated": len(text) > MAX_TEXT, "note": note}
+    if rendered:
+        note = "화면을 스크립트로 그리는 사이트라 브라우저로 열어서 읽었어요"
+    return {"url": url, "title": title, "text": text[:MAX_TEXT], "truncated": len(text) > MAX_TEXT, "note": note, "rendered": rendered}
