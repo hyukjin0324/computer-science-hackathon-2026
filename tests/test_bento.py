@@ -898,3 +898,8 @@ def test_rules_read_bracket_heading_then_next_line():
     from app.rules import rule_extract
     ex = rule_extract("제주 AI 챌린지\n[참가 자격]\n\n일반인, 학생 등 누구나 대회 참가 가능\n[문의처]\n게시판")
     assert any(f.label == "참가 자격" and "누구나" in f.value for f in ex.facts)
+
+
+def test_seed_page_is_local_only_and_needs_live_app():
+    assert TestClient(main.app, base_url="http://bento.example.com").get("/setup/seed").status_code == 403
+    assert "GitHub 앱이 연결돼 있지 않아요" in TestClient(main.app, base_url="http://localhost").get("/setup/seed").text

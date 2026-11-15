@@ -262,3 +262,87 @@ async def setup_login_save(request: Request):
     main.reload_settings()
     from fastapi.responses import RedirectResponse
     return RedirectResponse("/setup/login?ok=1", status_code=303)
+
+
+SEED_NOTE = "\n\n_Bento 기능 확인용 예시 데이터예요._"
+
+
+def _seed_plan(repo: str, me: str, state) -> list[tuple[str, str]]:
+    """예시 데이터로 할 일들 (사람이 읽는 설명, 내부 키). 이미 있는 건 건너뛴다."""
+    have_ms = {m.title for m in state.milestones}
+    have_is = {i.title for i in state.issues}
+    out = []
+    sub = state.milestone("해커톤 제출")
+    if sub and not sub.due_on:
+        out.append(("'해커톤 제출' 마감을 11월 20일 10:00로 채우기", "due"))
+    if any(i.title == "[제출] 제출 폼 작성" for i in state.issues):
+        out.append(("예전 할 일 '[제출] 제출 폼 작성' 닫기 (댓글로 이유 남김)", "close_form"))
+    for t, due in SEED_MS:
+        if t not in have_ms:
+            out.append((f"마감일 '{t}' 만들기 · {due[5:10].replace('-', '/')}" + (" (이미 지남 → 늦어진 일 시험)" if due < "2026-11-16" else ""), f"ms:{t}"))
+    for t, who, _ in SEED_ISSUES:
+        if t not in have_is:
+            out.append((f"할 일 '{t}' 만들기" + (f" · 담당 {me}" if who and me else " · 담당 없음"), f"is:{t}"))
+    return out
+
+
+SEED_MS = [("계획 · 아이디어·역할 확정", "2026-11-15T14:00:00Z"), ("계획 · 핵심 기능 완성 (MVP)", "2026-11-18T14:00:00Z"), ("계획 · 최종 점검", "2026-11-19T14:00:00Z")]
+SEED_ISSUES = [("[계획] 아이디어·역할 확정", True, "계획 · 아이디어·역할 확정"), ("[계획] 핵심 기능 완성 (MVP)", True, "계획 · 핵심 기능 완성 (MVP)"),
+               ("[계획] 최종 점검", False, "계획 · 최종 점검"), ("[제출물] 발표 자료", False, "해커톤 제출"), ("[제출물] 시연 영상", False, "해커톤 제출")]
+
+
+@router.get("/setup/seed")
+def seed_page(request: Request, repo: str = ""):
+    """GitHub 기능 확인용 예시 데이터를 채우는 화면. 무엇을 만들지 보여 주고, 사람이 버튼을 눌러야 만든다."""
+    _local_only(request)
+    from . import main
+    if not main.settings.live:
+        return _page("예시 데이터", '<h1>예시 데이터</h1><div class="card"><b class="bad">GitHub 앱이 연결돼 있지 않아요</b><a class="btn" href="/setup">설정으로 가기</a></div>')
+    repos = _installed_repos(main.settings)
+    if not repo:
+        items = "".join(f'<a class="btn sub" href="/setup/seed?repo={html.escape(r)}">{html.escape(r)}</a>' for r in repos)
+        return _page("예시 데이터", f'<h1>예시 데이터 채우기</h1><div class="card"><b>어느 저장소에 채울까요?</b><small>Bento 앱이 설치된 저장소만 보여요. 실제로 쓰는 팀 저장소는 고르지 마세요.</small>{items}</div>')
+    if repo not in repos:
+        raise HTTPException(400, "Bento 앱이 설치되지 않은 저장소예요")
+    gh, st = main.state_for(repo)
+    me = st.members[0] if len(st.members) == 1 else ""
+    plan = _seed_plan(repo, me, st)
+    if not plan:
+        return _page("예시 데이터", f'<h1>이미 채워져 있어요</h1><div class="card"><b class="ok">{html.escape(repo)}</b><small>예시 마감일과 할 일이 이미 있어요.</small><a class="btn" href="/">Bento 열기</a></div>')
+    rows = "".join(f"<li>{html.escape(t)}</li>" for t, _ in plan)
+    return _page("예시 데이터", f"""<h1>예시 데이터 채우기</h1>
+<div class="card"><b>{html.escape(repo)}에 이렇게 만들어요</b><ol>{rows}</ol>
+<small>모든 할 일에 'Bento 기능 확인용 예시 데이터'라고 적어요. 나중에 GitHub에서 닫거나 지울 수 있어요. PR은 만들지 않아요(Bento 앱에는 코드를 올릴 권한이 없어요).</small>
+<form method="post" action="/setup/seed"><input type="hidden" name="repo" value="{html.escape(repo)}"><button type="submit">이대로 만들기</button></form></div>""")
+
+
+@router.post("/setup/seed")
+async def seed_run(request: Request):
+    _local_only(request)
+    origin = request.headers.get("origin") or ""
+    if origin and not origin.startswith(("http://localhost", "http://127.0.0.1")):
+        raise HTTPException(403, "이 컴퓨터의 설정 화면에서만 할 수 있어요")
+    from urllib.parse import parse_qs
+    repo = (parse_qs((await request.body()).decode("utf-8", "replace")).get("repo") or [""])[0]
+    from . import main
+    if repo not in _installed_repos(main.settings):
+        raise HTTPException(400, "Bento 앱이 설치되지 않은 저장소예요")
+    gh, st = main.state_for(repo)
+    me = st.members[0] if len(st.members) == 1 else ""
+    keys = {k for _, k in _seed_plan(repo, me, st)}
+    done = []
+    sub = st.milestone("해커톤 제출")
+    if "due" in keys and sub:
+        gh.update_milestone(sub.number, "2026-11-20T01:00:00Z"); done.append("'해커톤 제출' 마감 채움")
+    if "close_form" in keys:
+        n = next(i.number for i in st.issues if i.title == "[제출] 제출 폼 작성")
+        gh.comment(n, "제출 버튼은 사람이 마지막에 직접 누르는 일이라 할 일에서 뺐어요. (Bento)"); gh.update_issue(n, state="closed"); done.append(f"#{n} 닫음")
+    ms = {m.title: m.number for m in st.milestones}
+    for t, due in SEED_MS:
+        if f"ms:{t}" in keys:
+            ms[t] = gh.create_milestone(t, due, "Bento가 공고 마감에서 거꾸로 짠 작업 계획" + SEED_NOTE)["number"]; done.append(f"마감일 '{t}'")
+    for t, who, mt in SEED_ISSUES:
+        if f"is:{t}" in keys:
+            n = gh.create_issue(t, "Bento 계획에서 나온 할 일이에요." + SEED_NOTE, [me] if who and me else [], ms.get(mt))["number"]; done.append(f"#{n} {t}")
+    items = "".join(f"<li>{html.escape(x)}</li>" for x in done)
+    return _page("다 채웠어요", f'<h1>다 채웠어요</h1><div class="card"><b class="ok">{html.escape(repo)}</b><ol>{items}</ol><a class="btn" href="/">Bento 열어서 확인하기</a></div>')
