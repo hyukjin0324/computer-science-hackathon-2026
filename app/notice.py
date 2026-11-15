@@ -289,7 +289,7 @@ def plan(ex: NoticeExtract, state: RepoState | None, milestone_title: str = "해
     linked: list[int] = []
     existing = [i for i in (state.issues if state else []) if not is_suspicious(i.body)]
     for d in ex.deliverables:
-        if _is_repo_item(d.name):
+        if _is_repo_item(d.name) or is_submit_act(d.name):
             continue
         kws = [k for k in KEYWORDS if k.lower() in d.name.lower()]
         found = [i for i in existing if any(k.lower() in i.title.lower() for k in kws)]
@@ -299,8 +299,16 @@ def plan(ex: NoticeExtract, state: RepoState | None, milestone_title: str = "해
             actions.append(CreateIssue(title=f"[제출물] {d.name}", body=f"공고 원문: \"{d.quote}\"", milestone_title=milestone_title))
     if linked:
         actions.insert(1, SetMilestone(issues=linked, milestone_title=milestone_title))
-    actions.append(CreateIssue(title="[제출] 제출 폼 작성", body=f"제출 마감: {ex.submit_deadline or '공고 확인 필요'}", milestone_title=milestone_title))
+    # 제출 버튼은 사람이 마지막에 직접 누르는 일이라 할 일(이슈)로 만들지 않는다. 마감은 마일스톤과 제출 점검이 챙긴다.
     return actions, linked
+
+
+_SUBMIT_ACT = re.compile(r"제출\s*폼|신청\s*(?:서|폼)?$|^신청|접수|참가\s*등록|폼\s*(?:작성|제출)")
+
+
+def is_submit_act(name: str) -> bool:
+    """'제출 폼 작성', '참가 신청'처럼 결과물이 아니라 사람이 하는 제출·신청 행동인지."""
+    return bool(_SUBMIT_ACT.search(name.strip()))
 
 
 def _utc(iso: str | None) -> str | None:

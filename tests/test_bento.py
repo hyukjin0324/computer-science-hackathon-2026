@@ -853,3 +853,25 @@ def test_apply_check_and_eligibility_endpoint_use_answers():
     assert [q["key"] for q in r["questions"]] == ["team", "grade", "status"]
     a = c.post("/api/apply-check", json={"extract": ex, "members": ["a", "b"], "answers": {"grade": "3", "status": "모두 재학 중"}}).json()
     assert a["ready"] is False and any("1명이 더 필요해요" in x["detail"] for x in a["rows"])
+
+
+def test_submit_act_is_not_a_task_and_solo_repo_is_not_nagged():
+    import dataclasses
+    from app.notice import Deliverable, is_submit_act, plan
+    from app.triage import triage
+    assert is_submit_act("제출 폼 작성") and is_submit_act("참가 신청") and is_submit_act("신청서")
+    assert not is_submit_act("발표 자료") and not is_submit_act("시연 영상")
+    ex = SAMPLE_EXTRACT.model_copy(update={"deliverables": [Deliverable(name="제출 폼", quote="제출 폼으로 제출"), Deliverable(name="발표 자료", quote="발표 자료")]})
+    titles = [getattr(a, "title", "") for a in plan(ex, None)[0]]
+    assert "[제출물] 발표 자료" in titles and not any("제출 폼" in t for t in titles)
+
+    st = main.build_state(main._demo)
+    issue = st.issues[0]
+    ms = dataclasses.replace(st.milestones[0], due_on="2099-01-01T00:00:00Z") if st.milestones else None
+    free = dataclasses.replace(issue, assignees=[], milestone=ms.title if ms else None, body="", title="[제출물] 발표 자료")
+    act = dataclasses.replace(issue, number=999, assignees=[], milestone=free.milestone, body="", title="[제출] 제출 폼 작성")
+    team = dataclasses.replace(st, issues=[free, act], milestones=[ms] if ms else [])
+    item = next(i for i in triage(team) if i["id"] == "assign")
+    assert item["sev"] == "주의" and "#999" not in item["why"]  # 마감이 멀면 긴급 아님 · 제출 행동은 빼기
+    solo = dataclasses.replace(team, members=team.members[:1])
+    assert not any(i["id"] == "assign" for i in triage(solo))  # 혼자면 나누자고 하지 않기

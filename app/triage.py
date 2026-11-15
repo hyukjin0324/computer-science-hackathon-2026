@@ -4,6 +4,7 @@
 근거가 없는 경고는 만들지 않는다.
 """
 
+import re
 from collections import Counter
 from itertools import combinations
 
@@ -58,12 +59,15 @@ def triage(state: RepoState, review_wait_hours: float = 24) -> list[dict]:
                       "why": f"{pr.title} · 리뷰가 밀리면 머지와 배포가 함께 밀려요", "evidence": [{"label": f"PR #{pr.number}", "url": pr.url}], "options": options})
 
     # 2. 담당자 없는 이슈 (마일스톤이 있으면 그 안에서만)
+    from .notice import is_submit_act
     has_ms = any(i.milestone for i in state.issues)
-    unassigned = [i for i in state.issues if not i.assignees and not is_suspicious(i.body) and (i.milestone or not has_ms)]
-    if unassigned:
+    unassigned = [i for i in state.issues if not i.assignees and not is_suspicious(i.body) and (i.milestone or not has_ms)
+                  and not is_submit_act(re.sub(r"^\[[^\]]*\]\s*", "", i.title))]  # 예전에 만든 '[제출] 제출 폼 작성'은 나눌 일이 아니다
+    solo = len(state.members) <= 1  # 혼자인 저장소는 다 내 일이라 나누자고 하지 않는다
+    if unassigned and not solo:
         order = sorted(state.members, key=lambda m: load[m])
         pairs = [(i, order[k % len(order)]) for k, i in enumerate(unassigned)] if order else []
-        items.append({"id": "assign", "sev": "긴급" if has_ms else "주의", "title": f"담당자 없는 이슈 {len(unassigned)}개",
+        items.append({"id": "assign", "sev": "긴급" if _due_soon(state, unassigned) else "주의", "title": f"담당자 없는 이슈 {len(unassigned)}개",
                       "why": ", ".join(f"#{i.number} {i.title}" for i in unassigned[:4]),
                       "evidence": [{"label": f"이슈 #{i.number}", "url": i.url} for i in unassigned[:4]],
                       "options": [{"label": "맡은 일이 적은 순서로 나누기", "recommended": True,
@@ -135,3 +139,17 @@ def triage(state: RepoState, review_wait_hours: float = 24) -> list[dict]:
     for it in items:
         it["handoff"] = [h for h in it.get("handoff", []) if h]
     return sorted(items, key=lambda it: SEV_ORDER.get(it["sev"], 9))
+
+
+def _due_soon(state, issues, days: float = 3) -> bool:
+    """마감이 3일 안이거나 이미 지난 마일스톤에 들어 있을 때만 긴급."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    for i in issues:
+        m = state.milestone(i.milestone) if i.milestone else None
+        due = m.due_on if m else None
+        if isinstance(due, str):
+            due = datetime.fromisoformat(due.replace("Z", "+00:00"))
+        if due and (due - now).total_seconds() < days * 86400:
+            return True
+    return False
