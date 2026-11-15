@@ -877,3 +877,14 @@ def test_submit_act_is_not_a_task_and_solo_repo_is_not_nagged():
     assert item["sev"] == "주의" and "#999" not in item["why"]  # 마감이 멀면 긴급 아님 · 제출 행동은 빼기
     solo = dataclasses.replace(team, members=team.members[:1])
     assert not any(i["id"] == "assign" for i in triage(solo))  # 혼자면 나누자고 하지 않기
+
+
+def test_eligibility_open_to_anyone_and_pasted_team_size():
+    from app import eligibility as el
+    anyone = _elig_ex("일반인, 학생 등 누구나 대회 참가 가능")
+    assert el.questions(anyone) == []
+    rows = el.judge(anyone, {}, "https://x.test/n")
+    assert rows[0]["status"] == "ok" and rows[0]["detail"] == "누구나 참가할 수 있어요"
+    pasted = _elig_ex("누구나 참가 가능, 2~4인 팀")  # 공고 분석이 팀 인원을 못 읽었어도 붙여넣은 문장에서 읽는다
+    assert [q["key"] for q in el.questions(pasted)] == ["team"]
+    assert {r["name"]: r for r in el.judge(pasted, {"team": 5})}["팀 인원"]["status"] == "fail"

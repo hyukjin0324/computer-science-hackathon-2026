@@ -50,6 +50,12 @@ def rules(ex: NoticeExtract) -> dict:
         r["dept"] = {"name": m.group(1), "quote": _find(q, m.group(1))}
     solo_ok = bool(re.search(r"개인\s*(?:또는|혹은|및|/|·|,)|개인\s*참가|1인\s*(?:또는|이상)|1\s*[~∼\-]", t))
     lo, hi = ex.team_min, ex.team_max
+    if lo is None and hi is None:  # 붙여넣은 문장에서도 팀 인원을 읽는다
+        if m := re.search(r"(\d+)\s*[~∼\-]\s*(\d+)\s*(?:인|명)", t):
+            lo, hi = int(m.group(1)), int(m.group(2))
+        elif m := re.search(r"(?:최대\s*(\d+)\s*(?:인|명)|(\d+)\s*(?:인|명)\s*이하)", t):
+            lo, hi = 1, int(m.group(1) or m.group(2))
+    r["open"] = bool(re.search(r"누구나|제한\s*(?:없|무)|자격\s*제한\s*없", t)) and not re.search(r"학년|재학", t)
     exact = [1, lo] if solo_ok and lo and lo > 1 and lo == hi else None  # '개인 또는 3인 팀' = 1명 또는 3명만
     if solo_ok and lo and lo > 1:
         lo = 1
@@ -155,10 +161,14 @@ def judge(ex: NoticeExtract, answers: dict, url: str | None = None) -> list[dict
             rows.append(_row("소속", "fail", f"{name} 소속이 아닌 팀원이 있어요", _ev(r["dept"]["quote"], url),
                              {"label": "주최 측에 다른 학과 참여가 되는지 문의하기"}))
 
+    if r.get("open") and not rows:
+        q0 = _find(_quotes(ex), r"누구나|제한")
+        rows.append(_row("참가 자격", "ok", "누구나 참가할 수 있어요", _ev(q0, url)))
+
     for c in r["unclear"]:
         rows.append(_row("주최 측 확인 필요", "warn", f"'{c}' · 공고만으로는 판단하기 어려워요", _ev(c, url),
                          {"label": "주최 측 문의처에 확인하기"}))
     if not r["has_rules"]:
-        rows.append(_row("참가 자격", "warn", "공고에서 참가 자격을 찾지 못했어요 · 원문에서 직접 확인하거나 주최 측에 물어봐 주세요",
+        rows.append(_row("참가 자격", "warn", "참가 자격을 읽지 못했어요 · 원문에서 참가 자격 문장을 붙여넣으면 판정해요",
                          [{"label": "공고 원문 보기", "url": url}] if url else [], {"label": "주최 측 문의처에 확인하기"}))
     return rows
