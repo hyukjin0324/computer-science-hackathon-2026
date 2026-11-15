@@ -1524,7 +1524,8 @@ async function applyFlow(ex) {
 }
 
 function markDone(kind, proof) {
-  store.set(doneKey(kind), { at: Date.now(), proof }); const d = curDraft(); if (d && kind === "apply") { d.applied = Date.now(); saveDrafts(); } if (kind === "apply") { try { localStorage.removeItem("bento:applyTodo:" + projKey()); } catch (e) { /* 무시 */ } if (d) setTimeout(() => { bot("신청을 마쳤어요. 이제 팀 저장소를 준비해요."); startPath(d); }, 300); } const J = JOURNEY[kind]; if (J) J.set(J.n); renderCal(); renderHome(); bot(`${kind === "apply" ? "신청" : "제출"} 완료로 기록했어요. 마감 알림을 멈출게요. 수고하셨어요!`);
+  store.set(doneKey(kind), { at: Date.now(), proof }); const d = curDraft(); if (d && kind === "apply") { d.applied = Date.now(); saveDrafts(); } if (kind === "apply") { try { localStorage.removeItem("bento:applyTodo:" + projKey()); } catch (e) { /* 무시 */ } if (d) setTimeout(() => { bot("신청을 마쳤어요. 이제 팀 저장소를 준비해요."); startPath(d); }, 300);
+    else setTimeout(() => { bot("신청을 마쳤어요. 저장소는 이미 연결돼 있으니 바로 협업 단계로 넘어가요. 누가 무엇을 할지 나누고, 마감까지 계획을 짤게요."); chip("다음: 누가 할지 나누기", afterTasks); }, 300); } const J = JOURNEY[kind]; if (J) J.set(J.n); renderCal(); renderHome(); bot(`${kind === "apply" ? "신청" : "제출"} 완료로 기록했어요. 마감 알림을 멈출게요. 수고하셨어요!`);
 }
 function proofStage(box, kind, issue) {
   const done = store.get(doneKey(kind), null);
