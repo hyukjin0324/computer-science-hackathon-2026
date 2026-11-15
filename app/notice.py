@@ -312,8 +312,12 @@ def is_submit_act(name: str) -> bool:
 
 
 def _utc(iso: str | None) -> str | None:
-    """GitHub 마일스톤 due_on은 UTC 날짜·시각 문자열을 받는다."""
+    """GitHub 마일스톤 due_on: GitHub는 날짜만 남기고 시각은 버리면서 날짜가 밀리기도 한다.
+    그래서 한국 시간 기준 날짜를 그 날짜의 00:00Z로 보낸다 (읽을 때는 그 날짜 23:59로 본다)."""
     if not iso:
         return None
-    from datetime import timezone
-    return datetime.fromisoformat(iso).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    from datetime import timedelta, timezone
+    d = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=timezone(timedelta(hours=9)))
+    return d.astimezone(timezone(timedelta(hours=9))).strftime("%Y-%m-%dT00:00:00Z")

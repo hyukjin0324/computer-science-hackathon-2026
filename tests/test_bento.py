@@ -903,3 +903,11 @@ def test_rules_read_bracket_heading_then_next_line():
 def test_seed_page_is_local_only_and_needs_live_app():
     assert TestClient(main.app, base_url="http://bento.example.com").get("/setup/seed").status_code == 403
     assert "GitHub 앱이 연결돼 있지 않아요" in TestClient(main.app, base_url="http://localhost").get("/setup/seed").text
+
+
+def test_github_milestone_dates_are_korean_dates():
+    from app.notice import _utc
+    from app.state import ms_due
+    assert _utc("2026-11-15T23:00:00+09:00") == "2026-11-15T00:00:00Z"  # 날짜가 밀리지 않게 한국 날짜로
+    assert _utc("2026-11-20T10:00:00+09:00") == "2026-11-20T00:00:00Z"
+    assert ms_due("2026-11-16T00:00:00Z").isoformat() == "2026-11-16T14:59:00+00:00"  # 그 날짜 한국 시간 23:59

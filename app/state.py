@@ -9,6 +9,15 @@ def parse_ts(s: str | None) -> datetime | None:
     return datetime.fromisoformat(s.replace("Z", "+00:00")) if s else None
 
 
+def ms_due(s: str | None) -> datetime | None:
+    """GitHub 마일스톤 마감은 날짜만 남는다(시각은 버려짐). 그 날짜의 한국 시간 23:59로 본다."""
+    if not s:
+        return None
+    from datetime import timedelta, timezone
+    d = s[:10]
+    return datetime.fromisoformat(f"{d}T23:59:00+09:00").astimezone(timezone.utc) if len(d) == 10 else parse_ts(s)
+
+
 def hours(a: datetime, b: datetime) -> float:
     return (b - a).total_seconds() / 3600
 

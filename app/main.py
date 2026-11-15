@@ -305,7 +305,7 @@ def _progress_proposal(gh, r: dict):
     for mv in r["moves"]:
         if mv["repo"]:
             actions.append(UpdateMilestone(title=prog.PLAN_PREFIX + mv["title"], due_on=notice_mod._utc(mv["new"]), reason="늦어진 단계를 남은 시간에 맞춰 다시 놓아요",
-                                           expect_due=notice_mod._utc(mv["old"])))
+                                           expect_due=mv.get("raw_due") or notice_mod._utc(mv["old"])))
     for a in r["assign"]:
         actions.append(AssignIssue(issue=a["issue"], users=[a["user"]], expect_assignees=[]))
     if actions and r["summary"]:

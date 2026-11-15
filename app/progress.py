@@ -5,7 +5,7 @@
 
 from datetime import datetime, timedelta, timezone
 
-from .state import RepoState, parse_ts
+from .state import RepoState, parse_ts, ms_due
 
 PLAN_PREFIX = "계획 · "
 SUBMIT_MS = "해커톤 제출"
@@ -53,7 +53,7 @@ def check(state: RepoState, plan: list[dict] | None, deadline_iso: str | None, n
     now = now or datetime.now(timezone.utc)
     findings: list[dict] = []
     ms_plan = {m.title[len(PLAN_PREFIX):]: m for m in state.milestones if m.title.startswith(PLAN_PREFIX)}
-    steps = [{"title": t, "due": parse_ts(m.due_on).isoformat()} for t, m in ms_plan.items() if m.due_on]
+    steps = [{"title": t, "due": ms_due(m.due_on).isoformat(), "raw_due": m.due_on} for t, m in ms_plan.items() if m.due_on]
     done: set[str] = set()
     for s in plan or []:  # 저장소에 없는 단계는 이 기기 계획에서
         if s.get("kind", "step") == "step" and s["title"] not in ms_plan:
@@ -66,7 +66,7 @@ def check(state: RepoState, plan: list[dict] | None, deadline_iso: str | None, n
         if total and m.open == 0:
             done.add(t)
             continue
-        due = parse_ts(m.due_on)
+        due = ms_due(m.due_on)
         if not due:
             continue
         unassigned = [i for i in state.issues if i.milestone == m.title and not i.assignees]
@@ -113,6 +113,8 @@ def check(state: RepoState, plan: list[dict] | None, deadline_iso: str | None, n
     moves = replan(steps, now, deadline, done) if deadline and (late or any(f["id"] == "pace" or f.get("local") for f in findings)) else []
     for mv in moves:
         mv["repo"] = mv["title"] in ms_plan
+        if mv["repo"]:
+            mv["raw_due"] = ms_plan[mv["title"]].due_on  # 실행 직전 비교는 GitHub에 있는 값 그대로
     scope = None
     if deadline:
         remain = deadline - timedelta(hours=3) - now

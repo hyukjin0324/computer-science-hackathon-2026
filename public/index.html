@@ -387,6 +387,8 @@ textarea { width: 100%; min-height: 80px; resize: vertical; border: 1px solid va
 .dw-proj { flex: 1; width: 100%; min-width: 0; display: grid; grid-template-columns: 12px 1fr; gap: 10px; align-items: center; text-align: left; padding: 10px 12px; border-radius: 14px; color: var(--ink); }
 .dw-proj.on { background: var(--surface-2); }
 .dw-proj .pdot { width: 10px; height: 10px; border-radius: 50%; }
+.dw-proj > span:last-child { min-width: 0; }  /* 긴 대회 이름은 줄임표로 (옆 버튼을 덮지 않게) */
+.dw-row { min-width: 0; } .dw-row > button:not(.dw-proj) { flex: none; }
 .dw-proj b { display: block; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .dw-proj small { color: var(--muted); font-size: 12.5px; }
 .dw-del { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: var(--muted); flex: none; }
 .dw-del.sure { color: #FFFFFF; background: var(--crit); }
