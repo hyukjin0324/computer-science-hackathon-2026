@@ -533,15 +533,33 @@ function renderHead() {
 async function loadSaved() {  // 팀원이 이미 분석해 저장소에 저장한 공고가 있으면 다시 분석하지 않고 가져온다
   try { const s = await api("/notice/saved"); if (s.extract && !curDraft()) setExtract(s.extract); } catch (e) { /* 없으면 그냥 넘어감 */ }
 }
+const ROOMS = {};  // 팀플 키 → 그 대화방의 화면 조각 (이 탭이 열려 있는 동안)
+let roomKey = null;
+function switchRoom(from, to) {
+  if (!from || from === to) return;
+  const keep = document.createElement("div"); while (chat.firstChild) keep.appendChild(chat.firstChild); ROOMS[from] = keep;
+  if (ROOMS[to]) { const r = ROOMS[to]; while (r.firstChild) chat.appendChild(r.firstChild); delete ROOMS[to]; }
+  else intro();  // 처음 여는 대화방: 지난 대화·이어서 하기는 resumeChat이 채운다
+  roomKey = to; scroll();
+}
+function moveRoom(from, to) {
+  // 같은 대회가 '준비 중'에서 저장소 팀플로 바뀔 때: 대화방과 기록을 그대로 옮긴다
+  if (ROOMS[from]) { ROOMS[to] = ROOMS[from]; delete ROOMS[from]; }
+  const l = store.get("log:" + from, null); if (l) store.set("log:" + to, [...store.get("log:" + to, []), ...l].slice(-12));
+  if (roomKey === from) roomKey = to;
+}
 function useProject(next, quiet) {
+  const fromKey = roomKey || (cur ? projKey() : null);
   cur = next; store.set("cur", cur);
   if (next.repo) { repo = next.repo; store.set("repo", repo); }
   const d = curDraft();
   extract = d ? d.extract || null : store.get("extract:" + projKey(), null);
   calState = null; lastTriage = null; lastProgress = null; renderHead(); renderCal(); renderMe(); renderHome();
   if (!d) { loadCalState(); if (!extract) loadSaved(); }
-  if (quiet && $("resume")) resumeChat();
-  if (!quiet) { showTab("chat"); add(h("div", "stamp", `${projName()}(으)로 바꿨어요`)); bot(d ? `'${d.title}' 준비 중이에요. 아직 저장소가 없는 새 팀플이라 신청부터 도와 드려요.` : `${curRepo()} 팀플을 보고 있어요.`); }
+  const toKey = projKey(); const fresh = fromKey && fromKey !== toKey && !ROOMS[toKey];
+  switchRoom(fromKey, toKey); roomKey = toKey;
+  if ($("resume") && (quiet || fresh)) resumeChat();
+  if (!quiet) showTab("chat");
 }
 const tasks = store.get("tasks", []);
 const docs = store.get("docs", []);
@@ -596,7 +614,7 @@ function intro() {
   const d = new Date();
   add(h("div", "stamp", `${d.getMonth() + 1}월 ${d.getDate()}일 ${d.getHours() < 12 ? "오전" : "오후"} ${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}`));
   add(h("div", null)).id = "history";  // 지난 대화 (팀플을 불러온 뒤 채운다)
-  add(h("div", "bub", "팀플을 대신 챙겨 드려요. 아래에서 고르거나 편하게 말씀해 주세요."));
+  add(h("div", "bub", typeof projName === "function" && cur ? `'${projName()}' 대화방이에요. 이 대회 이야기만 여기 모여요.` : "팀플을 대신 챙겨 드려요. 아래에서 고르거나 편하게 말씀해 주세요."));
   const p = h("div", "panel"); const ph = h("div", "panel-h"); ph.appendChild(h("b", null, "바로 맡겨 보기")); const pp = h("button", "more"); pp.type = "button"; pp.id = "panelProj"; pp.onclick = openProjects; ph.appendChild(pp); p.appendChild(ph);
   const picks = h("div", "picks");
   PICKS().forEach(([em, t, s, fn]) => {
@@ -912,6 +930,7 @@ async function connectTo(d, repo) {
   const info0 = store.get("info:d:" + d.id, null);
   const url0 = d.url;
   drafts.splice(drafts.indexOf(d), 1); saveDrafts();
+  moveRoom("d:" + d.id, "r:" + repo); delete ROOMS["r:" + repo]; roomKey = "r:" + repo;  // 지금 보고 있는 대화방이 그대로 이 저장소의 대화방이 된다
   useProject({ repo }, true); if (pl) store.set("plan:" + projKey(), pl); if (info0) store.set("info:" + projKey(), info0); if (url0) store.set("noticeUrl:" + projKey(), { url: url0, title: d.title });
   // 신청 기록을 그대로 들고 간다. 아직 신청 전이면 협업으로 넘기지 않는다.
   if (applied) store.set(doneKey("apply"), applied); else store.set("applyTodo:" + projKey(), 1);
@@ -1160,6 +1179,24 @@ function renderHome() {
     if (rest.length > 3) { const m = h("button", "btn", `${rest.length - 3}개 더 보기`); m.type = "button"; m.style.alignSelf = "flex-start"; m.onclick = () => { showTab("chat"); today(); }; v.appendChild(m); }
   }
   if (extract) contestBlock();
+  // 내 대회: 대회마다 대화방이 따로라서, 다른 대회의 급한 일도 홈에서 한눈에 본다
+  const others = allProjects().filter((p) => p.key !== projKey() && p.extract);
+  if (others.length) {
+    const oh = h("div", "sech"); oh.appendChild(h("h2", null, "다른 대회")); oh.appendChild(h("span", null, `${others.length}개`)); v.appendChild(oh);
+    others.map((p) => {
+      const ex = p.extract || {}; const applied = store.get(doneKey("apply", p.key), null) || (p.draft && (drafts.find((x) => x.id === p.draft) || {}).applied);
+      const sent = store.get(doneKey("submit", p.key), null);
+      const stage = sent ? "제출 완료" : p.draft ? (applied || !needsApply(ex) ? "저장소 준비" : "신청 전") : applied ? "협업 중" : "신청 전";
+      const due = !applied && ex.apply_deadline_iso ? ["신청", ex.apply_deadline_iso] : !sent && ex.submit_deadline_iso ? ["제출", ex.submit_deadline_iso] : null;
+      const dd = due ? ddays(due[1]) : null;
+      return { p, stage, dd, label: due && dd != null && dd >= 0 ? `${due[0]} D-${dd}` : "" };
+    }).sort((a2, b2) => (a2.dd ?? 999) - (b2.dd ?? 999)).forEach(({ p, stage, dd, label }) => {
+      const b = h("button", "arow"); b.type = "button";
+      b.appendChild(h("span", "ai " + (dd != null && dd <= 3 ? "crit" : dd != null && dd <= 7 ? "warn" : "ok"), label || "—"));
+      const tx = h("span"); tx.appendChild(h("b", null, p.name)); tx.appendChild(h("small", null, stage)); b.appendChild(tx);
+      b.onclick = () => useProject(p.draft ? { draft: p.draft } : { repo: p.repo }); v.appendChild(b);
+    });
+  }
   // 바로 맡기기
   const qh = h("div", "sech"); qh.appendChild(h("h2", null, "바로 맡기기")); v.appendChild(qh);
   const q = h("div", "quick");
