@@ -925,9 +925,23 @@ function needRepo(ask) {
 }
 
 /* ---------- 마감까지 계획 ---------- */
+function askDeadline() {
+  bot("제출 마감 날짜를 공고에서 찾지 못했어요. 공고에서 확인해서 넣어 주시면 그 날짜에서 거꾸로 계획을 짤게요.");
+  const c = add(h("div", "task")); const id = "dl" + Date.now();
+  const l = h("label", "lab", "제출 마감"); l.htmlFor = id; const i = h("input", "finput"); i.id = id; i.type = "datetime-local";
+  const src = noticeUrl(); if (src) c.appendChild(link("공고 원문 보기", src));
+  const b = h("button", "btn primary", "이 날짜로 계획 짜기"); b.type = "button"; c.append(l, i, b);
+  b.onclick = () => { if (!i.value) return i.focus(); b.disabled = i.disabled = true; const iso = new Date(i.value).toISOString(); setExtract({ ...extract, submit_deadline_iso: iso, submit_deadline: new Date(i.value).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }) }); planFlow(); };
+  scroll();
+}
 async function planFlow() {
   me("마감까지 계획 짜 줘");
   if (!extract) { bot("먼저 공고를 분석해야 마감을 알 수 있어요."); chip("대회 공고 분석하기", notice); return; }
+  if (!extract.submit_deadline_iso && noticeUrl()) {
+    try { await thinking("공고에서 제출 마감을 다시 찾고 있어요", refreshExtract()); } catch (e) { /* 못 읽으면 직접 넣기로 */ }
+    if (extract.submit_deadline_iso) bot(`공고를 다시 읽어서 제출 마감(${extract.submit_deadline || dtxt(extract.submit_deadline_iso)})을 찾았어요.`);
+  }
+  if (!extract.submit_deadline_iso) return askDeadline();
   let r; try { r = await thinking("마감에서 거꾸로 계획을 짜고 있어요", api("/schedule", { method: "POST", body: JSON.stringify({ extract }) })); } catch (e) { return fail(e); }
   if (!r.steps.length) { bot("제출 마감이 없거나 이미 지나서 계획을 짤 수 없어요."); return; }
   bot(`${projName()}의 제출 마감에서 거꾸로 ${r.steps.length}단계로 나눴어요. 날짜는 바꿀 수 있어요. AI를 쓰지 않아서 토큰은 0이에요.`);
@@ -1326,6 +1340,22 @@ const INFO_FIELDS = {
   submit: [["team", "팀명"], ["idea", "한 줄 소개"], ["deploy", "배포 링크 (비우면 README에서 찾아요)"], ["video", "시연 영상 링크"], ["slides", "발표 자료 링크"]],
 };
 function info() { return store.get("info:" + projKey(), {}); }
+async function refreshExtract(url) {
+  // 공고를 다시 읽어서 지금 분석에 비어 있는 칸만 채운다 (이미 있는 값은 그대로)
+  url = url || noticeUrl(); if (!url || !extract) return null;
+  const f = await api("/notice/fetch", { method: "POST", body: JSON.stringify({ url }) });
+  const r2 = await api("/notice", { method: "POST", body: JSON.stringify({ text: (f.title ? f.title + "\n" : "") + f.text, repo: null, new_project: true }) });
+  const n = r2.extract, cur0 = extract, have = new Set((cur0.facts || []).map((x) => x.label));
+  const pick = (k) => (cur0[k] == null || cur0[k] === "" ? n[k] : cur0[k]);
+  const merged = { ...cur0, source_url: url,
+    facts: [...(cur0.facts || []), ...(n.facts || []).filter((x) => !have.has(x.label))],
+    apply_deadline: pick("apply_deadline"), apply_deadline_iso: pick("apply_deadline_iso"),
+    submit_deadline: pick("submit_deadline"), submit_deadline_iso: pick("submit_deadline_iso"),
+    team_min: pick("team_min"), team_max: pick("team_max"),
+    apply_fields: (cur0.apply_fields || []).length ? cur0.apply_fields : n.apply_fields || [],
+    deliverables: (cur0.deliverables || []).length ? cur0.deliverables : n.deliverables || [] };
+  setExtract(merged); return merged;
+}
 function noticeUrl() {
   // 공고 주소는 공고 분석 결과(extract)에 같이 들고 다닌다. 다른 대회 주소가 섞이지 않게 제목으로 한 번 더 확인한다.
   const d = curDraft(); if (d && d.url) return d.url;
@@ -1360,11 +1390,8 @@ function eligBox(card, membersInput, saved, title) {
         rb2.onclick = async () => {
           rb2.disabled = true; rb2.textContent = "읽는 중…";
           try {
-            const f = await api("/notice/fetch", { method: "POST", body: JSON.stringify({ url: src2 }) });
-            const r2 = await api("/notice", { method: "POST", body: JSON.stringify({ text: (f.title ? f.title + "\n" : "") + f.text, repo: null, new_project: true }) });
-            const got = (r2.extract.facts || []).filter((x) => x.label === "참가 자격");
-            if (!got.length && r2.extract.team_min == null && r2.extract.team_max == null) { rb2.textContent = "이번에도 못 읽었어요 · 아래에 붙여넣어 주세요"; return; }
-            setExtract({ ...extract, facts: [...(extract.facts || []).filter((x) => x.label !== "참가 자격"), ...got], team_min: extract.team_min ?? r2.extract.team_min, team_max: extract.team_max ?? r2.extract.team_max, source_url: src2 });
+            const m = await refreshExtract(src2);
+            if (!m || (!(m.facts || []).some((x) => x.label === "참가 자격") && m.team_min == null && m.team_max == null)) { rb2.textContent = "이번에도 못 읽었어요 · 아래에 붙여넣어 주세요"; return; }
             qs.innerHTML = ""; refresh();
           } catch (e) { rb2.disabled = false; rb2.textContent = "공고 다시 읽기"; if (e.status === 401) askCode(() => rb2.onclick()); else snack(e.message); }
         };
