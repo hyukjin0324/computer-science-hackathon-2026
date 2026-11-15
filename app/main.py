@@ -551,18 +551,33 @@ def submit_check(body: SubmitIn):
 class ApplyCheckIn(BaseModel):
     extract: notice_mod.NoticeExtract
     members: list[str] = []
+    answers: dict = {}
+    source_url: str | None = None
+
+
+class EligibilityIn(BaseModel):
+    extract: notice_mod.NoticeExtract
+    answers: dict = {}
+    source_url: str | None = None
+
+
+@app.post("/api/eligibility")
+def eligibility(body: EligibilityIn):
+    """이 공고에 필요한 질문과, 지금 답으로 본 조건별 판정 (AI 없이 규칙으로)."""
+    from . import eligibility as el
+    return {"questions": el.questions(body.extract), "rows": el.judge(body.extract, body.answers, body.source_url)}
 
 
 @app.post("/api/apply-check")
 def apply_check(body: ApplyCheckIn):
     """신청 직전 확인. 저장소가 없어도 된다."""
     from datetime import datetime, timezone
-    ex, rows = body.extract, []
-    n = len([m for m in body.members if m.strip()])
-    if ex.team_min is not None or ex.team_max is not None:
-        ok = n and (ex.team_min is None or n >= ex.team_min) and (ex.team_max is None or n <= ex.team_max)
-        rows.append(sub_mod._row("팀 인원", "ok" if ok else "fail", f"팀원 {n}명 · 조건 {ex.team_min or '?'}~{ex.team_max or '?'}명",
-                                 [{"label": f"공고: {f.quote}"} for f in ex.facts if f.label == "참가 자격"][:1]))
+    from . import eligibility as el
+    ex = body.extract
+    answers = dict(body.answers)
+    if not answers.get("team"):
+        answers["team"] = len([m for m in body.members if m.strip()]) or ""
+    rows = el.judge(ex, answers, body.source_url)
     if ex.apply_deadline_iso:
         left = (datetime.fromisoformat(ex.apply_deadline_iso) - datetime.now(timezone.utc)).total_seconds() / 3600
         rows.append(sub_mod._row("신청 마감까지", "fail" if left <= 0 else "warn" if left < 3 else "ok",

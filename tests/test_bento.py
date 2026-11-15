@@ -809,3 +809,47 @@ def test_date_only_deadline_is_read_as_korean_end_of_day():
     assert ex.apply_deadline_iso == "2099-11-20T23:59:00+09:00" and ex.submit_deadline_iso.endswith("+09:00")
     r = TestClient(main.app).post("/api/apply-check", json={"extract": ex.model_dump(), "members": ["a"]})
     assert r.status_code == 200
+
+
+def _elig_ex(quote, lo=None, hi=None):
+    from app.notice import Fact, NoticeExtract
+    return NoticeExtract(title="t", facts=[Fact(label="참가 자격", value=quote, quote=quote)], team_min=lo, team_max=hi)
+
+
+def test_eligibility_asks_only_needed_questions_and_says_next_step():
+    from app import eligibility as el
+    ex = _elig_ex("2학년 이상 재학생, 3~4인 팀", 3, 4)
+    assert [q["key"] for q in el.questions(ex)] == ["team", "grade", "status"]
+    by = lambda n: {r["name"]: r for r in el.judge(ex, {"team": n, "grade": "2", "status": "모두 재학 중"}, "https://x.test/notice")}
+    two = by(2)
+    assert two["팀 인원"]["status"] == "fail" and "1명이 더 필요해요" in two["팀 인원"]["detail"]
+    assert two["학년"]["status"] == "ok" and two["학적"]["status"] == "ok"  # 인원만 미충족
+    assert two["팀 인원"]["evidence"][0] == {"label": "공고: 2학년 이상 재학생, 3~4인 팀", "url": "https://x.test/notice"}
+    assert by(3)["팀 인원"]["status"] == "ok"
+    assert "1명이 많아요" in by(5)["팀 인원"]["detail"]
+    low = {r["name"]: r for r in el.judge(ex, {"team": 3, "grade": "1", "status": "휴학생 있음"})}
+    assert low["학년"]["status"] == "fail" and low["학적"]["status"] == "fail"
+
+
+def test_eligibility_individual_notice_skips_team_and_flags_unclear():
+    from app import eligibility as el
+    solo = _elig_ex("컴퓨터학부 재학생 개인 참가", 1, 1)
+    assert [q["key"] for q in el.questions(solo)] == ["status", "dept"]
+    odd = _elig_ex("관련 분야 수상 경력 보유자, 2~4인 팀", 2, 4)
+    rows = el.judge(odd, {"team": 2})
+    assert any(r["name"] == "주최 측 확인 필요" and "수상 경력" in r["detail"] for r in rows)
+    either = _elig_ex("개인 또는 3인 팀", 3, 3)
+    assert {r["name"]: r for r in el.judge(either, {"team": 1})}["팀 인원"]["status"] == "ok"
+    two = {r["name"]: r for r in el.judge(either, {"team": 2})}["팀 인원"]
+    assert two["status"] == "fail" and "1명 또는 3명" in two["detail"]
+    assert {r["name"]: r for r in el.judge(either, {"team": 3})}["팀 인원"]["status"] == "ok"
+    assert el.judge(_elig_ex("", None, None).model_copy(update={"facts": []}), {})[0]["name"] == "참가 자격"
+
+
+def test_apply_check_and_eligibility_endpoint_use_answers():
+    ex = _elig_ex("2학년 이상 재학생, 3~4인 팀", 3, 4).model_dump()
+    c = TestClient(main.app)
+    r = c.post("/api/eligibility", json={"extract": ex, "answers": {"team": 2}}).json()
+    assert [q["key"] for q in r["questions"]] == ["team", "grade", "status"]
+    a = c.post("/api/apply-check", json={"extract": ex, "members": ["a", "b"], "answers": {"grade": "3", "status": "모두 재학 중"}}).json()
+    assert a["ready"] is False and any("1명이 더 필요해요" in x["detail"] for x in a["rows"])

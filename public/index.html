@@ -153,6 +153,18 @@ textarea { width: 100%; min-height: 80px; resize: vertical; border: 1px solid va
 .tier.red { background: var(--crit-soft); } .tier.red > b { color: var(--crit); }
 .tier.yellow { background: var(--warn-soft); } .tier.yellow > b { color: var(--warn); }
 .tier.green { background: var(--ok-soft); } .tier.green summary { color: var(--ok); font-weight: 700; font-size: 13.5px; cursor: pointer; }
+.elig { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 12px; }
+.elig .qs { display: flex; flex-direction: column; gap: 8px; }
+.elig .q { display: flex; flex-direction: column; gap: 6px; }
+.elig .opts2 { display: flex; flex-wrap: wrap; gap: 6px; }
+.elig .opts2 button { height: 38px; padding: 0 14px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); font: inherit; font-size: 13.5px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.elig .opts2 button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.elig .stepper { display: inline-flex; align-items: center; gap: 4px; }
+.elig .stepper button { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); font-size: 18px; color: var(--ink); cursor: pointer; }
+.elig .stepper output { min-width: 56px; text-align: center; font-weight: 800; font-size: 16px; }
+.elig .verdict { display: flex; flex-direction: column; gap: 8px; background: var(--surface-2); border-radius: 14px; padding: 12px; }
+.elig .verdict .crow > span { font-weight: 800; }
+.elig .verdict .crow.fail > span { color: var(--crit); } .elig .verdict .crow.ok > span { color: var(--ok); } .elig .verdict .crow.warn > span { color: var(--warn); }
 .crow { display: grid; grid-template-columns: 20px 1fr; gap: 8px; font-size: 14px; }
 .crow small { display: block; color: var(--muted); font-size: 12.5px; }
 .crow .ev { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; }
@@ -721,6 +733,7 @@ function noticeForm(target, draft, opts = {}) {
         Object.assign(dd, { title: r.extract.title, extract: r.extract, text: ta.value, url: pageUrl, noAi, found: opts.foundId || dd.found }); saveDrafts();
         useProject({ draft: dd.id }, true);
       } else if (!cur || cur.repo !== target || cur.draft) useProject({ repo: target }, true);
+      if (target && pageUrl) store.set("noticeUrl:" + projKey(), pageUrl);  // 자격 판정 옆에 원문 링크를 붙인다
       setExtract(r.extract);
       showExtract(r);
     } catch (e) { fail(e); go.disabled = ta.disabled = fb.disabled = url.disabled = false; }
@@ -772,8 +785,9 @@ async function connectTo(d, repo) {
   const pl = store.get("plan:d:" + d.id, null); try { localStorage.removeItem("bento:plan:d:" + d.id); } catch (e) { /* 무시 */ }
   const applied = store.get(doneKey("apply", "d:" + d.id), null) || (d.applied ? { at: d.applied, proof: "" } : null);
   const info0 = store.get("info:d:" + d.id, null);
+  const url0 = d.url;
   drafts.splice(drafts.indexOf(d), 1); saveDrafts();
-  useProject({ repo }, true); if (pl) store.set("plan:" + projKey(), pl); if (info0) store.set("info:" + projKey(), info0);
+  useProject({ repo }, true); if (pl) store.set("plan:" + projKey(), pl); if (info0) store.set("info:" + projKey(), info0); if (url0) store.set("noticeUrl:" + projKey(), url0);
   // 신청 기록을 그대로 들고 간다. 아직 신청 전이면 협업으로 넘기지 않는다.
   if (applied) store.set(doneKey("apply"), applied); else store.set("applyTodo:" + projKey(), 1);
   setExtract(r.extract);
@@ -1156,6 +1170,42 @@ const INFO_FIELDS = {
   submit: [["team", "팀명"], ["idea", "한 줄 소개"], ["deploy", "배포 링크 (비우면 README에서 찾아요)"], ["video", "시연 영상 링크"], ["slides", "발표 자료 링크"]],
 };
 function info() { return store.get("info:" + projKey(), {}); }
+function noticeUrl() { const d = curDraft(); return (d && d.url) || store.get("noticeUrl:" + projKey(), null); }
+function eligBox(card, membersInput, saved) {
+  // 이 공고에 필요한 질문만 묻고, 답할 때마다 조건별 판정을 바로 보여 준다 (규칙 · AI 토큰 0)
+  const box = h("div", "elig"); box.appendChild(h("b", null, "참가 자격 확인")); box.appendChild(h("div", "note", "이 공고에 필요한 것만 물어봐요. 답을 바꾸면 판정이 바로 바뀌어요."));
+  const qs = h("div", "qs"), verdict = h("div", "verdict"); box.appendChild(qs); box.appendChild(verdict); card.appendChild(box);
+  const ans = { ...saved }; let locked = false, timer = 0;
+  const memberCount = () => (membersInput ? membersInput.value.split(",").map((x) => x.trim()).filter(Boolean).length : 0);
+  const refresh = async () => {
+    let r; try { r = await api("/eligibility", { method: "POST", body: JSON.stringify({ extract, answers: ans, source_url: noticeUrl() }) }); } catch (e) { verdict.textContent = "판정을 불러오지 못했어요"; return; }
+    if (!qs.childNodes.length) drawQs(r.questions);
+    verdict.innerHTML = ""; const bad = r.rows.filter((x) => x.status === "fail").length;
+    verdict.appendChild(h("b", null, !r.rows.length ? "이 공고는 따로 확인할 자격 조건이 없어요" : bad ? `${bad}개 조건을 아직 못 채웠어요` : r.rows.some((x) => x.status === "warn") ? "남은 확인이 있어요" : "모든 조건을 채웠어요"));
+    r.rows.forEach((x) => verdict.appendChild(crow(x)));
+    if (!r.questions.length && !r.rows.length) box.hidden = true;
+  };
+  const later = () => { clearTimeout(timer); timer = setTimeout(refresh, 150); };
+  const drawQs = (list) => list.forEach((q) => {
+    const w = h("div", "q"); w.appendChild(h("span", "lab", q.label));
+    if (q.type === "number") {
+      if (!ans[q.key]) ans[q.key] = memberCount() || 1;
+      const st = h("div", "stepper"); const minus = h("button", null, "−"), out = h("output", null, `${ans[q.key]}명`), plus = h("button", null, "+");
+      minus.type = plus.type = "button"; minus.setAttribute("aria-label", "한 명 빼기"); plus.setAttribute("aria-label", "한 명 더하기"); out.setAttribute("aria-live", "polite");
+      const set = (n) => { if (locked) return; ans[q.key] = Math.max(1, Math.min(20, n)); out.textContent = `${ans[q.key]}명`; later(); };
+      minus.onclick = () => set(+ans[q.key] - 1); plus.onclick = () => set(+ans[q.key] + 1);
+      st.append(minus, out, plus); w.appendChild(st);
+      if (membersInput) membersInput.addEventListener("input", () => { const n = memberCount(); if (n) set(n); });
+    } else {
+      const os = h("div", "opts2"); os.setAttribute("role", "group"); os.setAttribute("aria-label", q.label);
+      q.options.forEach((o) => { const b = h("button", null, q.key === "grade" ? `${o}학년` : o); b.type = "button"; b.setAttribute("aria-pressed", String(String(ans[q.key]) === o)); b.onclick = () => { if (locked) return; ans[q.key] = o; os.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b))); later(); }; os.appendChild(b); });
+      w.appendChild(os);
+    }
+    qs.appendChild(w);
+  });
+  refresh();
+  return { answers: () => ({ ...ans }), lock: () => { locked = true; box.querySelectorAll("button").forEach((b) => (b.disabled = true)); } };
+}
 function prefillInfo() {
   // 이미 아는 값으로 채워 두기: 팀명 = 저장소 이름, 팀원 = 저장소 팀원 (없으면 로그인한 나)
   const d = curDraft(); const repo = d ? "" : curRepo();
@@ -1168,13 +1218,14 @@ function infoCard(kind, next) {
   c.appendChild(h("div", "note", "이 기기에만 저장돼요. 학번·연락처 같은 개인정보는 넣지 마세요. 폼에서 직접 입력하게 남겨 둬요."));
   const cur0 = { ...prefillInfo(), ...Object.fromEntries(Object.entries(info()).filter(([, x]) => x)) }; const inputs = {};
   INFO_FIELDS[kind].forEach(([k, lab]) => { const id = `inf${k}${Date.now()}`; const l = h("label", "lab", lab); l.htmlFor = id; const i = h("input", "finput"); i.id = id; i.value = cur0[k] || ""; if (["deploy", "video", "slides"].includes(k)) { i.type = "url"; i.placeholder = "https://"; } c.appendChild(l); c.appendChild(i); inputs[k] = i; });
+  const elig = kind === "apply" && extract ? eligBox(c, inputs.members, cur0.elig || {}) : null;
   const go = h("button", "btn primary", kind === "apply" ? "신청 전 확인하기" : "제출 전 점검하기"); go.type = "button"; c.appendChild(go);
-  go.onclick = () => { const v = { ...info() }; Object.entries(inputs).forEach(([k, i]) => (v[k] = i.value.trim())); store.set("info:" + projKey(), v); go.disabled = true; Object.values(inputs).forEach((i) => (i.disabled = true)); next(v); };
+  go.onclick = () => { const v = { ...info() }; Object.entries(inputs).forEach(([k, i]) => (v[k] = i.value.trim())); if (elig) { v.elig = elig.answers(); elig.lock(); } store.set("info:" + projKey(), v); go.disabled = true; Object.values(inputs).forEach((i) => (i.disabled = true)); next(v); };
   scroll(); return c;
 }
 function evidence(list) { const ev = h("div", "ev"); (list || []).forEach((e) => { if (e.url) { const a = h("a", null, e.label + " ↗"); a.href = e.url; a.target = "_blank"; a.rel = "noopener noreferrer"; ev.appendChild(a); } else ev.appendChild(h("span", null, e.label)); }); return ev; }
 function crow(r) {
-  const d = h("div", "crow"); d.appendChild(h("span", null, { ok: "✓", warn: "!", fail: "✕" }[r.status] || "·"));
+  const d = h("div", "crow " + (r.status || "")); d.appendChild(h("span", null, { ok: "✓", warn: "!", fail: "✕" }[r.status] || "·"));
   const tx = h("div", null, r.name); tx.appendChild(h("small", null, r.detail));
   if (r.fix) tx.appendChild(h("small", null, "→ " + r.fix.label));
   const ev = evidence([...(r.evidence || []), ...(r.fix && r.fix.url ? [{ label: r.fix.label, url: r.fix.url }] : [])]); if (ev.childNodes.length) tx.appendChild(ev);
@@ -1256,7 +1307,7 @@ async function applyFlow(ex) {
     J.set(1);
     const fields = ex.apply_fields.length ? ex.apply_fields : ["팀명", "팀원", "아이디어 한 줄"];
     docs.unshift({ title: `신청서 초안 · ${ex.title}`, body: fields.map((f) => `${f}: ${/팀명/.test(f) ? v.team || "" : /팀원/.test(f) ? v.members || "" : /아이디어|소개/.test(f) ? v.idea || "" : ""}`).join("\n") + `\n\n신청 마감: ${ex.apply_deadline || "공고 확인 필요"}`, at: Date.now() }); saveLists();
-    let r; try { r = await thinking("신청 조건을 확인하고 있어요", api("/apply-check", { method: "POST", body: JSON.stringify({ extract: ex, members: (v.members || "").split(",").map((x) => x.trim()).filter(Boolean) }) })); } catch (e) { return fail(e); }
+    let r; try { r = await thinking("신청 조건을 확인하고 있어요", api("/apply-check", { method: "POST", body: JSON.stringify({ extract: ex, members: (v.members || "").split(",").map((x) => x.trim()).filter(Boolean), answers: v.elig || {}, source_url: noticeUrl() }) })); } catch (e) { return fail(e); }
     const cc = checkCard(`2단계 · 신청 조건 확인`, r, (ok) => { s1.setAttribute("aria-disabled", String(!ok)); s2.setAttribute("aria-disabled", String(!ok)); if (ok) J.set(2); });
     const s1 = stage(cc.card, "3단계 · 폼 열고 직접 신청하기", false);
     const s2 = stage(cc.card, "4단계 · 신청 완료 기록하기", false);
