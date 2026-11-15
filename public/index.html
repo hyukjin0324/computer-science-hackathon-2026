@@ -104,6 +104,15 @@ h1 { margin: 6px 0 8px; font-size: 26px; font-weight: 800; letter-spacing: -.6px
 .link.on { color: var(--ok); }
 
 /* 작업 카드 */
+.path { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.path li { display: grid; grid-template-columns: 28px 1fr; gap: 12px; padding: 10px 0; position: relative; }
+.path li + li { border-top: 1px solid var(--line); }
+.path li > i { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 13px; font-weight: 800; background: var(--surface-2); color: var(--muted); }
+.path li.done > i { background: var(--ok-soft); color: var(--ok); } .path li.now > i { background: var(--pop); color: var(--pop-ink); box-shadow: 0 0 0 4px var(--pop-soft); }
+.path li b { display: block; font-size: 15px; } .path li:not(.now):not(.done) b { color: var(--muted); } .path li.done b { color: var(--muted); font-weight: 600; }
+.path li small { display: block; color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.path-acts { margin-top: 10px; display: flex; } .path-acts > * { flex: 1; }
+details.more summary { cursor: pointer; font-size: 13.5px; color: var(--muted); min-height: 32px; display: flex; align-items: center; }
 .journey { background: var(--surface); border: 1.5px solid var(--ink); border-radius: 20px; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
 .journey.pin { position: sticky; top: 0; z-index: 3; box-shadow: 0 6px 18px rgba(0,0,0,.08); }
 .journey .j-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .journey .j-h b { font-size: 15.5px; }
@@ -744,24 +753,27 @@ function noticeForm(target, draft, opts = {}) {
 function showExtract(r) {
   const ex = r.extract;
   const c = add(h("div", "task")); const hd = h("div", "task-h"); hd.appendChild(h("b", null, ex.title)); hd.appendChild(h("span", "tag done", { claude: "AI 분석", cache: "저장된 분석", repo: "팀이 저장한 분석", sample: "예시 분석", rules: "규칙 분석" }[r.source] || "분석")); c.appendChild(hd);
-  const dl = h("dl", "facts");
-  ex.facts.forEach((f) => { dl.appendChild(h("dt", null, f.label)); const dd = h("dd", null, f.value); const q = h("small", null, `원문 · "${f.quote}"`); q.style.display = "block"; q.style.color = "var(--muted)"; q.style.fontSize = "12px"; dd.appendChild(q); dl.appendChild(dd); });
-  if (ex.deliverables.length) { dl.appendChild(h("dt", null, "제출물")); dl.appendChild(h("dd", null, ex.deliverables.map((d, i) => `${i + 1}. ${d.name}`).join("\n"))); dl.lastChild.style.whiteSpace = "pre-line"; }
+  // 핵심(마감·참가 자격·낼 것)만 보이고 나머지는 '자세히'에 접어 둔다
+  const KEY = /마감|자격|대상/;
+  const fact = (dl, f) => { dl.appendChild(h("dt", null, f.label)); const dd = h("dd", null, f.value); const q = h("small", null, `원문 · "${f.quote}"`); q.style.display = "block"; q.style.color = "var(--muted)"; q.style.fontSize = "12px"; dd.appendChild(q); dl.appendChild(dd); };
+  const dl = h("dl", "facts"); ex.facts.filter((f) => KEY.test(f.label)).forEach((f) => fact(dl, f));
+  if (ex.deliverables.length) { dl.appendChild(h("dt", null, "낼 것")); dl.appendChild(h("dd", null, ex.deliverables.map((d, i) => `${i + 1}. ${d.name}`).join("\n"))); dl.lastChild.style.whiteSpace = "pre-line"; }
   c.appendChild(dl);
+  const rest = ex.facts.filter((f) => !KEY.test(f.label));
+  if (rest.length) { const det = h("details", "more"); det.appendChild(h("summary", null, `자세히 · ${rest.map((f) => f.label).join(", ")}`)); const dl2 = h("dl", "facts"); rest.forEach((f) => fact(dl2, f)); det.appendChild(dl2); c.appendChild(det); }
   if (r.team_ok != null) c.appendChild(h("div", "note", r.team_ok ? `✓ 저장소 팀원 ${r.team_size}명, 참가 조건(${ex.team_min ?? "?"}~${ex.team_max ?? "?"}명)을 충족해요` : `! 저장소 팀원 ${r.team_size}명, 참가 조건(${ex.team_min ?? "?"}~${ex.team_max ?? "?"}명)과 맞지 않아요`));
   if (r.dropped) c.appendChild(h("div", "note", `원문에서 근거를 찾지 못한 항목 ${r.dropped}개는 뺐어요.`));
   c.appendChild(h("div", "note", r.usage
     ? `AI 사용: 입력 ${r.usage.input_tokens.toLocaleString()} · 출력 ${r.usage.output_tokens.toLocaleString()} 토큰 (약 $${r.usage.est_usd})`
     : r.source === "cache" || r.source === "repo" ? "같은 공고를 이미 분석해 둬서 AI를 다시 부르지 않았어요 · 토큰 0"
     : r.source === "rules" ? "AI 키가 없어 규칙으로 읽었어요 · 토큰 0. 날짜와 제출물이 원문과 맞는지 꼭 확인해 주세요." : "예시 공고라 AI를 부르지 않았어요 · 토큰 0"));
-  if (!ex.submit_deadline_iso) c.appendChild(h("div", "note", "! 제출 마감을 찾지 못했어요. 계획을 짜려면 마감 날짜가 있는 공고가 필요해요."));
-  const rb = h("div", "row-btns"); const a = h("button", "btn", "신청 준비하기"); a.type = "button"; rb.appendChild(a);
-  const pl = h("button", "btn", "마감까지 계획 짜기"); pl.type = "button"; pl.disabled = !ex.submit_deadline_iso; rb.appendChild(pl); c.appendChild(rb);
-  a.onclick = () => { a.disabled = true; me("신청할래"); applyFlow(ex); };
-  pl.onclick = () => { pl.disabled = true; planFlow(); };
+  if (!ex.submit_deadline_iso) c.appendChild(h("div", "note", "! 제출 마감을 찾지 못했어요. 날짜는 나중에 정할 수 있어요."));
   scroll();
-  if (curDraft()) draftNext();
-  else offerPlan(r);
+  // 새 팀플: 버튼은 한 번에 하나. 신청 → 저장소 → 앱 설치 → 연결 순서로
+  if (curDraft()) return startPath(curDraft());
+  const rb = h("div", "row-btns"); const pl = h("button", "btn", "마감까지 계획 짜기"); pl.type = "button"; pl.disabled = !ex.submit_deadline_iso; rb.appendChild(pl); c.appendChild(rb);
+  pl.onclick = () => { pl.disabled = true; planFlow(); };
+  offerPlan(r);
 }
 function offerPlan(r) {
   if (r.plan) { bot(`대회 일정을 GitHub에 적어 둘까요? 마감일을 만들고, 낼 것마다 할 일을 하나씩 만들어요.` + (r.linked && r.linked.length ? `\n이미 있는 할 일 ${r.linked.map((n) => "#" + n).join(", ")}은 그대로 써요.` : "")); approval(r.plan, (ok) => { if (ok) { renderCal(); chip("캘린더 보기", () => showTab("cal")); chip("오늘 할 일 정리", today); } }); }
@@ -769,6 +781,71 @@ function offerPlan(r) {
   else bot("저장소를 읽지 못해서 일정은 만들지 않았어요. Bento 앱이 그 저장소에 설치됐는지 확인해 주세요.");
 }
 function repoSlug(t) { const s = t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); return /[a-z]/.test(s) ? s : `hackathon-${new Date().getFullYear()}`; }
+const PATHS = {};
+function needsApply(ex) { return !!(ex && (ex.apply_deadline_iso || (ex.apply_fields && ex.apply_fields.length))); }
+function startPath(d) {
+  // 새 팀플이 할 일을 순서대로 한 장에. 지금 할 단계에만 버튼이 있다.
+  if (!d) return;
+  (PATHS[d.id] || []).forEach((old) => old.freeze());
+  const ex = d.extract || {}; const apply = needsApply(ex);
+  const c = add(h("div", "journey")); c.setAttribute("role", "group"); c.setAttribute("aria-label", "준비 순서");
+  let frozen = false;
+  const applied = () => !!(d.applied || store.get(doneKey("apply", "d:" + d.id), null));
+  const steps = [
+    ...(apply ? [{ k: "apply", name: "신청하기", who: "직접", done: applied }] : []),
+    { k: "repo", name: "팀 저장소 만들기", who: "GitHub", done: () => !!d.repoMade },
+    { k: "app", name: "Bento 앱 설치", who: "GitHub", done: () => !!d.installed },
+    { k: "link", name: "연결 완료", who: "Bento", done: () => false },
+  ];
+  const render = () => {
+    c.innerHTML = "";
+    const hd = h("div", "j-h"); hd.appendChild(h("b", null, `준비 순서 · ${d.title}`)); const nowI = steps.findIndex((x) => !x.done());
+    const tag = h("span", "tag"); tag.textContent = `${nowI + 1}/${steps.length}`; hd.appendChild(tag); c.appendChild(hd);
+    if (!apply) c.appendChild(h("div", "note", "이 대회는 공고에 따로 신청 단계가 없어서 바로 팀 저장소부터 해요."));
+    const ol = h("ol", "path");
+    steps.forEach((st, i) => {
+      const state = i < nowI ? "done" : i === nowI ? "now" : "";
+      const li = h("li", state); if (state === "now") li.setAttribute("aria-current", "step");
+      li.appendChild(h("i", null, state === "done" ? "✓" : String(i + 1)));
+      const body = h("div"); body.appendChild(h("b", null, st.name));
+      if (state === "now" && !frozen) {
+        const acts = h("div", "path-acts");
+        if (st.k === "apply") {
+          body.appendChild(h("small", null, ex.apply_deadline_iso ? `신청 마감 ${dtxt(ex.apply_deadline_iso)} · 조건 확인과 폼 채우기는 Bento가 도와요` : "조건 확인과 폼 채우기는 Bento가 도와요"));
+          const b = h("button", "btn primary", "신청하기"); b.type = "button"; b.onclick = () => { b.disabled = true; me("신청할래"); applyFlow(ex); }; acts.appendChild(b);
+        } else if (st.k === "repo") {
+          body.appendChild(h("small", null, "GitHub에서 빈 저장소를 하나 만들어 주세요. 이름은 미리 채워 둘게요."));
+          const a = link("GitHub에서 저장소 만들기", "https://github.com/new?name=" + encodeURIComponent(repoSlug(d.title))); a.classList.add("primary");
+          a.addEventListener("click", () => { d.repoMade = Date.now(); saveDrafts(); setTimeout(render, 400); }); acts.appendChild(a);
+        } else if (st.k === "app") {
+          if (H.install_url) {
+            body.appendChild(h("small", null, "설치 화면에서 'Only select repositories'로 방금 만든 저장소를 고르면, Bento로 돌아와 바로 연결돼요."));
+            const a = link("Bento 앱 설치", H.install_url); a.classList.add("primary");
+            a.addEventListener("click", () => { store.set("connectAfterInstall", d.id); d.installed = Date.now(); saveDrafts(); setTimeout(render, 400); }); acts.appendChild(a);
+          } else {
+            body.appendChild(h("small", null, "데모에서는 설치 없이 예시 저장소로 연결해 볼 수 있어요."));
+            const b = h("button", "btn primary", "다음"); b.type = "button"; b.onclick = () => { d.installed = Date.now(); saveDrafts(); render(); }; acts.appendChild(b);
+          }
+        } else {
+          body.appendChild(h("small", null, "앱 설치 화면에서 돌아오면 자동으로 연결돼요. 안 됐으면 눌러 주세요."));
+          const b = h("button", "btn primary", "저장소 연결하기"); b.type = "button"; b.onclick = () => { b.disabled = true; connectDraft(); }; acts.appendChild(b);
+        }
+        body.appendChild(acts);
+      } else if (state === "") body.appendChild(h("small", null, st.who === "직접" ? "직접" : `${st.who}에서`));
+      li.appendChild(body); ol.appendChild(li);
+    });
+    c.appendChild(ol);
+    if (!frozen && nowI < steps.length - 1) {
+      const skip = h("button", "link", "저장소가 이미 있어요"); skip.type = "button"; skip.onclick = () => { skip.disabled = true; connectDraft(); };
+      c.appendChild(skip);
+    }
+    scroll();
+  };
+  render();
+  const api2 = { freeze: () => { frozen = true; render(); }, render };
+  (PATHS[d.id] = PATHS[d.id] || []).push(api2);
+  return api2;
+}
 function draftNext() {
   const d = curDraft(); if (!d) return;
   bot(`'${d.title}'은(는) 새 팀플이라 아직 저장소가 없어요. 순서는 이래요:\n1. 신청하기\n2. 팀 저장소 만들고 Bento 앱 설치하기\n3. 연결하면 마감일과 할 일을 GitHub에 적어 둬요`);
@@ -951,7 +1028,7 @@ function renderHome() {
     lab("시작"); body.appendChild(h("b", null, "나갈 대회 공고를 알려 주세요")); acts().appendChild(btn("공고 분석", true, () => { showTab("chat"); notice(); }));
   } else if (d) {
     lab(d.applied ? "신청 완료" : "신청 준비", "pop"); body.appendChild(h("b", null, d.applied ? "팀 저장소를 연결해 주세요" : d.title));
-    acts().appendChild(btn(d.applied ? "저장소 연결" : "신청 준비", true, () => { showTab("chat"); d.applied ? connectDraft() : (me("신청할래"), applyFlow(extract)); }));
+    acts().appendChild(btn(d.applied ? "저장소 연결" : "신청 준비", true, () => { showTab("chat"); d.applied ? startPath(d) : (me("신청할래"), applyFlow(extract)); }));
   } else if (needApply) {
     lab(appD != null && appD >= 0 ? `신청 · D-${appD}` : "신청 전", "pop"); body.appendChild(h("b", null, extract.title || "대회 신청"));
     body.appendChild(h("small", null, "저장소는 연결됐어요. 신청을 마쳐야 협업 단계로 넘어가요."));
@@ -1348,7 +1425,7 @@ function proofStage(box, kind, issue) {
   const id = `proof${Date.now()}`; const l = h("label", "lab", "접수 번호나 확인 메일 문구"); l.htmlFor = id; const i = h("input", "finput"); i.id = id; i.placeholder = "예: 접수번호 HK-0042 / '응답이 기록되었습니다'";
   const b = h("button", "btn primary", `${kind === "apply" ? "신청" : "제출"} 완료로 기록`); b.type = "button"; box.appendChild(l); box.appendChild(i); box.appendChild(b);
   box.appendChild(h("div", "note", issue ? "기록은 GitHub에 남아서 팀원 모두 볼 수 있어요." : "기록하면 마감 알림을 멈춰요."));
-  const mark = () => { store.set(doneKey(kind), { at: Date.now(), proof: i.value.trim() }); const d = curDraft(); if (d && kind === "apply") { d.applied = Date.now(); saveDrafts(); } if (kind === "apply") { try { localStorage.removeItem("bento:applyTodo:" + projKey()); } catch (e) { /* 무시 */ } } const J = JOURNEY[kind]; if (J) J.set(J.n); renderCal(); renderHome(); bot(`${kind === "apply" ? "신청" : "제출"} 완료로 기록했어요. 마감 알림을 멈출게요. 수고하셨어요!`); };
+  const mark = () => { store.set(doneKey(kind), { at: Date.now(), proof: i.value.trim() }); const d = curDraft(); if (d && kind === "apply") { d.applied = Date.now(); saveDrafts(); } if (kind === "apply") { try { localStorage.removeItem("bento:applyTodo:" + projKey()); } catch (e) { /* 무시 */ } if (d) setTimeout(() => { bot("신청을 마쳤어요. 이제 팀 저장소를 준비해요."); startPath(d); }, 300); } const J = JOURNEY[kind]; if (J) J.set(J.n); renderCal(); renderHome(); bot(`${kind === "apply" ? "신청" : "제출"} 완료로 기록했어요. 마감 알림을 멈출게요. 수고하셨어요!`); };
   b.onclick = async () => {
     if (i.value.trim().length < 2) return i.focus();
     b.disabled = i.disabled = true;
