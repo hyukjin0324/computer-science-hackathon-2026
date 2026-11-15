@@ -253,6 +253,7 @@ def schedule(body: ScheduleIn):
 class Step(BaseModel):
     title: str
     due: str
+    note: str = ""
 
 
 class ScheduleGitHubIn(BaseModel):
@@ -266,7 +267,10 @@ def schedule_to_github(body: ScheduleGitHubIn):
     from datetime import datetime
     gh, st = state_for(body.repo)
     have = {m.title for m in st.milestones}
-    actions = []
+    titles = {i.title for i in st.issues}
+    # 사람별로 나누기: 지금 맡은 열린 이슈가 적은 사람부터 한 단계씩 돌아가며 맡긴다
+    load = {m: sum(1 for i in st.issues if m in i.assignees) for m in st.members}
+    actions, who = [], []
     for s in body.steps[:12]:
         title = f"계획 · {s.title.strip()[:50]}"
         try:
@@ -275,9 +279,18 @@ def schedule_to_github(body: ScheduleGitHubIn):
             raise HTTPException(400, f"날짜를 읽지 못했어요: {s.due}") from e
         if title not in have:
             actions.append(CreateMilestone(title=title, due_on=due, description="Bento가 공고 마감에서 거꾸로 짠 작업 계획"))
+        issue_title = f"[계획] {s.title.strip()[:60]}"
+        if issue_title not in titles:
+            owner = min(load, key=lambda m: (load[m], m)) if load else None
+            if owner:
+                load[owner] += 1
+                who.append(owner)
+            actions.append(CreateIssue(title=issue_title, body=(s.note or "") + f"\n\n마감: {s.due[:16].replace('T', ' ')}",
+                                       assignees=[owner] if owner else [], milestone_title=title))
     if not actions:
-        return {"proposal": None, "message": "계획 단계가 이미 모두 저장소에 있어요"}
-    return {"proposal": _proposal(gh.repo, "작업 계획을 저장소 마일스톤으로 만들기", actions, "schedule")}
+        return {"proposal": None, "message": "계획 단계와 할 일이 이미 모두 저장소에 있어요"}
+    return {"proposal": _proposal(gh.repo, "작업 계획을 GitHub에 적고 사람별로 나누기", actions, "schedule"),
+            "assignees": sorted(set(who)), "solo": len(st.members) <= 1}
 
 
 class ProgressIn(BaseModel):

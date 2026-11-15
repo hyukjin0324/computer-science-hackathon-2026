@@ -344,7 +344,9 @@ def test_schedule_to_github_is_a_signed_proposal_and_skips_existing():
     steps = client.post("/api/schedule", json={"extract": SAMPLE_EXTRACT.model_dump()}).json()["steps"]
     body = [{"title": s["title"], "due": s["due"]} for s in steps if s["kind"] != "due"]
     p = client.post("/api/schedule/github", json={"steps": body}).json()["proposal"]
-    assert len(p["steps"]) == len(body) and all("계획 · " in s["label"] for s in p["steps"])
+    labels = [s["label"] for s in p["steps"]]
+    assert sum("마감일 만들기" in l for l in labels) == len(body) and sum(l.startswith("할 일 추가: [계획]") for l in labels) == len(body)
+    assert all("담당" in s["sub"] for s in p["steps"] if s["label"].startswith("할 일 추가"))  # 사람별로 맡김
     assert client.post("/api/execute", json={"token": p["token"]}).json()["ok"]
     again = client.post("/api/schedule/github", json={"steps": body}).json()
     assert again["proposal"] is None

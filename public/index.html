@@ -475,7 +475,7 @@ body.onboarding .dock { display: none; }  /* 첫 화면 뒤로 아래 막대가 
   <div class="dock">
     <button class="toast" type="button" id="toast" hidden><div class="bento"><i></i><i></i><i></i><i></i></div><span id="toastTxt"></span></button>
     <form class="composer" id="composer">
-      <button class="ic" type="button" aria-label="대회 공고 분석" id="plusBtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+      <button class="ic" type="button" aria-label="바로 맡겨 보기 열기" id="plusBtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
       <input id="msg" placeholder="Bento에게 맡기기…" autocomplete="off" aria-label="Bento에게 맡기기">
       <button class="go" type="submit" aria-label="보내기" id="todayBtn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
     </form>
@@ -578,6 +578,20 @@ async function thinking(text, p) { const b = add(h("div", "bub typing", text)); 
 function fail(e) { bot(e.message + (e.errors ? "\n· " + e.errors.join("\n· ") : "")); }
 
 /* ---------- 첫 화면 ---------- */
+function PICKS() {
+  return [["🏆", "새 대회 고르기", "Bento가 찾아온 대회에서 고르거나 공고 링크로 추가", () => discoverChat("새 대회 준비할래")], ["🗂️", "오늘 팀플 할 일 정리", "급한 순서대로 보여 드려요", today], ["🗓️", "마감까지 계획 짜기", "할 일을 날짜별로 나눠 캘린더와 GitHub에", planFlow], ["🔎", "진행 점검·다시 계획", "늦어진 단계를 찾아 남은 시간에 맞게 다시 짜요", () => progressCheck(false)], ["📮", "제출 전 점검하기", "제출물과 저장소를 대조해요", submit]];
+}
+function openPicks() {
+  // 입력창 ＋: 대화가 길어져도 언제든 '바로 맡겨 보기'를 연다
+  const bg = h("div", "sheet-bg"); const sh = h("div", "sheet"); sh.setAttribute("role", "dialog"); sh.setAttribute("aria-modal", "true"); sh.setAttribute("aria-label", "바로 맡겨 보기"); bg.appendChild(sh);
+  const close = () => { bg.remove(); document.removeEventListener("keydown", esc); $("plusBtn").focus(); }; const esc = (e) => { if (e.key === "Escape") close(); };
+  bg.onclick = (e) => { if (e.target === bg) close(); }; document.addEventListener("keydown", esc);
+  sh.appendChild(h("div", null)).setAttribute("aria-hidden", "true"); sh.lastChild.style.cssText = "width:40px;height:5px;border-radius:99px;background:var(--line);align-self:center";
+  const hd = h("div", "panel-h"); hd.appendChild(h("b", null, "바로 맡겨 보기")); hd.appendChild(h("span", "note", projName())); sh.appendChild(hd);
+  const picks = h("div", "picks");
+  PICKS().forEach(([em, t, s2, fn]) => { const x = h("button", "pick"); x.type = "button"; x.appendChild(h("span", "em", em)); const tx = h("span"); tx.appendChild(h("b", null, t)); tx.appendChild(h("small", null, s2)); x.appendChild(tx); x.appendChild(h("span", "chev", "›")); x.onclick = () => { close(); showTab("chat"); fn(); }; picks.appendChild(x); });
+  sh.appendChild(picks); document.querySelector(".phone").appendChild(bg); picks.querySelector("button").focus();
+}
 function intro() {
   const d = new Date();
   add(h("div", "stamp", `${d.getMonth() + 1}월 ${d.getDate()}일 ${d.getHours() < 12 ? "오전" : "오후"} ${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}`));
@@ -585,7 +599,7 @@ function intro() {
   add(h("div", "bub", "팀플을 대신 챙겨 드려요. 아래에서 고르거나 편하게 말씀해 주세요."));
   const p = h("div", "panel"); const ph = h("div", "panel-h"); ph.appendChild(h("b", null, "바로 맡겨 보기")); const pp = h("button", "more"); pp.type = "button"; pp.id = "panelProj"; pp.onclick = openProjects; ph.appendChild(pp); p.appendChild(ph);
   const picks = h("div", "picks");
-  [["🏆", "대회 공고 분석하기", "마감·제출물 정리 → 깃허브 일정", notice], ["🗂️", "오늘 팀플 할 일 정리", "급한 순서대로 보여 드려요", today], ["🗓️", "마감까지 계획 짜기", "할 일을 날짜별로 나눠 캘린더에 넣어요", planFlow], ["🔎", "진행 점검·다시 계획", "늦어진 단계를 찾아 남은 시간에 맞게 다시 짜요", () => progressCheck(false)], ["📮", "제출 전 점검하기", "제출물과 저장소를 대조해요", submit]].forEach(([em, t, s, fn]) => {
+  PICKS().forEach(([em, t, s, fn]) => {
     const x = h("button", "pick"); x.type = "button"; x.appendChild(h("span", "em", em)); const tx = h("span"); tx.appendChild(h("b", null, t)); tx.appendChild(h("small", null, s)); x.appendChild(tx); x.appendChild(h("span", "chev", "›"));
     x.onclick = () => { showTab("chat"); fn(); }; picks.appendChild(x);
   });
@@ -753,6 +767,7 @@ function noticeForm(target, draft, opts = {}) {
       const r = await thinking("공고를 읽고 있어요", api("/notice", { method: "POST", body: JSON.stringify({ text: ta.value, repo: target, new_project: !target, no_ai: noAi }) }));
       if (opts.title) r.extract.title = opts.title;  // 찾아온 대회는 이미 아는 제목을 쓴다
       if (pageUrl) r.extract.source_url = pageUrl;  // 원문 주소는 분석 결과와 같이 다닌다
+      if (opts.deadline_iso && !r.extract.apply_deadline_iso) { r.extract.apply_deadline_iso = opts.deadline_iso; r.extract.apply_deadline = opts.deadline_text || dtxt(opts.deadline_iso); }  // 공고에서 못 읽은 접수 마감은 대회 목록 값으로
       if (!target) {
         let dd = draft || drafts.find((x) => x.title === r.extract.title);
         if (!dd) { dd = { id: Date.now().toString(36), at: Date.now() }; drafts.unshift(dd); }
@@ -815,7 +830,7 @@ async function afterTasks() {
 }
 function repoSlug(t) { const s = t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); return /[a-z]/.test(s) ? s : `hackathon-${new Date().getFullYear()}`; }
 const PATHS = {};
-function needsApply(ex) { return !!(ex && (ex.apply_deadline_iso || (ex.apply_fields && ex.apply_fields.length))); }
+function needsApply(ex) { return !!ex && !ex.no_apply; }  // 대회는 거의 다 참가 신청이 있다. 공고에서 신청 마감을 못 읽어도 신청부터
 function startPath(d) {
   // 새 팀플이 할 일을 순서대로 한 장에. 지금 할 단계에만 버튼이 있다.
   if (!d) return;
@@ -960,15 +975,15 @@ async function planFlow() {
     store.set("plan:" + projKey(), steps); store.set("planAt:" + projKey(), new Date().toISOString()); renderCal();
     bot(`캘린더에 넣었어요. 팀플마다 색을 다르게 보여 드려요.` + (curDraft() ? " 저장소를 연결하면 GitHub에도 적어 둘 수 있어요." : ""));
     chip("캘린더 보기", () => showTab("cal"));
-    if (!curDraft()) chip("GitHub에도 적어 두기", () => planToGithub(steps));
+    if (!curDraft()) chip("다음: GitHub에 적고 사람별로 나누기", () => planToGithub(steps));
   };
   scroll();
 }
 async function planToGithub(steps) {
-  me("계획을 GitHub에도 적어 줘");
-  let r; try { r = await thinking("저장소와 대조하고 있어요", api("/schedule/github", { method: "POST", body: JSON.stringify({ repo: curRepo(), steps: steps.filter((s) => s.kind === "step").map((s) => ({ title: s.title, due: s.due })) }) })); } catch (e) { return fail(e); }
+  me("계획을 GitHub에 적고 사람별로 나눠 줘");
+  let r; try { r = await thinking("저장소와 대조하고 있어요", api("/schedule/github", { method: "POST", body: JSON.stringify({ repo: curRepo(), steps: steps.filter((s) => s.kind === "step").map((s) => ({ title: s.title, due: s.due, note: s.note || "" })) }) })); } catch (e) { return fail(e); }
   if (!r.proposal) return bot(r.message);
-  bot(`단계마다 마감일을 GitHub에 적어 둘게요. 팀원 모두 같은 계획을 보게 돼요.`);
+  bot(`단계마다 GitHub에 마감일과 할 일을 만들고, ${r.solo ? "팀원이 한 명이라 모두 내 일로 맡겨" : "지금 맡은 일이 적은 사람부터 한 단계씩 맡겨"} 둘게요. 승인하면 팀원 모두 GitHub에서 같은 계획과 자기 할 일을 봐요.`);
   approval(r.proposal, (ok) => { if (ok) { loadCalState(); chip("캘린더 보기", () => showTab("cal")); } });
 }
 
@@ -1177,7 +1192,7 @@ function startFound(x) {
   bot(`${x.source_name}에서 찾은 공고예요. 공고를 읽고 마감과 참가 자격을 바로 확인해 드릴게요.`);
   // 화면을 스크립트로 그리는 사이트는 글을 거의 못 읽는다. 그때는 Bento가 이미 아는 정보로 채운다.
   const fallback = [x.title, x.host ? `주최: ${x.host}` : "", x.deadline_text ? `접수: ~ ${x.deadline_text}` : "", x.tags && x.tags.length ? `분류: ${x.tags.join(", ")}` : ""].filter(Boolean).join("\n");
-  noticeForm(null, null, { url: x.url, autoLoad: true, noAi: !x.ai_ok, foundId: x.id, title: x.title, fallback });
+  noticeForm(null, null, { url: x.url, autoLoad: true, noAi: !x.ai_ok, foundId: x.id, title: x.title, fallback, deadline_iso: x.deadline_iso, deadline_text: x.deadline_text });
 }
 function dismissFound(x) { const g = store.get("dismissed", []); g.push(x.id); store.set("dismissed", g.slice(-200)); renderHome(); }
 // 포스터: 화면에 보이는 대회만, 하나씩 차례로 부른다 (서버가 사이트마다 간격을 지킨다)
@@ -1365,7 +1380,7 @@ function noticeUrl() {
   const saved = store.get("noticeUrl:" + projKey(), null);
   const savedOk = saved && typeof saved === "object" ? saved.title === (extract && extract.title) && saved.url : null;
   const url = savedOk || (hit && hit.url) || (typeof saved === "string" && !t ? saved : null);
-  if (url && extract && !extract.source_url) setExtract({ ...extract, source_url: url });
+  if (url && extract && !extract.source_url) setExtract({ ...extract, source_url: url, ...(hit && hit.deadline_iso && !extract.apply_deadline_iso ? { apply_deadline_iso: hit.deadline_iso, apply_deadline: hit.deadline_text || "" } : {}) });
   return url;
 }
 function eligBox(card, membersInput, saved, title) {
@@ -1546,6 +1561,8 @@ async function applyFlow(ex) {
     const done = h("button", "btn" + (url ? "" : " primary"), "신청했어요"); done.type = "button"; c2.appendChild(done);
     c2.appendChild(h("div", "note", "누르면 신청 마감 알림을 멈추고 다음 단계로 넘어가요."));
     done.onclick = () => { done.disabled = true; markDone("apply", ""); };
+    const none = h("button", "link", "이 대회는 따로 신청이 없어요"); none.type = "button"; none.style.alignSelf = "flex-start";
+    none.onclick = () => { none.disabled = done.disabled = true; setExtract({ ...extract, no_apply: true }); markDone("apply", "신청 없음"); }; c2.appendChild(none);
     scroll();
   };
 }
@@ -1591,7 +1608,7 @@ $("composer").addEventListener("submit", (e) => { e.preventDefault(); const t = 
   if (/할일|오늘|뭐부터|리뷰|담당|머지|닫|PR|이슈/i.test(n)) return today();
   me(t); bot("지금은 공고 분석, 오늘 할 일 정리, 제출 점검을 맡을 수 있어요. 아래에서 골라 주세요."); chip("오늘 할 일 정리", today);
 });
-$("plusBtn").onclick = () => { showTab("chat"); notice(); };
+$("plusBtn").onclick = () => { showTab("chat"); openPicks(); };
 $("inviteBtn").onclick = async () => { try { await navigator.clipboard.writeText(location.href); snack("팀원에게 보낼 링크를 복사했어요"); } catch (e) { snack(location.href); } };
 $("menuBtn").onclick = openProjects;
 $("projBtn").onclick = openProjects;
