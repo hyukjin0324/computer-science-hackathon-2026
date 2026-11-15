@@ -159,5 +159,6 @@ def judge(ex: NoticeExtract, answers: dict, url: str | None = None) -> list[dict
         rows.append(_row("주최 측 확인 필요", "warn", f"'{c}' · 공고만으로는 판단하기 어려워요", _ev(c, url),
                          {"label": "주최 측 문의처에 확인하기"}))
     if not r["has_rules"]:
-        rows.append(_row("참가 자격", "warn", "공고에서 참가 자격을 찾지 못했어요 · 주최 측 확인 필요", [], {"label": "주최 측 문의처에 확인하기"}))
+        rows.append(_row("참가 자격", "warn", "공고에서 참가 자격을 찾지 못했어요 · 원문에서 직접 확인하거나 주최 측에 물어봐 주세요",
+                         [{"label": "공고 원문 보기", "url": url}] if url else [], {"label": "주최 측 문의처에 확인하기"}))
     return rows

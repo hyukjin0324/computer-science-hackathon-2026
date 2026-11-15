@@ -844,6 +844,8 @@ def test_eligibility_individual_notice_skips_team_and_flags_unclear():
     assert two["status"] == "fail" and "1명 또는 3명" in two["detail"]
     assert {r["name"]: r for r in el.judge(either, {"team": 3})}["팀 인원"]["status"] == "ok"
     assert el.judge(_elig_ex("", None, None).model_copy(update={"facts": []}), {})[0]["name"] == "참가 자격"
+    none = el.judge(_elig_ex("", None, None).model_copy(update={"facts": []}), {}, "https://x.test/n")[0]
+    assert none["evidence"] == [{"label": "공고 원문 보기", "url": "https://x.test/n"}]
 
 
 def test_apply_check_and_eligibility_endpoint_use_answers():

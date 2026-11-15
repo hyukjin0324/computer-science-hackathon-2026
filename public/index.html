@@ -752,13 +752,14 @@ function noticeForm(target, draft, opts = {}) {
     try {
       const r = await thinking("공고를 읽고 있어요", api("/notice", { method: "POST", body: JSON.stringify({ text: ta.value, repo: target, new_project: !target, no_ai: noAi }) }));
       if (opts.title) r.extract.title = opts.title;  // 찾아온 대회는 이미 아는 제목을 쓴다
+      if (pageUrl) r.extract.source_url = pageUrl;  // 원문 주소는 분석 결과와 같이 다닌다
       if (!target) {
         let dd = draft || drafts.find((x) => x.title === r.extract.title);
         if (!dd) { dd = { id: Date.now().toString(36), at: Date.now() }; drafts.unshift(dd); }
         Object.assign(dd, { title: r.extract.title, extract: r.extract, text: ta.value, url: pageUrl, noAi, found: opts.foundId || dd.found }); saveDrafts();
         useProject({ draft: dd.id }, true);
       } else if (!cur || cur.repo !== target || cur.draft) useProject({ repo: target }, true);
-      if (target && pageUrl) store.set("noticeUrl:" + projKey(), pageUrl);  // 자격 판정 옆에 원문 링크를 붙인다
+      if (target && pageUrl) store.set("noticeUrl:" + projKey(), { url: pageUrl, title: r.extract.title });
       setExtract(r.extract);
       showExtract(r);
     } catch (e) { fail(e); go.disabled = ta.disabled = fb.disabled = url.disabled = false; }
@@ -896,7 +897,7 @@ async function connectTo(d, repo) {
   const info0 = store.get("info:d:" + d.id, null);
   const url0 = d.url;
   drafts.splice(drafts.indexOf(d), 1); saveDrafts();
-  useProject({ repo }, true); if (pl) store.set("plan:" + projKey(), pl); if (info0) store.set("info:" + projKey(), info0); if (url0) store.set("noticeUrl:" + projKey(), url0);
+  useProject({ repo }, true); if (pl) store.set("plan:" + projKey(), pl); if (info0) store.set("info:" + projKey(), info0); if (url0) store.set("noticeUrl:" + projKey(), { url: url0, title: d.title });
   // 신청 기록을 그대로 들고 간다. 아직 신청 전이면 협업으로 넘기지 않는다.
   if (applied) store.set(doneKey("apply"), applied); else store.set("applyTodo:" + projKey(), 1);
   setExtract(r.extract);
@@ -1325,7 +1326,18 @@ const INFO_FIELDS = {
   submit: [["team", "팀명"], ["idea", "한 줄 소개"], ["deploy", "배포 링크 (비우면 README에서 찾아요)"], ["video", "시연 영상 링크"], ["slides", "발표 자료 링크"]],
 };
 function info() { return store.get("info:" + projKey(), {}); }
-function noticeUrl() { const d = curDraft(); return (d && d.url) || store.get("noticeUrl:" + projKey(), null); }
+function noticeUrl() {
+  // 공고 주소는 공고 분석 결과(extract)에 같이 들고 다닌다. 다른 대회 주소가 섞이지 않게 제목으로 한 번 더 확인한다.
+  const d = curDraft(); if (d && d.url) return d.url;
+  if (extract && extract.source_url) return extract.source_url;
+  const t = (extract && extract.title || "").replace(/\s+/g, "");
+  const hit = t ? (lastDiscover && lastDiscover.items ? lastDiscover.items : []).find((x) => { const a = (x.title || "").replace(/\s+/g, ""); return a && (a.includes(t) || t.includes(a)); }) : null;
+  const saved = store.get("noticeUrl:" + projKey(), null);
+  const savedOk = saved && typeof saved === "object" ? saved.title === (extract && extract.title) && saved.url : null;
+  const url = savedOk || (hit && hit.url) || (typeof saved === "string" && !t ? saved : null);
+  if (url && extract && !extract.source_url) setExtract({ ...extract, source_url: url });
+  return url;
+}
 function eligBox(card, membersInput, saved, title) {
   // 이 공고에 필요한 질문만 묻고, 답할 때마다 조건별 판정을 바로 보여 준다 (규칙 · AI 토큰 0)
   const box = h("div", "elig" + (title ? " flat" : "")); box.appendChild(h("b", null, title || "참가 자격 확인")); box.appendChild(h("div", "note", "이 공고에 필요한 것만 물어봐요. 답을 바꾸면 판정이 바로 바뀌어요."));
@@ -1338,6 +1350,7 @@ function eligBox(card, membersInput, saved, title) {
     verdict.innerHTML = ""; const bad = r.rows.filter((x) => x.status === "fail").length; lastFails = bad;
     verdict.appendChild(h("b", null, !r.rows.length ? "이 공고는 따로 확인할 자격 조건이 없어요" : bad ? `${bad}개 조건을 아직 못 채웠어요` : r.rows.some((x) => x.status === "warn") ? "남은 확인이 있어요" : "모든 조건을 채웠어요"));
     r.rows.forEach((x) => verdict.appendChild(crow(x)));
+    const src = noticeUrl(); if (src && !r.rows.some((x) => (x.evidence || []).some((e) => e.url))) verdict.appendChild(evidence([{ label: "공고 원문 보기", url: src }]));
     if (!r.questions.length && !r.rows.length) box.hidden = true;
   };
   const later = () => { clearTimeout(timer); timer = setTimeout(refresh, 150); };
