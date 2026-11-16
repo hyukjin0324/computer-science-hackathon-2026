@@ -335,6 +335,7 @@ textarea { width: 100%; min-height: 80px; resize: vertical; border: 1px solid va
 .arow .meta .kind { font-size: 11.5px; font-weight: 700; padding: 1px 7px; border-radius: 6px; background: var(--surface-2); color: var(--muted); margin-right: 6px; }
 .card.hint { display: flex; flex-direction: column; gap: 8px; } .card.hint .btn { align-self: flex-start; }
 .prow { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: baseline; font-size: 14px; } .prow span { color: var(--muted); font-size: 13px; } .prow .late { color: var(--crit); font-weight: 700; }
+details.teamall summary { gap: 8px; } details.teamall summary .gsub { color: var(--muted); font-weight: 500; font-size: 13px; } details.teamall summary .late { color: var(--crit); font-size: 13px; }
 details.teamall { display: flex; flex-direction: column; gap: 8px; } details.teamall summary { cursor: pointer; font-size: 14px; font-weight: 700; min-height: 40px; display: flex; align-items: center; } details.teamall > a { margin-top: 8px; }
 .arow { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; text-align: left; padding: 12px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); width: 100%; }
 .arow .ai { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 12px; font-weight: 800; line-height: 1.15; text-align: center; word-break: keep-all; }
@@ -1101,18 +1102,20 @@ function kindOf(it) {
 }
 function findTag(f) { return f.sev === "긴급" || /^late:/.test(f.id || "") ? ["늦음", "crit"] : ["곧 마감", "warn"]; }
 function itemTag(it) { return ["확인 필요", it.level >= 1 ? "crit" : "warn"]; }
-function itemRow(it) {
+function itemRow(it, inGroup) {
   // Bento 제안 한 줄 (리뷰어 지정·담당 정하기 등 승인이 필요한 것)
   const b = h("button", "arow"); b.type = "button"; const [tt, tc] = itemTag(it);
   b.appendChild(h("span", "ai " + tc, tt)); const tx = h("span"); tx.appendChild(h("b", null, it.title));
-  const [tl, cls] = turnLabel(it); const meta = h("span", "meta"); meta.appendChild(h("span", "kind", kindOf(it)[0])); meta.appendChild(h("span", "turn " + cls, tl)); tx.appendChild(meta);
+  const [tl, cls] = turnLabel(it); const meta = h("span", "meta"); meta.appendChild(h("span", "kind", kindOf(it)[0]));
+  if (!inGroup) meta.appendChild(h("span", "turn " + cls, tl)); else if (it.age_hours >= 12) meta.appendChild(h("span", "turn", `${Math.floor(it.age_hours)}시간째`));
+  tx.appendChild(meta);
   b.appendChild(tx); b.appendChild(h("span", "chev", "›")); b.onclick = () => { showTab("chat"); openItem(it); }; return b;
 }
 function homeBoard(v, me2, items) {
   // 누구나 다 볼 수 있다. 처음 보이는 건 '내 할 일', 팀 현황은 문제가 있을 때만, 나머지는 '팀 전체'에 접어 둔다.
   const b = lastBoard; const people = b ? b.people || [] : []; const mine = people.find((p) => p.login === me2);
   // 내 할 일엔 '내 차례'인 것만. 팀장이 정할 일(담당·리뷰어)은 늘 그 칸에, '누구나 승인 가능'은 누구나 할 일에
-  const myItems = items.filter((i) => i.id !== heroItem && me2 && i.owner === me2 && kindOf(i)[1] !== "lead" && !(i.level >= 2));
+  const myItems = items.filter((i) => i.id !== heroItem && me2 && i.owner === me2 && kindOf(i)[1] !== "lead");
   const otherItems = items.filter((i) => i.id !== heroItem && !myItems.includes(i));
   const roles = b ? b.roles || {} : {};
   // 역할이 비어 있으면 먼저 안내
@@ -1124,14 +1127,15 @@ function homeBoard(v, me2, items) {
   if (me2) {
     const sh = h("div", "sech"); sh.appendChild(h("h2", null, "내 할 일")); sh.appendChild(h("span", null, roles[me2] || "")); v.appendChild(sh);
     const ts = mine ? mine.tasks : [];
-    myItems.forEach((it) => v.appendChild(itemRow(it)));
+    myItems.forEach((it) => v.appendChild(itemRow(it, true)));
     ts.slice(0, 5).forEach((t) => v.appendChild(taskRow(t)));
     if (!ts.length && !myItems.length) v.appendChild(h("div", "note", b ? "나에게 맡겨진 할 일이 없어요." : "할 일을 불러오고 있어요…"));
     if (ts.length > 5) v.appendChild(h("div", "note", `${ts.length - 5}개 더 있어요 · 팀 전체에서 볼 수 있어요`));
   }
   // 팀장이 정할 일: 담당 정하기 · 리뷰어 지정 · 일이 몰렸을 때 다시 나누기 (누구나 볼 수 있고, 오래 비면 누구나 승인)
-  const leadItems = otherItems.filter((i) => kindOf(i)[1] === "lead");
-  const anyItems = otherItems.filter((i) => kindOf(i)[1] !== "lead");
+  // 팀장 몫(담당·리뷰어 정하기)과, 담당이 정해지지 않은 일은 팀장이 정할 일로. 나머지는 그 사람의 할 일.
+  const leadItems = otherItems.filter((i) => kindOf(i)[1] === "lead" || !i.owner);
+  const byOwner = {}; otherItems.filter((i) => !leadItems.includes(i)).forEach((i) => (byOwner[i.owner] = byOwner[i.owner] || []).push(i));
   const unassigned = b ? b.unassigned || [] : [];
   const lateP = people.filter((p) => p.late > 0);
   if (leadItems.length || unassigned.length || (b && b.rebalance) || lateP.length) {
@@ -1158,19 +1162,19 @@ function homeBoard(v, me2, items) {
       v.appendChild(c);
     }
   }
-  // 누구나 할 일: PR 머지·고치기, 이슈 정리 (종류별로)
-  if (anyItems.length) {
-    const sh = h("div", "sech"); sh.appendChild(h("h2", null, "누구나 할 일")); sh.appendChild(h("span", null, "PR · 이슈")); v.appendChild(sh);
-    const order = ["승인 요청", "PR 머지", "PR 고치기", "이슈 정리", "확인"];
-    anyItems.slice().sort((x, y) => order.indexOf(kindOf(x)[0]) - order.indexOf(kindOf(y)[0])).forEach((it) => v.appendChild(itemRow(it)));
-  }
   if (!b) return;
-  // 팀 전체: 접어 둔다 (팀원 차례인 제안도 여기)
-  const all = people.flatMap((p) => p.tasks.map((t) => ({ t, who: p.login })));
-  if (all.length) {
-    const det = h("details", "teamall"); det.appendChild(h("summary", null, `팀원 할 일 전체 보기 · ${new Set(all.map((x) => x.t.number)).size}개 (GitHub 이슈)`));
-    const seen = new Set(); all.sort((x, y) => (x.t.due || "9").localeCompare(y.t.due || "9")).forEach(({ t, who }) => { const k = t.number + who; if (seen.has(k)) return; seen.add(k); det.appendChild(taskRow(t, who)); });
-    v.appendChild(det);
+  // 팀원 할 일: 사람별로 접어 둔다. 펼치면 그 사람의 PR·이슈 일과 GitHub 할 일
+  const others = (people.length ? people.map((p) => p.login) : Object.keys(byOwner)).filter((m) => m !== me2);
+  const groups = others.map((m) => ({ m, items: byOwner[m] || [], tasks: (people.find((p) => p.login === m) || { tasks: [] }).tasks, late: (people.find((p) => p.login === m) || {}).late || 0 }))
+    .filter((g) => g.items.length || g.tasks.length);
+  if (groups.length) {
+    const sh = h("div", "sech"); sh.appendChild(h("h2", null, "팀원 할 일")); v.appendChild(sh);
+    groups.sort((x, y) => y.late - x.late || (y.items.length + y.tasks.length) - (x.items.length + x.tasks.length)).forEach((g) => {
+      const det = h("details", "teamall"); const sm = h("summary"); sm.appendChild(h("b", null, g.m));
+      sm.appendChild(h("span", "gsub", `${roles[g.m] || "역할 없음"} · ${g.items.length + g.tasks.length}개`)); if (g.late) sm.appendChild(h("span", "late", `늦음 ${g.late}`));
+      det.appendChild(sm); g.items.forEach((it) => det.appendChild(itemRow(it, true))); g.tasks.forEach((t) => det.appendChild(taskRow(t)));
+      v.appendChild(det);
+    });
   }
 }
 function refreshHome() { if (curDraft()) return renderHome(); api("/triage").then((t) => { lastTriage = t; renderHome(); }).catch(() => renderHome()); loadBoard(); }
