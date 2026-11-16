@@ -337,6 +337,24 @@ def fetch_url(body: FetchIn, request: Request, x_bento_code: str | None = Header
         raise HTTPException(422, str(e)) from e
 
 
+class ChatIn(BaseModel):
+    message: str
+    history: list[dict] | None = None  # 이 자유 대화에서 오간 말만 [{role, text}]
+
+
+@app.post("/api/chat")
+def chat_free(body: ChatIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    """정해진 낱말로 못 알아들은 말에 짧게 답하고, 맞는 Bento 기능 하나를 고른다. 실행은 하지 않는다."""
+    from . import chat as chat_mod
+    _check_code(x_bento_code, request)
+    u = current_user(request) if settings.login_enabled else None
+    who = (u or {}).get("login") or (request.client.host if request.client else "anon")
+    try:
+        return chat_mod.ask(body.message, body.history, who=who)
+    except chat_mod.ChatError as e:
+        raise HTTPException(e.status, str(e)) from e
+
+
 class RecheckIn(BaseModel):
     url: str
     base: dict | None = None  # 지난번에 읽은 값 {hash, apply_deadline_iso, submit_deadline_iso}

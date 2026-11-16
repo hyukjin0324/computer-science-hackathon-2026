@@ -1829,8 +1829,22 @@ $("composer").addEventListener("submit", (e) => { e.preventDefault(); const t = 
   if (/공고|대회|신청|^https?:/.test(n)) return notice();
   if (/제출|점검/.test(n)) return submit();
   if (/할일|오늘|뭐부터|리뷰|담당|머지|닫|PR|이슈/i.test(n)) return today();
-  me(t); bot("무슨 뜻인지 정확히 모르겠어요. 지금은 대회 찾기, 신청, 계획 짜기, 오늘 할 일, 진행 점검, 제출 점검, 그리고 '취소'를 알아들어요. 아래에서 골라 주세요."); chip("할 수 있는 일 보기", openPicks);
+  me(t); freeChat(t);
 });
+// 정해진 낱말로 못 알아들은 말: AI 키가 있으면 Claude가 짧게 답하고 맞는 기능을 버튼으로 권한다 (누르기 전엔 실행하지 않는다)
+let chatHist = [];  // 이 자유 대화에서 오간 말만 보낸다. 공고·저장소 내용은 보내지 않는다
+const FREE_ACTIONS = { discover: () => discoverChat(), notice: () => notice(), apply: () => (extract ? applyFlow(extract) : notice()), plan: () => planFlow(), today: () => today(), progress: () => progressCheck(false), submit: () => submit() };
+async function freeChat(t) {
+  const dunno = () => { bot("무슨 뜻인지 정확히 모르겠어요. 지금은 대회 찾기, 신청, 계획 짜기, 오늘 할 일, 진행 점검, 제출 점검, 그리고 '취소'를 알아들어요. 아래에서 골라 주세요."); chip("할 수 있는 일 보기", openPicks); };
+  if (!(H && H.ai)) return dunno();
+  let r;
+  try { r = await thinking("생각하는 중…", api("/chat", { method: "POST", body: JSON.stringify({ message: t.slice(0, 500), history: chatHist.slice(-6) }) })); }
+  catch (e) { bot(e.message || "AI가 답하지 못했어요."); chip("할 수 있는 일 보기", openPicks); return; }
+  if (!r || !r.ai) return dunno();
+  chatHist.push({ role: "user", text: t.slice(0, 500) }, { role: "assistant", text: r.reply }); chatHist = chatHist.slice(-12);
+  bot(r.reply);
+  if (r.action && FREE_ACTIONS[r.action]) chip(r.label || "이어서 하기", FREE_ACTIONS[r.action]); else chip("할 수 있는 일 보기", openPicks);
+}
 $("plusBtn").onclick = () => { showTab("chat"); openPicks(); };
 $("inviteBtn").onclick = async () => { try { await navigator.clipboard.writeText(location.href); snack("팀원에게 보낼 링크를 복사했어요"); } catch (e) { snack(location.href); } };
 $("menuBtn").onclick = openProjects;
@@ -1980,7 +1994,7 @@ function openMe(page) { mePage = page; setTimeout(() => syncNav("me")); try { hi
 const ME_PAGES = {
   connect: ["연결된 서비스", (v) => {
   const c2 = h("div", "card"); c2.appendChild(h("b", null, "연결 상태"));
-  const rows = [["GitHub", H.mode === "live" ? `연결됨 · ${H.repo}` : "데모 저장소 사용 중 (GitHub App 미연결)", H.mode === "live"], ["Claude AI (공고 분석)", H.ai ? "연결됨" : "키 미설정 · 예시 공고만 분석", H.ai], ["디스코드 팀 채널", H.discord ? "연결됨" : "미연결 · 팀 메시지는 복사만 돼요", H.discord], ["팀 접근 코드", H.needs_code ? (store.get("code", "") ? "입력함" : "실행할 때 물어봐요") : "사용 안 함", H.needs_code]];
+  const rows = [["GitHub", H.mode === "live" ? `연결됨 · ${H.repo}` : "데모 저장소 사용 중 (GitHub App 미연결)", H.mode === "live"], ["Claude AI (공고 분석·자유 대화)", H.ai ? "연결됨" : "키 미설정 · 정해진 말만 알아들어요", H.ai], ["디스코드 팀 채널", H.discord ? "연결됨" : "미연결 · 팀 메시지는 복사만 돼요", H.discord], ["팀 접근 코드", H.needs_code ? (store.get("code", "") ? "입력함" : "실행할 때 물어봐요") : "사용 안 함", H.needs_code]];
   rows.forEach(([n, s, on]) => { const r = h("div", "app"); const ic = h("span", "ico", on ? "✓" : "·"); ic.style.background = on ? "var(--ok)" : "var(--surface-2)"; r.appendChild(ic); const tx = h("span"); tx.appendChild(h("b", null, n)); const sm = h("small", null, s); sm.style.display = "block"; sm.style.color = "var(--muted)"; sm.style.fontSize = "13px"; tx.appendChild(sm); r.appendChild(tx); r.appendChild(h("span")); c2.appendChild(r); });
   v.appendChild(c2);
   if (H.mode !== "live") {

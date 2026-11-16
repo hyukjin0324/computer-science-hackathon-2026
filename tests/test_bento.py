@@ -1139,3 +1139,54 @@ def test_notice_recheck_only_alerts_on_deadline_change(monkeypatch):
     r = client.post("/api/notice/recheck", json={"url": "https://example.com/n", "base": first["base"]}).json()
     if first["base"]["submit_deadline_iso"]:
         assert r["changed"] and r["diffs"][0]["label"] == "제출 마감" and "11-27" in r["diffs"][0]["new"]
+
+
+# ---------- 자유 대화 ----------
+from types import SimpleNamespace  # noqa: E402
+
+from app import chat as chat_mod  # noqa: E402
+
+
+class _FakeChatClaude:
+    def __init__(self, text, stop="end_turn"):
+        self.sent = None
+        self.messages = SimpleNamespace(create=self._create)
+        self._text, self._stop = text, stop
+
+    def _create(self, **kw):
+        self.sent = kw
+        return SimpleNamespace(stop_reason=self._stop, model=kw["model"], usage=SimpleNamespace(input_tokens=100, output_tokens=20),
+                               content=[SimpleNamespace(type="text", text=self._text)])
+
+
+def test_chat_without_key_says_not_ready(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    r = client.post("/api/chat", json={"message": "안녕"})
+    assert r.status_code == 200 and r.json() == {"ai": False}
+
+
+def test_chat_returns_reply_and_known_action(monkeypatch):
+    chat_mod._hits.clear()
+    fake = _FakeChatClaude('{"reply": "마감에 맞춰 계획을 짜 드릴게요.", "action": "plan"}')
+    r = chat_mod.ask("이번 주에 뭘 해야 할지 정리해줘", [{"role": "assistant", "text": "앞 답"}, {"role": "user", "text": "전에 한 말"}, {"role": "assistant", "text": "AI 답"}], who="t1", client=fake)
+    assert r == {"ai": True, "reply": "마감에 맞춰 계획을 짜 드릴게요.", "action": "plan", "label": "계획 짜기"}
+    msgs = fake.sent["messages"]
+    assert msgs[0]["role"] == "user" and msgs[-1] == {"role": "user", "content": "이번 주에 뭘 해야 할지 정리해줘"}
+    assert fake.sent["model"] == "claude-haiku-5-5"
+
+
+def test_chat_unknown_action_becomes_none_and_limits(monkeypatch):
+    chat_mod._hits.clear()
+    fake = _FakeChatClaude('{"reply": "음", "action": "merge"}')
+    assert chat_mod.ask("머지해줘", who="t2", client=fake)["action"] == "none"
+    with pytest.raises(chat_mod.ChatError):
+        chat_mod.ask("x" * 501, who="t2", client=fake)
+    monkeypatch.setattr(chat_mod, "PER_HOUR", 1)
+    with pytest.raises(chat_mod.ChatError):
+        chat_mod.ask("또", who="t2", client=fake)
+
+
+def test_chat_refusal_gives_safe_reply():
+    chat_mod._hits.clear()
+    r = chat_mod.ask("이상한 말", who="t3", client=_FakeChatClaude("", stop="refusal"))
+    assert r["ai"] and r["action"] == "none"
