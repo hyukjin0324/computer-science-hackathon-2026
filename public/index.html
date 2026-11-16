@@ -123,6 +123,11 @@ details.history > .bub { margin-top: 8px; }
 details.more summary { cursor: pointer; font-size: var(--fs-small); color: var(--muted); min-height: 32px; display: flex; align-items: center; }
 .journey { background: var(--surface); border: 1.5px solid var(--ink); border-radius: var(--r-card); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
 .journey.pin { position: sticky; top: 0; z-index: 3; box-shadow: 0 6px 18px rgba(0,0,0,.08); }
+/* 위에 붙어 있을 때는 한 줄로 접어서 대화를 가리지 않는다 */
+.journey .j-now { display: none; font-size: var(--fs-small); color: var(--muted); }
+.journey.pin.stuck { padding: 10px 14px; gap: 2px; }
+.journey.pin.stuck .j-steps, .journey.pin.stuck > .note { display: none; }
+.journey.pin.stuck .j-now { display: block; }
 .journey .j-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .journey .j-h b { font-size: var(--fs-body); }
 .j-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
 .j-steps li { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; position: relative; }
@@ -773,11 +778,13 @@ function noticeForm(target, draft, opts = {}) {
     const u = url.value.trim(); if (!/^https?:\/\//i.test(u)) { snack("http로 시작하는 주소를 넣어 주세요"); url.focus(); return false; }
     fb.disabled = true; fb.textContent = "읽는 중";
     try {
-      const r = await api("/notice/fetch", { method: "POST", body: JSON.stringify({ url: u }) });
-      const thin = (r.text || "").length < 200;
+      const r = await api("/notice/fetch", { method: "POST", body: JSON.stringify({ url: u, title: opts.title || null, no_ai: !!noAi }) });
+      const thin = !r.searched && (r.text || "").length < 200;
+      if (r.searched) store.set("noticeSrc:" + r.url, r.sources || []);
       ta.value = thin && opts.fallback ? `${opts.fallback}\n\n${r.text}` : (r.title ? r.title + "\n" : "") + r.text; pageUrl = r.url;
       if (thin && opts.fallback) r.note = "이 사이트는 화면을 스크립트로 그려서 글을 거의 읽지 못했어요. Bento가 찾아온 정보(제목·주최·마감)로 채웠어요.";
       src.hidden = false; src.textContent = `읽어 온 페이지: ${r.title || r.url}${r.truncated ? " · 길어서 앞부분만" : ""}${r.note ? "\n" + r.note : ""}${noAi ? "\n이 사이트 글은 AI에 보내지 않고 규칙으로만 읽어요." : ""}`; src.style.whiteSpace = "pre-line";
+      if (r.searched) src.appendChild(sourceLinks(r.sources));
       return true;
     } catch (e) {
       if (e.status === 401 && e.login) { src.hidden = false; src.textContent = "링크를 불러오려면 GitHub로 로그인해 주세요."; c.appendChild(ghBtn("GitHub로 로그인", false)); }
@@ -1551,7 +1558,8 @@ function info() { return store.get("info:" + projKey(), {}); }
 async function refreshExtract(url) {
   // 공고를 다시 읽어서 지금 분석에 비어 있는 칸만 채운다 (이미 있는 값은 그대로)
   url = url || noticeUrl(); if (!url || !extract) return null;
-  const f = await api("/notice/fetch", { method: "POST", body: JSON.stringify({ url }) });
+  const f = await api("/notice/fetch", { method: "POST", body: JSON.stringify({ url, title: extract.title || null }) });
+  if (f.searched) store.set("noticeSrc:" + url, f.sources || []);
   const r2 = await api("/notice", { method: "POST", body: JSON.stringify({ text: (f.title ? f.title + "\n" : "") + f.text, repo: null, new_project: true }) });
   const n = r2.extract, cur0 = extract, have = new Set((cur0.facts || []).map((x) => x.label));
   const pick = (k) => (cur0[k] == null || cur0[k] === "" ? n[k] : cur0[k]);
@@ -1563,6 +1571,16 @@ async function refreshExtract(url) {
     apply_fields: (cur0.apply_fields || []).length ? cur0.apply_fields : n.apply_fields || [],
     deliverables: (cur0.deliverables || []).length ? cur0.deliverables : n.deliverables || [] };
   setExtract(merged); return merged;
+}
+// AI 웹 검색으로 채운 공고: 어디서 가져온 문장인지 링크로 보여 준다
+function sourceLinks(sources) {
+  const box = h("div", "note"); box.style.marginTop = "6px";
+  box.appendChild(document.createTextNode("검색으로 찾은 출처 · "));
+  (sources || []).slice(0, 4).forEach((x, i) => {
+    if (i) box.appendChild(document.createTextNode(" · "));
+    const a = h("a", null, (x.title || x.url).slice(0, 28) + " ↗"); a.href = x.url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.style.color = "var(--blue)"; box.appendChild(a);
+  });
+  return box;
 }
 function noticeUrl() {
   // 공고 주소는 공고 분석 결과(extract)에 같이 들고 다닌다. 다른 대회 주소가 섞이지 않게 제목으로 한 번 더 확인한다.
@@ -1588,6 +1606,8 @@ function eligBox(card, membersInput, saved, title) {
     verdict.innerHTML = ""; const bad = r.rows.filter((x) => x.status === "fail").length; lastFails = bad;
     verdict.appendChild(h("b", null, !r.rows.length ? "이 공고는 따로 확인할 자격 조건이 없어요" : bad ? `${bad}개 조건을 아직 못 채웠어요` : r.rows.some((x) => x.status === "warn") ? "남은 확인이 있어요" : "모든 조건을 채웠어요"));
     r.rows.forEach((x) => verdict.appendChild(crow(x)));
+    const srcs = store.get("noticeSrc:" + (noticeUrl() || ""), null);
+    if (srcs && srcs.length) { const n = sourceLinks(srcs); n.insertBefore(document.createTextNode("공고 페이지를 직접 못 읽어서 AI가 웹 검색으로 찾은 내용이에요. 공식 원문과 다를 수 있어요. "), n.firstChild); verdict.appendChild(n); }
     // 참가 자격을 못 읽었으면(스크립트로 그리는 사이트 등) 원문 문장을 붙여넣어 판정하게 한다
     if (!locked && r.rows.some((x) => x.name === "참가 자격" && x.status === "warn")) {
       const pid = "eligpaste" + Date.now(); const pl = h("label", "lab", "공고의 참가 자격 문장 붙여넣기"); pl.htmlFor = pid;
@@ -1605,8 +1625,8 @@ function eligBox(card, membersInput, saved, title) {
         };
         verdict.appendChild(rb2);
         // 버튼을 누르기 전에 Bento가 알아서 한 번 다시 읽는다 (같은 공고는 한 번만)
-        const tried = store.get("reread:" + src2, 0);
-        if (!tried) { store.set("reread:" + src2, Date.now()); rb2.onclick(); }
+        const tried = store.get("reread2:" + src2, 0);  // 웹 검색이 생겨서 예전에 실패한 공고도 한 번 더 읽어 본다
+        if (!tried) { store.set("reread2:" + src2, Date.now()); rb2.onclick(); }
       }
       const pb = h("button", "btn", "이 문장으로 판정하기"); pb.type = "button";
       pb.onclick = () => { const t = ta.value.trim(); if (t.length < 4) return ta.focus(); setExtract({ ...extract, facts: [...(extract.facts || []).filter((f) => f.label !== "참가 자격"), { label: "참가 자격", value: t.slice(0, 200), quote: t.slice(0, 200) }] }); qs.innerHTML = ""; refresh(); };
@@ -1682,15 +1702,27 @@ function journey(kind) {
     : [["제출 정보", "Bento가 채워요"], ["제출물 점검", "Bento"], ["팀원 확인", "팀원"], ["직접 제출", "직접"], ["완료 기록", "직접"]];
   document.querySelectorAll(".journey.pin").forEach((x) => x.classList.remove("pin"));
   const ex = extract || {}; const dd = ddays(kind === "apply" ? ex.apply_deadline_iso : ex.submit_deadline_iso);
+  const mark = add(h("div")); mark.style.height = "1px"; mark.setAttribute("aria-hidden", "true");  // 카드가 위에 붙었는지 보는 표시
   const c = add(h("div", "journey pin")); c.setAttribute("role", "group"); c.setAttribute("aria-label", kind === "apply" ? "신청 단계" : "제출 단계");
+  let gap0 = null;  // 붙지 않았을 때 표시와 카드 사이 간격 (대화 칸 사이 여백)
+  const stick = () => {
+    if (!c.isConnected) return document.removeEventListener("scroll", stick, true);
+    const gap = c.getBoundingClientRect().top - mark.getBoundingClientRect().bottom;
+    if (gap0 === null) gap0 = gap;
+    c.classList.toggle("stuck", c.classList.contains("pin") && gap > gap0 + 8);
+  };
+  requestAnimationFrame(() => { gap0 = c.getBoundingClientRect().top - mark.getBoundingClientRect().bottom; });
+  document.addEventListener("scroll", stick, true);
   const hd = h("div", "j-h"); hd.appendChild(h("b", null, `${kind === "apply" ? "신청하기" : "제출하기"}${ex.title ? " · " + ex.title : ""}`)); const st = h("span", "tag"); hd.appendChild(st); c.appendChild(hd);
   const ol = h("ol", "j-steps"); const lis = steps.map(([n, who], i) => { const li = h("li"); li.appendChild(h("i", null, String(i + 1))); const t = h("span"); t.appendChild(h("b", null, n)); t.appendChild(h("small", null, who)); li.appendChild(t); ol.appendChild(li); return li; }); c.appendChild(ol);
   const note = h("div", "note"); c.appendChild(note);
+  const now = h("div", "j-now"); c.appendChild(now);
   const set = (n) => {
     lis.forEach((li, i) => { li.className = i < n ? "done" : i === n ? "now" : ""; li.firstChild.textContent = i < n ? "✓" : String(i + 1); if (i === n) li.setAttribute("aria-current", "step"); else li.removeAttribute("aria-current"); });
     const end = n >= steps.length; st.className = "tag" + (end ? " done" : ""); st.textContent = end ? "완료" : `${n + 1}/${steps.length}`;
     note.textContent = end ? `${kind === "apply" ? "신청" : "제출"}을 마쳤어요.${kind === "apply" ? (curDraft() ? " 다음은 팀 저장소예요." : " 이제 협업 단계예요.") : ""}` : `지금: ${steps[n][0]} · ${steps[n][1] === "직접" ? "이 단계는 직접 해 주세요" : steps[n][1] === "팀원" ? "다른 팀원이 확인해요" : "Bento가 해요"}${dd != null && dd >= 0 ? ` · 마감 D-${dd}` : ""}`;
-    if (end) c.classList.remove("pin");
+    now.textContent = end ? note.textContent : `지금: ${steps[n][0]}${dd == null ? "" : dd > 0 ? " · 마감 D-" + dd : dd === 0 ? " · 오늘 마감" : " · 마감 지남"}`;
+    if (end) { c.classList.remove("pin", "stuck"); }
   };
   set(0); JOURNEY[kind] = { set, n: steps.length }; return JOURNEY[kind];
 }

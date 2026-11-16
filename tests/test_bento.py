@@ -1205,3 +1205,65 @@ def test_chat_button_follows_the_feature_the_reply_recommends():
 def test_notice_uses_cheap_model():
     from app import notice as n
     assert n.MODEL == "claude-haiku-5-5" and n.MODEL in n.PRICE_PER_MTOK
+
+
+# ---------- 못 읽는 공고는 AI 웹 검색으로 ----------
+from app import websearch as ws_mod  # noqa: E402
+
+
+def _cite(url, title, text):
+    return SimpleNamespace(url=url, title=title, cited_text=text)
+
+
+def test_search_corpus_keeps_only_cited_text_from_related_sources():
+    resp = SimpleNamespace(content=[
+        SimpleNamespace(type="text", text="요약", citations=[
+            _cite("https://news.example/jeju", "제주TP 챌린지 개최", "누구나 개인 또는 5인 이하 팀으로 참여할 수 있다."),
+            _cite("https://daker.ai/community/other", "소재연구데이터 해커톤 마감 안내", "신청이 마감되었습니다."),
+        ]),
+        SimpleNamespace(type="text", text="AI가 쓴 문장은 들어가지 않아요", citations=None),
+    ])
+    text, sources = ws_mod.corpus_from(resp, "제주 AI·빅데이터 활용 AI Agent 개발 챌린지", "https://daker.ai/public/hackathons/jeju")
+    assert "누구나 개인 또는 5인 이하" in text and "AI가 쓴 문장" not in text
+    assert "마감되었습니다" not in text and [s["url"] for s in sources] == ["https://news.example/jeju"]
+
+
+def test_search_skips_school_sites():
+    assert not ws_mod.allowed("https://aicollege.knu.ac.kr/bbs/board.php?x=1")
+    assert ws_mod.allowed("https://daker.ai/public/hackathons/x")
+
+
+def test_fetch_falls_back_to_web_search_when_page_is_empty(monkeypatch):
+    monkeypatch.setattr(main, "fetch_notice", lambda url: {"url": url, "title": "DAKER", "text": "DAKER\n", "truncated": False, "note": None, "rendered": False})
+    monkeypatch.setattr(ws_mod, "ready", lambda: True)
+    monkeypatch.setattr(ws_mod, "search_notice", lambda url, title, who="": {"text": f"{title}\n누구나 참가 가능", "sources": [{"url": "https://news.example/a", "title": "기사"}]})
+    r = client.post("/api/notice/fetch", json={"url": "https://daker.ai/public/hackathons/x", "title": "제주 챌린지"}).json()
+    assert r["searched"] and "누구나 참가 가능" in r["text"] and r["sources"][0]["url"] == "https://news.example/a"
+    r2 = client.post("/api/notice/fetch", json={"url": "https://daker.ai/public/hackathons/x", "title": "제주 챌린지", "no_ai": True}).json()
+    assert not r2.get("searched")
+
+
+def test_weekday_follows_the_date():
+    from app.notice import fix_weekdays
+    ex = SAMPLE_EXTRACT.model_copy(update={"apply_deadline": "11월 20일(목) 10:00", "apply_deadline_iso": "2026-11-20T10:00:00+09:00"})
+    assert fix_weekdays(ex).apply_deadline == "11월 20일(금) 10:00"
+
+
+def test_search_asks_again_for_missing_items_and_merges():
+    class Fake:
+        def __init__(self):
+            self.prompts = []
+            self.messages = SimpleNamespace(create=self.create)
+
+        def create(self, **kw):
+            self.prompts.append(kw["messages"][0]["content"])
+            cite = _cite("https://news.example/jeju", "제주 챌린지 개최", "대회 주제는 AI Agent 개발이다.") if len(self.prompts) == 1 else \
+                _cite("https://news.example/jeju2", "제주 챌린지 접수", "누구나 참여할 수 있고 접수는 11월 20일 오전 10시까지다.")
+            return SimpleNamespace(content=[SimpleNamespace(type="text", text="x", citations=[cite])], model="m",
+                                   usage=SimpleNamespace(input_tokens=10, output_tokens=5, server_tool_use=SimpleNamespace(web_search_requests=1)))
+    ws_mod._cache.clear(); ws_mod._hits.clear()
+    fake = Fake()
+    out = ws_mod.search_notice("https://daker.ai/public/hackathons/jeju-test", "제주 AI 챌린지", who="t", client=fake)
+    assert len(fake.prompts) == 2 and "참가 자격" in fake.prompts[1]
+    assert "누구나" in out["text"] and "대회 주제" in out["text"] and out["missing"] == []
+    assert "https://daker.ai/public/hackathons/jeju-test" in ws_mod._cache

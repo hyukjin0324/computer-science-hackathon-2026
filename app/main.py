@@ -325,16 +325,38 @@ def _check_code(code: str | None, request: Request | None = None) -> None:
 
 class FetchIn(BaseModel):
     url: str
+    title: str | None = None  # 이미 아는 대회 이름 (웹 검색할 때 쓴다)
+    no_ai: bool = False  # 출처가 AI 사용을 막아 둔 글이면 웹 검색도 하지 않는다
+
+
+THIN = 200  # 이보다 짧으면 페이지를 거의 못 읽은 것
 
 
 @app.post("/api/notice/fetch")
 def fetch_url(body: FetchIn, request: Request, x_bento_code: str | None = Header(default=None)):
-    """공고 링크에서 본문을 가져온다. 서버가 대신 여는 주소라 로그인이나 팀 접근 코드가 있어야 한다."""
+    """공고 링크에서 본문을 가져온다. 서버가 대신 여는 주소라 로그인이나 팀 접근 코드가 있어야 한다.
+
+    화면을 스크립트로 그리는 사이트라 글을 거의 못 읽었으면, AI 웹 검색으로 출처 문장을 모아 대신 돌려준다.
+    """
+    from . import websearch
     _check_code(x_bento_code, request)
     try:
-        return fetch_notice(body.url)
+        page = fetch_notice(body.url)
     except FetchError as e:
         raise HTTPException(422, str(e)) from e
+    body_text = (page.get("text") or "").replace(page.get("title") or "", "").strip()
+    if len(body_text) < THIN and not body.no_ai and websearch.allowed(page.get("url") or body.url) and websearch.ready():
+        u = current_user(request) if settings.login_enabled else None
+        who = (u or {}).get("login") or (request.client.host if request.client else "anon")
+        try:
+            found = websearch.search_notice(page.get("url") or body.url, body.title or page.get("title"), who=who)
+        except websearch.SearchError as e:
+            page["note"] = str(e)
+            found = None
+        if found:
+            page.update(text=found["text"], searched=True, sources=found["sources"],
+                        note=f"이 페이지는 화면을 스크립트로 그려서 직접 읽지 못했어요. AI가 웹 검색으로 찾은 출처 {len(found['sources'])}곳의 문장으로 채웠어요. 공식 원문과 다를 수 있으니 출처를 확인해 주세요.")
+    return page
 
 
 class ChatIn(BaseModel):

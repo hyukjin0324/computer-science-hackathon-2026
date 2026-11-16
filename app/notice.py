@@ -240,7 +240,7 @@ def extract(text: str, repo_descriptions: list[str] | None = None, allow_ai: boo
     if not allow_ai or not os.getenv("ANTHROPIC_API_KEY"):  # AI 키가 없거나, 출처가 AI 사용을 원하지 않으면 규칙으로 읽는다
         from .rules import rule_extract
         clean, dropped = verify_quotes(rule_extract(text), text)
-        return clean, dropped, "rules", None
+        return fix_weekdays(clean), dropped, "rules", None
     client = anthropic.Anthropic()
     try:
         resp = client.messages.create(
@@ -266,9 +266,31 @@ def extract(text: str, repo_descriptions: list[str] | None = None, allow_ai: boo
     except (json.JSONDecodeError, ValueError) as e:
         raise NoticeError("AI 응답을 읽지 못했어요. 다시 해 주세요") from e
     clean, dropped = verify_quotes(ex, text)
+    clean = fix_weekdays(clean)
     _remember(h, clean)
     return clean, dropped, "claude", usage
 
+
+WEEKDAYS = "월화수목금토일"
+
+
+def fix_text(value: str, ex: "NoticeExtract") -> str:
+    """글 속 'M월 D일(요일)'의 요일을 공고 마감 날짜 기준으로 고친다."""
+    for iso in (ex.apply_deadline_iso, ex.submit_deadline_iso):
+        try:
+            d = datetime.fromisoformat(iso) if iso else None
+        except ValueError:
+            d = None
+        if d:
+            value = re.sub(rf"({d.month}\s*월\s*{d.day}\s*일\s*)\([월화수목금토일]\)", lambda m, d=d: f"{m.group(1)}({WEEKDAYS[d.weekday()]})", value)
+    return value
+
+
+def fix_weekdays(ex: "NoticeExtract") -> "NoticeExtract":
+    """AI가 적은 요일이 날짜와 다르면 날짜 기준으로 고친다 (예: 2026-11-20인데 '(목)' → '(금)')."""
+    upd = {k: fix_text(getattr(ex, k), ex) for k in ("apply_deadline", "submit_deadline") if getattr(ex, k)}
+    upd["facts"] = [f.model_copy(update={"value": fix_text(f.value, ex)}) for f in ex.facts]
+    return ex.model_copy(update=upd)
 
 KEYWORDS = ["README", "배포", "발표", "영상", "보고서", "데모"]
 
