@@ -445,7 +445,8 @@ def test_replan_moves_late_steps_forward_and_keeps_order():
 
 
 def test_progress_finds_late_step_suggests_owner_and_replans():
-    ms = _plan_milestone(1, "계획 · README·배포 정리", -10)  # 10시간 전에 끝났어야 함
+    # 마일스톤은 날짜만 남고 그날 한국 시간 23:59로 본다. 몇 시에 돌려도 확실히 지난 날짜가 되게 36시간 전으로
+    ms = _plan_milestone(1, "계획 · README·배포 정리", -36)
     _plan_milestone(2, "계획 · 발표 자료 완성", 40)
     main._demo.d["issues"][3]["milestone"] = ms  # #13 README 작성 (담당자 없음)
     r = client.post("/api/progress", json={"deadline_iso": (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()}).json()
