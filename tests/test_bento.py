@@ -967,3 +967,24 @@ def test_team_wide_change_needs_someone_other_than_proposer():
     # 작은 일(리뷰어 지정 등)은 혼자 승인해도 된다
     small = next(o["proposal"] for i in client.get("/api/triage", headers=hdr).json()["items"] if i["id"].startswith("review-") for o in i["options"])
     assert client.post("/api/execute", json={"token": small["token"]}, headers=hdr).json()["ok"]
+
+
+def test_board_groups_tasks_per_person_and_suggests_rebalance():
+    import dataclasses
+    st = main.build_state(main._demo)
+    m = st.members
+    b = client.get("/api/board").json()
+    assert {p["login"] for p in b["people"]} == set(m) and "unassigned" in b
+    # 한 사람에게 몰리게: 열린 이슈를 모두 m[0]에게
+    for iss in main._demo.d["issues"]:
+        iss["assignees"] = [{"login": m[0]}]
+    b = client.get("/api/board").json()
+    heavy = next(p for p in b["people"] if p["login"] == m[0])
+    assert heavy["open"] >= 3 and b["rebalance"] and m[0] in b["rebalance"]["why"]
+    labels = [s["label"] for s in b["rebalance"]["proposal"]["steps"]]
+    assert all("넘기기" in l and f"{m[0]} →" in l for l in labels)
+    assert b["rebalance"]["proposal"]["team_wide"]  # 팀 전체 변경: 두 사람 규칙
+    ok = client.post("/api/execute", json={"token": b["rebalance"]["proposal"]["token"]}).json()
+    assert ok["ok"]
+    after = client.get("/api/board").json()
+    assert next(p for p in after["people"] if p["login"] == m[0])["open"] < heavy["open"]

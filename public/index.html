@@ -331,6 +331,8 @@ textarea { width: 100%; min-height: 80px; resize: vertical; border: 1px solid va
 .found.calm button { background: var(--primary); color: var(--primary-ink); }
 .sech { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; }
 .sech h2 { margin: 0; font-size: 17px; font-weight: 800; } .sech span { font-size: 13px; color: var(--muted); }
+.prow { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: baseline; font-size: 14px; } .prow span { color: var(--muted); font-size: 13px; } .prow .late { color: var(--crit); font-weight: 700; }
+details.teamall { display: flex; flex-direction: column; gap: 8px; } details.teamall summary { cursor: pointer; font-size: 14px; font-weight: 700; min-height: 40px; display: flex; align-items: center; } details.teamall > a { margin-top: 8px; }
 .arow { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; text-align: left; padding: 12px 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); width: 100%; }
 .arow .ai { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 12px; font-weight: 800; line-height: 1.15; text-align: center; word-break: keep-all; }
 .arow .ai.crit { background: var(--crit-soft); color: var(--crit); } .arow .ai.warn { background: var(--warn-soft); color: var(--warn); } .arow .ai.ok { background: var(--ok-soft); color: var(--ok); }
@@ -558,7 +560,7 @@ function useProject(next, quiet) {
   if (next.repo) { repo = next.repo; store.set("repo", repo); }
   const d = curDraft();
   extract = d ? d.extract || null : store.get("extract:" + projKey(), null);
-  calState = null; lastTriage = null; lastProgress = null; renderHead(); renderCal(); renderMe(); renderHome();
+  calState = null; lastTriage = null; lastProgress = null; lastBoard = null; renderHead(); renderCal(); renderMe(); renderHome();
   if (!d) { loadCalState(); if (!extract) loadSaved(); }
   const toKey = projKey(); const fresh = fromKey && fromKey !== toKey && !ROOMS[toKey];
   switchRoom(fromKey, toKey); roomKey = toKey;
@@ -1069,9 +1071,55 @@ function turnLabel(it) {
   if (it.owner && it.owner === me2) return ["내 차례", "mine"];
   return [it.owner ? `${it.owner}님 차례${it.level ? ` · ${age}시간째` : ""}` : "팀 확인", ""];
 }
-let lastTriage = null, lastProgress = null, lastChecked = null;
+let lastTriage = null, lastProgress = null, lastChecked = null, lastBoard = null;
+function loadBoard() { if (curDraft() || H.mode === "?") return; api("/board").then((b) => { lastBoard = b; renderHome(); }).catch(() => {}); }
 function fmtTime(d) { return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; }
-function refreshHome() { if (curDraft()) return renderHome(); api("/triage").then((t) => { lastTriage = t; renderHome(); }).catch(() => renderHome()); }
+function taskRow(t, who) {
+  // 할 일 한 줄: 마감 D-day(늦으면 빨간색) · 제목 · 담당
+  const a = h("a", "arow"); a.href = t.url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.style.textDecoration = "none"; a.style.color = "inherit";
+  const dd = t.due ? ddays(t.due) : null;
+  a.appendChild(h("span", "ai " + (t.late ? "crit" : dd != null && dd <= 2 ? "warn" : "ok"), t.late ? "늦음" : dd == null ? "—" : dd === 0 ? "오늘" : `D-${dd}`));
+  const tx = h("span"); tx.appendChild(h("b", null, t.title)); tx.appendChild(h("small", null, `#${t.number}` + (who ? ` · ${who}` : ""))); a.appendChild(tx); a.appendChild(h("span", "chev", "↗"));
+  return a;
+}
+function homeBoard(v, me2) {
+  // 누구나 다 볼 수 있고, 처음 보이는 것만 다르다: 팀원은 '내 할 일', 팀장은 '팀원별 현황'이 먼저
+  const b = lastBoard; const people = b.people || []; const mine = people.find((p) => p.login === me2);
+  const lead = me2 && (b.leads || []).includes(me2) && people.length > 1;
+  if (lead) {
+    const sh = h("div", "sech"); sh.appendChild(h("h2", null, "팀원별 현황")); sh.appendChild(h("span", null, "팀장")); v.appendChild(sh);
+    const c = h("div", "card"); c.style.display = "flex"; c.style.flexDirection = "column"; c.style.gap = "8px";
+    people.slice().sort((x, y) => y.late - x.late || y.open - x.open).forEach((p) => {
+      const r = h("div", "prow"); r.appendChild(h("b", null, p.login + (p.login === me2 ? " (나)" : "")));
+      r.appendChild(h("span", null, `${b.roles[p.login] || "역할 없음"} · ${p.open}개`));
+      const late = h("span", p.late ? "late" : "", p.late ? `늦음 ${p.late}` : "늦음 0"); r.appendChild(late); c.appendChild(r);
+    });
+    if ((b.unassigned || []).length) c.appendChild(h("div", "note", `담당 없는 할 일 ${b.unassigned.length}개`));
+    if (b.rebalance) {
+      c.appendChild(h("div", "note", `일이 몰렸어요 · ${b.rebalance.why}`));
+      const bt = h("button", "btn primary", "다시 나누기"); bt.type = "button";
+      bt.onclick = () => { showTab("chat"); me("일이 몰린 사람 다시 나눠 줘"); bot("역할이 맞고 일이 적은 사람에게 몇 개를 넘길게요. 팀 전체에 영향을 주는 변경이라, 제안한 사람이 아닌 팀원이나 팀장이 승인해야 실행돼요."); approval(b.rebalance.proposal, (ok) => { if (ok) { lastBoard = null; refreshHome(); } }); };
+      c.appendChild(bt);
+    }
+    v.appendChild(c);
+  }
+  if (me2) {
+    const sh = h("div", "sech"); sh.appendChild(h("h2", null, "내 할 일"));
+    sh.appendChild(h("span", null, mine && mine.roles.length ? (b.roles[me2] || "") : "역할 없음")); v.appendChild(sh);
+    const ts = mine ? mine.tasks : [];
+    if (!ts.length) v.appendChild(h("div", "note", "나에게 맡겨진 할 일이 없어요."));
+    ts.slice(0, 5).forEach((t) => v.appendChild(taskRow(t)));
+    if (ts.length > 5) v.appendChild(h("div", "note", `${ts.length - 5}개 더 있어요 · 팀 전체에서 볼 수 있어요`));
+  }
+  // 팀 전체: 접혀 있고, 누구나 펼쳐 볼 수 있다
+  const all = people.flatMap((p) => p.tasks.map((t) => ({ t, who: p.login }))).concat((b.unassigned || []).map((t) => ({ t, who: "담당 없음" })));
+  if (all.length) {
+    const det = h("details", "teamall"); det.appendChild(h("summary", null, `팀 전체 할 일 ${all.length}개 보기`));
+    const seen = new Set(); all.sort((x, y) => (x.t.due || "9").localeCompare(y.t.due || "9")).forEach(({ t, who }) => { const k = t.number + who; if (seen.has(k)) return; seen.add(k); det.appendChild(taskRow(t, who)); });
+    v.appendChild(det);
+  }
+}
+function refreshHome() { if (curDraft()) return renderHome(); api("/triage").then((t) => { lastTriage = t; renderHome(); }).catch(() => renderHome()); loadBoard(); }
 function resumeChat() {
   const box = $("resume"), hist = $("history"); if (!box) return; box.innerHTML = ""; if (hist) hist.innerHTML = "";
   // 지난 대화 (흐리게, 맨 위)
@@ -1166,6 +1214,7 @@ function renderHome() {
     acts().appendChild(btn("진행 점검", false, () => { showTab("chat"); progressCheck(false); }));
   }
   v.appendChild(card);
+  if (!d && lastBoard) homeBoard(v, me2);
   const contestBlock = () => {
   // Bento가 찾아온 대회
     const finds2 = freshFinds().filter((x) => x.id !== heroId);  // 맨 위 카드에 나온 대회는 목록에서 빼기
@@ -2031,7 +2080,7 @@ $("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); 
     if (curDraft()) return;
     // 알림은 지난번에 열었을 때 없던 긴급한 일이 새로 생겼을 때만 잠깐 띄운다.
     try { const lz = await api("/lazy/tick", { method: "POST", body: JSON.stringify({ repo: curRepo() }) }); if (lz.ran && lz.ran.length) bot(`반대가 없어서 팀 규칙에 따라 ${lz.ran.length}개를 실행했어요.`); } catch (e) { /* 규칙이 없거나 읽지 못하면 넘어간다 */ }
-    const t = await api("/triage"); lastTriage = t; lastChecked = new Date(); renderHome(); renderMe();
+    const t = await api("/triage"); lastTriage = t; lastChecked = new Date(); renderHome(); renderMe(); loadBoard();
     const urgent = t.items.filter((i) => i.sev === "긴급");
     const seen = store.get("seen", null);
     store.set("seen", urgent.map((i) => i.id));

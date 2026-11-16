@@ -87,7 +87,7 @@ import contextvars
 
 _ASKER: contextvars.ContextVar[str | None] = contextvars.ContextVar("asker", default=None)
 # 팀 전체에 영향을 주는 변경: 제안한 사람 혼자서는 실행하지 못한다 (팀장이거나 다른 팀원이 승인해야)
-TEAM_WIDE = {"set_roles", "set_team_rules", "update_milestone", "close_issue"}
+TEAM_WIDE = {"set_roles", "set_team_rules", "update_milestone", "close_issue", "reassign_issue"}
 APPROVE_PREFIX = "[승인 요청]"
 
 
@@ -217,6 +217,63 @@ def get_triage(repo: str | None = None):
         it.update(owner=lead, age_hours=0, level=0 if lead else 2, lazy={"eligible": False})
         items.insert(0, it)
     return {"repo": gh.repo, "items": items, "members": st.members, "duty": own.duty(st.members, now), "rules": rules, "roles": st.roles, "leads": st.leads}
+
+
+@app.get("/api/board")
+def board(repo: str | None = None):
+    """홈 화면용: 팀원별 할 일(마감 순)·늦은 일, 담당 없는 일, 일이 몰렸으면 다시 나누기 제안."""
+    import math
+
+    from .actions import ReassignIssue
+    from .state import ms_due
+    gh, st = state_for(repo)
+    now = datetime.now(timezone.utc)
+    due_of = {m.title: ms_due(m.due_on) for m in st.milestones}
+    people = {m: {"login": m, "roles": st.roles.get(m, []), "lead": m in st.leads, "tasks": []} for m in st.members}
+    unassigned, raw = [], {}
+    for i in st.issues:
+        if i.title.startswith(APPROVE_PREFIX):
+            continue
+        due = due_of.get(i.milestone)
+        from .actions import is_suspicious
+        t = {"number": i.number, "title": i.title, "url": i.url, "due": due.isoformat() if due else None, "late": bool(due and due < now), "assignees": i.assignees,
+             "safe": not is_suspicious(i.body)}
+        raw[i.number] = i
+        for who in i.assignees:
+            if who in people:
+                people[who]["tasks"].append(t)
+        if not i.assignees:
+            unassigned.append(t)
+    key = lambda t: (t["due"] is None, t["due"] or "")
+    for p in people.values():
+        p["tasks"].sort(key=key)
+        p["open"], p["late"] = len(p["tasks"]), sum(t["late"] for t in p["tasks"])
+    unassigned.sort(key=key)
+    # 다시 나누기: 평균보다 2개 넘게 많이 맡은 사람(3개 이상)이나 늦은 일이 2개 이상인 사람의 일을, 역할 맞고 한가한 사람에게
+    rebalance, why = None, []
+    if len(st.members) > 1:
+        avg = sum(p["open"] for p in people.values()) / len(people)
+        load = {m: people[m]["open"] for m in people}
+        actions = []
+        for p in sorted(people.values(), key=lambda x: -x["open"]):
+            heavy = p["open"] >= 3 and p["open"] >= avg + 2
+            if not (heavy or p["late"] >= 2):
+                continue
+            give = max(1, p["open"] - math.ceil(avg)) if heavy else 1
+            for t in sorted(p["tasks"], key=lambda t: (not t["late"], key(t)))[:give]:
+                if len(t["assignees"]) != 1 or not t["safe"]:  # 의심스러운 지시가 있는 이슈는 건드리지 않는다
+                    continue
+                to, reason = own.pick_by_role(st.members, st.roles, load, t["title"], skip=[p["login"]])
+                if not to or load[to] + 1 >= load[p["login"]]:
+                    continue
+                load[to] += 1
+                load[p["login"]] -= 1
+                actions.append(ReassignIssue(issue=t["number"], users=[to], expect_assignees=[p["login"]]))
+            why.append(f"{p['login']} 님이 {p['open']}개를 맡고 있어요" + (f" (늦음 {p['late']})" if p["late"] else ""))
+        if actions:
+            rebalance = {"why": " · ".join(why), "proposal": _proposal(gh.repo, "일이 몰린 사람의 할 일 다시 나누기", actions, "rebalance")}
+    return {"repo": gh.repo, "people": list(people.values()), "unassigned": unassigned, "leads": st.leads,
+            "roles": {k: own.role_names(v) for k, v in st.roles.items()}, "rebalance": rebalance}
 
 
 class NoticeIn(BaseModel):

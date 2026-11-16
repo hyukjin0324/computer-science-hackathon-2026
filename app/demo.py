@@ -122,6 +122,8 @@ class DemoGitHub:
         i = self._issue(n)
         if "state" in fields:
             i["state"] = fields["state"]
+        if "assignees" in fields:
+            i["assignees"] = [{"login": u} for u in fields["assignees"]]
         if "milestone" in fields:
             ms = next((m for m in self.d["milestones"] if m["number"] == fields["milestone"]), None)
             i["milestone"] = {"number": ms["number"], "title": ms["title"]} if ms else None

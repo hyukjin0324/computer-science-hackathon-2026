@@ -44,6 +44,14 @@ class AssignIssue(BaseModel):
     expect_assignees: list[str] | None = None  # 제안할 때 본 담당자
 
 
+class ReassignIssue(BaseModel):
+    """할 일을 다른 사람에게 넘기기 (지금 담당자를 바꾼다). 팀 전체에 영향을 주는 변경."""
+    type: Literal["reassign_issue"] = "reassign_issue"
+    issue: int
+    users: list[str]
+    expect_assignees: list[str] = []
+
+
 class CloseIssue(BaseModel):
     type: Literal["close_issue"] = "close_issue"
     issue: int
@@ -87,7 +95,7 @@ class TeamMessage(BaseModel):
     text: str
 
 
-Action = Annotated[Union[RequestReviewers, Comment, CreateIssue, AssignIssue, CloseIssue, CreateMilestone, UpdateMilestone, SetMilestone, SetTeamRules, SetRoles, TeamMessage], Field(discriminator="type")]
+Action = Annotated[Union[RequestReviewers, Comment, CreateIssue, AssignIssue, CloseIssue, CreateMilestone, UpdateMilestone, SetMilestone, SetTeamRules, SetRoles, ReassignIssue, TeamMessage], Field(discriminator="type")]
 ActionList = TypeAdapter(list[Action])
 
 # 승인 화면에서 사람이 고칠 수 있는 글 필드
@@ -157,15 +165,17 @@ def validate(actions: list, state: RepoState) -> list[str]:
                 bad(f"마일스톤 '{a.milestone_title}'이 없어요")
             if a.body and (p := _text_problem(a.body, 5000)):
                 bad(p)
-        elif isinstance(a, (AssignIssue, CloseIssue)):
+        elif isinstance(a, (AssignIssue, CloseIssue, ReassignIssue)):
             iss = state.issue(a.issue)
-            if iss and isinstance(a, AssignIssue) and a.expect_assignees is not None and sorted(iss.assignees) != sorted(a.expect_assignees):
+            if isinstance(a, ReassignIssue) and any(u not in state.members for u in a.users):
+                bad("저장소 팀원에게만 넘길 수 있어요")
+            if iss and isinstance(a, (AssignIssue, ReassignIssue)) and a.expect_assignees is not None and sorted(iss.assignees) != sorted(a.expect_assignees):
                 bad(STALE + f"이슈 #{a.issue} 담당자가 지금은 {', '.join(iss.assignees) or '없음'}이에요")
             if not iss:
                 bad((STALE + f"이슈 #{a.issue}이 이미 닫혔어요") if isinstance(a, CloseIssue) else f"열린 이슈 #{a.issue}이 없어요")
             elif is_suspicious(iss.body):
                 bad(f"이슈 #{a.issue}에는 에이전트에게 하는 의심스러운 지시가 있어서 건드리지 않아요")
-            if isinstance(a, AssignIssue) and not a.users:
+            if isinstance(a, (AssignIssue, ReassignIssue)) and not a.users:
                 bad("담당자가 비어 있어요")
             if isinstance(a, CloseIssue) and (p := _text_problem(a.comment)):
                 bad(p)
@@ -228,6 +238,8 @@ def label(a, discord: bool) -> tuple[str, str]:
         return f"할 일 추가: {a.title}", (f"담당 {', '.join(a.assignees)}" if a.assignees else "담당은 나중에 정해요") + (f" · '{a.milestone_title}'에 넣어요" if a.milestone_title else "")
     if isinstance(a, AssignIssue):
         return f"할 일 #{a.issue}을 {', '.join(a.users)}님에게 맡기기", ""
+    if isinstance(a, ReassignIssue):
+        return f"할 일 #{a.issue}을 {', '.join(a.expect_assignees) or '담당 없음'} → {', '.join(a.users)}님에게 넘기기", "일이 몰린 사람의 일을 나눠요"
     if isinstance(a, CloseIssue):
         return f"할 일 #{a.issue} 닫기", "이유를 댓글로 남겨요 · 다시 열 수 있어요"
     if isinstance(a, CreateMilestone):
@@ -286,6 +298,9 @@ def execute(actions: list, gh, settings, op: str | None = None, by: str | None =
                 url = gh.create_issue(a.title, (a.body or "") + FOOT, a.assignees, milestone_numbers.get(a.milestone_title or "")).get("html_url")
             elif isinstance(a, AssignIssue):
                 gh.add_assignees(a.issue, a.users)
+                url = gh.html(f"/issues/{a.issue}")
+            elif isinstance(a, ReassignIssue):
+                gh.update_issue(a.issue, assignees=a.users)
                 url = gh.html(f"/issues/{a.issue}")
             elif isinstance(a, CloseIssue):
                 gh.comment(a.issue, a.comment + FOOT)
