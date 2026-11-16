@@ -16,7 +16,7 @@ from pydantic import BaseModel, field_validator
 from .actions import CreateIssue, CreateMilestone, SetMilestone, is_suspicious
 from .state import RepoState
 
-MODEL = "claude-opus-5-5"
+MODEL = "claude-haiku-5-5"  # 공고에서 날짜·조건 뽑기는 싼 모델로 충분하다 (인용은 verify_quotes로 원문과 대조)
 
 
 class Fact(BaseModel):
@@ -134,7 +134,7 @@ _CACHE_MAX = 100
 EMBED = re.compile(r"<!-- bento-notice:([0-9a-f]{16}) ([A-Za-z0-9_\-=]+) -->")
 
 # ---------- 사용량 기록 ----------
-PRICE_PER_MTOK = {"claude-opus-5-5": (4.0, 20.0)}  # 입력, 출력 (USD / 100만 토큰)
+PRICE_PER_MTOK = {"claude-haiku-5-5": (0.10, 0.50), "claude-sonnet-5-5": (2.0, 10.0), "claude-opus-5-5": (4.0, 20.0)}  # 입력, 출력 (USD / 100만 토큰)
 USAGE = {"ai_calls": 0, "cache_hits": 0, "input_tokens": 0, "output_tokens": 0, "est_usd": 0.0}
 
 
@@ -243,11 +243,9 @@ def extract(text: str, repo_descriptions: list[str] | None = None, allow_ai: boo
         return clean, dropped, "rules", None
     client = anthropic.Anthropic()
     try:
-        resp = client.beta.messages.create(
+        resp = client.messages.create(
             model=MODEL,
             max_tokens=16000,
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
             output_config={"effort": "low", "format": {"type": "json_schema", "schema": SCHEMA}},
             messages=[{"role": "user", "content": PROMPT.format(notice=text, year=datetime.now().year)}],
         )

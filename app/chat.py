@@ -41,7 +41,10 @@ Bento가 할 수 있는 일:
 - submit: 제출 전 빠진 것 점검
 규칙:
 - 한국어 존댓말로 1~3문장, 쉬운 말로 짧게 답한다.
-- 사용자의 말이 위 기능 중 하나와 맞으면 action에 그 이름을, 아니면 none을 넣는다.
+- 먼저 action을 하나 고른다. 지금 사용자에게 가장 먼저 필요한 기능 하나이고, 맞는 게 없으면 none이다.
+- 답 아래에 그 action이 버튼 하나로 붙는다. 그래서 reply에서 권하는 기능은 고른 action 하나뿐이어야 한다.
+  다른 기능 이름(대회 찾기, 공고 읽기, 신청, 계획 짜기, 오늘 할 일, 진행 점검, 제출 점검)은 reply에 쓰지 않는다.
+- action이 none이 아니면 reply 끝을 그 버튼을 눌러 보라는 말로 맺는다. none이면 기능을 권하지 않는다.
 - Bento는 머지·푸시·코드 수정을 하지 않고, 모든 실행은 사람이 승인한다. 이걸 넘는 일을 해 주겠다고 말하지 않는다.
 - 대회 일정·상금 같은 사실을 지어내지 않는다. 모르면 공고를 붙여 넣거나 대회 찾기를 써 보라고 안내한다.
 - 비밀번호·API 키·개인정보를 달라고 하지 않는다."""
@@ -49,10 +52,10 @@ Bento가 할 수 있는 일:
 SCHEMA = {
     "type": "object",
     "properties": {
+        "action": {"type": "string", "enum": list(ACTIONS)},  # 먼저 고르고, 답은 그 기능에 맞춰 쓴다
         "reply": {"type": "string"},
-        "action": {"type": "string", "enum": list(ACTIONS)},
     },
-    "required": ["reply", "action"],
+    "required": ["action", "reply"],
     "additionalProperties": False,
 }
 
@@ -65,6 +68,27 @@ class ChatError(Exception):
     def __init__(self, message: str, status: int = 400):
         super().__init__(message)
         self.status = status
+
+
+# 답에서 기능을 부르는 말 → 그 기능. 답이 권한 기능과 버튼이 어긋나지 않게 맞춘다.
+MENTION = [
+    ("discover", ("대회 찾기", "대회를 찾", "공모전을 찾", "대회 찾아")),
+    ("notice", ("공고 읽기", "공고를 읽", "공고를 붙여", "공고 주소")),
+    ("apply", ("신청하기", "신청 준비", "신청해")),
+    ("plan", ("계획 짜기", "계획을 짜", "계획을 세", "할 일을 나누")),
+    ("today", ("오늘 할 일",)),
+    ("progress", ("진행 점검", "진행을 점검")),
+    ("submit", ("제출 점검", "제출 전 점검", "제출 전에 점검")),
+]
+
+
+def align(reply: str, action: str) -> str:
+    """답이 기능을 딱 하나 권했는데 버튼과 다르면, 답이 권한 기능으로 버튼을 바꾼다.
+    여러 기능을 말했으면 고른 버튼이 그중 하나일 때만 두고, 아니면 버튼을 붙이지 않는다."""
+    said = [a for a, words in MENTION if any(w in reply for w in words)]
+    if not said or action in said:
+        return action  # 기능 이름을 안 썼거나, 쓴 것 중에 버튼이 있으면 그대로
+    return said[0] if len(said) == 1 else "none"
 
 
 def ready() -> bool:
@@ -112,7 +136,7 @@ def ask(message: str, history=None, who: str = "anon", client=None) -> dict:
     if not ready() and client is None:
         return {"ai": False}
     _allow(who, time.time())
-    client = client or anthropic.Anthropic()
+    client = client or anthropic.Anthropic(timeout=30, max_retries=1)  # 응답이 늦으면 서버를 오래 붙잡지 않는다
     try:
         resp = client.messages.create(
             model=MODEL,
@@ -148,4 +172,5 @@ def ask(message: str, history=None, who: str = "anon", client=None) -> dict:
         raise ChatError("AI 답을 읽지 못했어요. 다시 해 주세요", 503) from e
     action = data.get("action") if data.get("action") in ACTIONS else "none"
     reply = str(data.get("reply") or "").strip()[:600] or "무슨 뜻인지 잘 모르겠어요. 조금만 더 알려 주세요."
+    action = align(reply, action)
     return {"ai": True, "reply": reply, "action": action, "label": ACTIONS[action]}

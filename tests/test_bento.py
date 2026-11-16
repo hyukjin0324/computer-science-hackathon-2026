@@ -200,12 +200,12 @@ class _FakeClaude:
     calls = 0
 
     def __init__(self, *a, **k):
-        self.beta = SimpleNamespace(messages=SimpleNamespace(create=self._create))
+        self.messages = SimpleNamespace(create=self._create)
 
     def _create(self, **kw):
         _FakeClaude.calls += 1
         ex = SAMPLE_EXTRACT.model_copy(update={"title": "AI가 읽은 해커톤"})
-        return SimpleNamespace(stop_reason="end_turn", model="claude-opus-5-5",
+        return SimpleNamespace(stop_reason="end_turn", model=kw["model"],
                                content=[SimpleNamespace(type="text", text=_json.dumps(ex.model_dump(), ensure_ascii=False))],
                                usage=SimpleNamespace(input_tokens=1200, output_tokens=600))
 
@@ -225,7 +225,7 @@ def test_same_notice_is_analyzed_once_and_usage_recorded(fake_ai):
     a = client.post("/api/notice", json={"text": REAL_NOTICE}).json()
     b = client.post("/api/notice", json={"text": REAL_NOTICE + "\n\n"}).json()  # 공백만 다르면 같은 공고
     assert a["source"] == "claude" and b["source"] == "cache" and _FakeClaude.calls == 1
-    assert a["usage"]["input_tokens"] == 1200 and a["usage"]["est_usd"] == round(1200 / 1e6 * 4 + 600 / 1e6 * 20, 5)
+    assert a["usage"]["input_tokens"] == 1200 and a["usage"]["est_usd"] == round(1200 / 1e6 * 0.10 + 600 / 1e6 * 0.50, 5)
     assert b["usage"] is None
     u = client.get("/api/usage").json()
     assert u["ai_calls"] == 1 and u["cache_hits"] == 1
@@ -1190,3 +1190,18 @@ def test_chat_refusal_gives_safe_reply():
     chat_mod._hits.clear()
     r = chat_mod.ask("이상한 말", who="t3", client=_FakeChatClaude("", stop="refusal"))
     assert r["ai"] and r["action"] == "none"
+
+
+def test_chat_button_follows_the_feature_the_reply_recommends():
+    assert chat_mod.align("먼저 대회 찾기로 나갈 대회를 정해 보세요.", "plan") == "discover"
+    assert chat_mod.align("계획 짜기 버튼을 눌러 보세요.", "plan") == "plan"
+    assert chat_mod.align("대회 찾기를 하고, 계획 짜기도 해 보세요.", "submit") == "none"
+    assert chat_mod.align("고마워요!", "none") == "none"
+    chat_mod._hits.clear()
+    fake = _FakeChatClaude('{"action": "plan", "reply": "아직 대회를 못 정했다면 대회 찾기부터 해 보세요."}')
+    assert chat_mod.ask("뭐부터 하지", who="t4", client=fake)["label"] == "대회 찾기"
+
+
+def test_notice_uses_cheap_model():
+    from app import notice as n
+    assert n.MODEL == "claude-haiku-5-5" and n.MODEL in n.PRICE_PER_MTOK
