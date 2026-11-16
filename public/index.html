@@ -365,6 +365,9 @@ details.teamall summary::after { content: '›'; margin-left: auto; color: var(-
 .whoami .opts { display: flex; flex-wrap: wrap; gap: 8px; }
 .turn { font-size: var(--fs-caption); font-weight: 700; padding: 3px 9px; border-radius: var(--r-pill); background: var(--surface-2); color: var(--muted); white-space: nowrap; }
 .turn.mine { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
+/* 근거 칩: 이 제안이 어떤 PR·이슈·공고 문장에서 나왔는지 개수로 (누르면 대화에서 근거 링크가 보여요) */
+.evc { display: inline-flex; align-items: center; gap: 3px; font-size: var(--fs-caption); font-weight: 700; padding: 2px 8px; border-radius: var(--r-pill); box-shadow: inset 0 0 0 1px var(--line); background: var(--surface); color: var(--muted); white-space: nowrap; }
+.bigrow .evc { margin-top: 6px; }
 .turn.open { background: var(--warn-soft); color: var(--warn); }
 .arow .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .found .src { font-size: var(--fs-small); color: #C9CBD0; }
@@ -1153,12 +1156,15 @@ function kindOf(it) {
 function findTag(f) { return f.sev === "긴급" || /^late:/.test(f.id || "") ? ["늦음", "crit"] : ["곧 마감", "warn"]; }
 const SEV = { "긴급": "crit", "주의": "warn", "확인": "info", "정리": "muted", "바로 가능": "ok" };
 function itemTag(it) { return SEV[it.sev] ? [it.sev, SEV[it.sev]] : ["확인 필요", it.level >= 1 ? "crit" : "warn"]; }
+const evCount = (it) => (it.evidence || []).filter((e) => e && e.url).length;
+function evChip(it) { const n = evCount(it); return n ? h("span", "evc", `근거 ${n}건`) : null; }
 function itemRow(it, inGroup) {
   // Bento 제안 한 줄 (리뷰어 지정·담당 정하기 등 승인이 필요한 것)
   const b = h("button", "arow"); b.type = "button"; const [tt, tc] = itemTag(it);
   b.appendChild(h("span", "ai " + tc, tt)); const tx = h("span"); tx.appendChild(h("b", null, it.title));
   const [tl, cls] = turnLabel(it); const meta = h("span", "meta"); meta.appendChild(h("span", "kind", kindOf(it)[0]));
   if (!inGroup) meta.appendChild(h("span", "turn " + cls, tl)); else if (it.age_hours >= 12) meta.appendChild(h("span", "turn", `${Math.floor(it.age_hours)}시간째`));
+  const ec = evChip(it); if (ec) meta.appendChild(ec);
   tx.appendChild(meta);
   b.appendChild(tx); b.appendChild(h("span", "chev", "›")); b.onclick = () => { showTab("chat"); openItem(it); }; return b;
 }
@@ -1305,6 +1311,7 @@ function renderHome() {
   if (top) {
     const tg = finds[0] ? findTag(finds[0]) : itemTag(top); if (!finds[0]) heroItem = top.id;
     lab(tg[0], tg[1]); body.appendChild(h("b", null, top.title)); body.appendChild(h("small", null, top.why));
+    if (!finds[0]) { const ec = evChip(top); if (ec) { ec.style.alignSelf = "flex-start"; body.appendChild(ec); } }
     acts().appendChild(btn(finds[0] ? (lastProgress.proposal || lastProgress.moves.length ? "계획 다시 짜기" : "자세히") : "해결하기", true, () => { $("homeBadge").hidden = true; showTab("chat"); if (finds[0]) { me("늦어진 일 보여 줘"); progressCard(lastProgress, true); } else openItem(top); }));
   } else if (soon.length) {
     const x = soon[0]; const dl = Math.max(0, dleft2(x.deadline_iso)); heroId = x.id;
@@ -1508,7 +1515,7 @@ async function today() {
   const box = add(h("div", "big"));
   items.forEach((it, i) => {
     const b = h("button", "bigrow sev-" + itemTag(it)[1]); b.type = "button"; b.appendChild(h("span", "n", String(i + 1)));
-    const tx = h("span"); const bt = h("b"); bt.appendChild(h("span", "sev " + itemTag(it)[1], itemTag(it)[0])); bt.appendChild(document.createTextNode(it.title)); tx.appendChild(bt); tx.appendChild(h("small", null, it.why)); b.appendChild(tx); b.appendChild(h("span", "chev", "›"));
+    const tx = h("span"); const bt = h("b"); bt.appendChild(h("span", "sev " + itemTag(it)[1], itemTag(it)[0])); bt.appendChild(document.createTextNode(it.title)); tx.appendChild(bt); tx.appendChild(h("small", null, it.why)); { const ec = evChip(it); if (ec) tx.appendChild(ec); } b.appendChild(tx); b.appendChild(h("span", "chev", "›"));
     b.onclick = () => { box.querySelectorAll("button").forEach((x) => (x.disabled = true)); openItem(it); };
     box.appendChild(b);
   });
