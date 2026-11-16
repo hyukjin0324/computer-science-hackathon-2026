@@ -221,6 +221,7 @@ def get_triage(repo: str | None = None):
 
 @app.get("/api/board")
 def board(repo: str | None = None):
+    from .notice import is_submit_act
     """홈 화면용: 팀원별 할 일(마감 순)·늦은 일, 담당 없는 일, 일이 몰렸으면 다시 나누기 제안."""
     import math
 
@@ -242,13 +243,19 @@ def board(repo: str | None = None):
         for who in i.assignees:
             if who in people:
                 people[who]["tasks"].append(t)
-        if not i.assignees:
-            unassigned.append(t)
+        if not i.assignees and t["safe"] and not is_submit_act(re.sub(r"^\[[^\]]*\]\s*", "", i.title)):
+            unassigned.append(t)  # 의심 지시가 있는 이슈·제출 행동은 담당을 나누지 않는다 ('이슈 정리'에서 따로 다룬다)
     key = lambda t: (t["due"] is None, t["due"] or "")
     for p in people.values():
         p["tasks"].sort(key=key)
         p["open"], p["late"] = len(p["tasks"]), sum(t["late"] for t in p["tasks"])
     unassigned.sort(key=key)
+    load0 = {m: people[m]["open"] for m in people}
+    for t in unassigned:  # 담당 없는 할 일: 제목으로 역할을 보고, 그 역할에서 맡은 일이 적은 사람을 추천
+        who, why = own.pick_by_role(st.members, st.roles, load0, t["title"])
+        if who:
+            load0[who] = load0.get(who, 0) + 1
+        t["suggest"] = {"who": who, "role": own.role_names(own.role_codes_for(t["title"])), "why": why}
     # 다시 나누기: 평균보다 2개 넘게 많이 맡은 사람(3개 이상)이나 늦은 일이 2개 이상인 사람의 일을, 역할 맞고 한가한 사람에게
     rebalance, why = None, []
     if len(st.members) > 1:

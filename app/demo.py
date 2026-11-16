@@ -52,9 +52,19 @@ def _seed() -> dict:
         "repo": {"private": False, "default_branch": "main", "homepage": ""},
         "head": "c0ffee1234567890",
         "readme": "# 경대 맛집\n\n## 실행 방법\nnpm install && npm run dev\n\n배포: https://knu-matzip.example.com\n",
-        "comments": {}, "reactions": {}, "labels": {},
+        "comments": {}, "reactions": {}, "labels": _demo_role_labels(),
     }
 
+
+
+
+def _demo_role_labels() -> dict:
+    """예시 팀의 역할표 (팀 승인으로 정해 둔 것처럼). 테스트에서는 BENTO_DEMO_ROLES=0으로 비워 둔다."""
+    import os
+    if os.getenv("BENTO_DEMO_ROLES") == "0":
+        return {}
+    roles = {"jiwoo": "pm", "seoyeon": "fe", "doyoon": "be", "hajun": "ds,pt"}
+    return {f"bento-role:{k}": {"name": f"bento-role:{k}", "color": "C5DEF5", "description": v} for k, v in roles.items()}
 
 class DemoGitHub:
     """GitHub 클래스와 같은 메서드를 가진 메모리 저장소."""
