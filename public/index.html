@@ -1366,11 +1366,12 @@ function renderHome() {
   // Bento가 찾아온 대회
     const finds2 = freshFinds().filter((x) => x.id !== heroId);  // 맨 위 카드에 나온 대회는 목록에서 빼기
     if (finds2.length) {
-      const fh = h("div", "sech"); fh.appendChild(h("h2", null, "새 대회")); const more = h("button", "link", `${freshFinds().length}개 모두 보기`); more.type = "button"; more.onclick = () => { showTab("chat"); discoverChat(); }; fh.appendChild(more); v.appendChild(fh);
+      const fh = h("div", "sech"); fh.appendChild(h("h2", null, "다른 대회")); const more = h("button", "link", `${freshFinds().length}개 모두 보기`); more.type = "button"; more.onclick = () => { showTab("chat"); discoverChat(); }; fh.appendChild(more); v.appendChild(fh);
       finds2.slice(0, 3).forEach((x) => v.appendChild(foundRow(x)));
     }
   };
-  if (!extract) contestBlock();  // 대회를 먼저 정하고 → 저장소 → 협업. 아직 대회가 없으면 찾아온 대회가 먼저
+  // 아직 대회를 안 골랐으면 맨 위 노란 카드('대회 고르기')가 대회 찾기로 이어 주니 목록은 겹쳐서 빼고,
+  // 대회를 고른 뒤에만 '다른 대회'로 보여 준다
   if (extract) contestBlock();
   // 내 대회: 대회마다 대화방이 따로라서, 다른 대회의 급한 일도 홈에서 한눈에 본다
   const others = allProjects().filter((p) => p.key !== projKey() && p.extract);
