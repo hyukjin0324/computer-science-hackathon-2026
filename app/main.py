@@ -901,4 +901,4 @@ def demo_reset():
 @app.get("/")
 def index():
     """로컬 실행용. Vercel에서는 public/index.html을 바로 내보낸다."""
-    return FileResponse("public/index.html")
+    return FileResponse("public/index.html", headers={"Cache-Control": "no-cache"})  # 고친 화면이 바로 보이게
