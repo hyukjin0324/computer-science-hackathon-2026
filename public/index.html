@@ -373,7 +373,7 @@ details.teamall summary::after { content: '›'; margin-left: auto; color: var(-
 .arow b { display: block; font-size: var(--fs-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .arow small { font-size: var(--fs-small); color: var(--muted); }
 .log { display: grid; grid-template-columns: 56px 1fr; row-gap: 8px; font-size: var(--fs-body); }
 .log span:nth-child(odd) { color: var(--muted); font-variant-numeric: tabular-nums; }
-.quick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.quick { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } .quick.one { grid-template-columns: 1fr; }
 .quick button { text-align: left; padding: 14px; border-radius: var(--r-box); background: var(--surface); border: 1px solid var(--line); min-height: 56px; display: flex; flex-direction: column; gap: 2px; }
 .quick b { font-size: var(--fs-body); } .quick small { font-size: var(--fs-small); color: var(--muted); }
 .whoami { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
@@ -1391,12 +1391,18 @@ function renderHome() {
       b.onclick = () => useProject(p.draft ? { draft: p.draft } : { repo: p.repo }); v.appendChild(b);
     });
   }
-  // 바로 맡기기
-  const qh = h("div", "sech"); qh.appendChild(h("h2", null, "바로 맡기기")); v.appendChild(qh);
-  const q = h("div", "quick");
-  [["대회 찾아오기", "학과 공지·해커톤 목록", discoverChat], ["대회 공고 분석", "링크나 본문으로", notice], ["마감까지 계획", "날짜별로 나눠요", planFlow], [d ? "신청 준비" : "제출 전 점검", d ? "조건·폼·증거" : "링크·버전·확인", d ? () => { me("신청할래"); applyFlow(extract); } : submit], ["진행 점검", "늦은 단계 다시 짜기", () => progressCheck(false)]]
-    .forEach(([a, b2, fn]) => { const x = h("button"); x.type = "button"; x.appendChild(h("b", null, a)); x.onclick = () => { showTab("chat"); fn(); }; q.appendChild(x); });
+  // 바로 맡기기: 지금 단계에 맞는 1~2개만 (나머지는 대화창 ＋ 메뉴에 다 있어요)
+  const stq = stageOf(); const subDq = extract ? ddays(extract.submit_deadline_iso) : null;
+  const qa = !extract ? [["공고 링크로 시작", "찾아온 목록에 없는 대회", () => notice(true)]]
+    : stq === 0 ? [["신청 준비", "참가 자격·신청 항목 확인", () => { me("신청할래"); applyFlow(extract); }], ["마감까지 계획", "신청 전에 미리 나눠 보기", planFlow]]
+    : stq >= 3 ? [["새 대회 고르기", "다음 대회 찾기", () => discoverChat("새 대회 준비할래")]]
+    : subDq != null && subDq <= 3 ? [["제출 전 점검", "제출물·저장소·공개 여부", submit], ["진행 점검", "남은 시간에 맞게 다시 짜기", () => progressCheck(false)]]
+    : [["오늘 할 일", "급한 순서대로", today], ["진행 점검", "늦은 단계 다시 짜기", () => progressCheck(false)]];
+  const qh = h("div", "sech"); qh.appendChild(h("h2", null, "바로 맡기기")); qh.appendChild(h("span", null, !extract ? "대회 고르기 전" : stq >= 3 ? "제출 완료" : stq === 0 ? "신청 단계" : subDq != null && subDq <= 3 ? "제출 단계" : "협업 단계")); v.appendChild(qh);
+  const q = h("div", "quick" + (qa.length === 1 ? " one" : ""));
+  qa.forEach(([a, b2, fn]) => { const x = h("button"); x.type = "button"; x.appendChild(h("b", null, a)); x.appendChild(h("small", null, b2)); x.onclick = () => { showTab("chat"); fn(); }; q.appendChild(x); });
   v.appendChild(q);
+  const qn = h("div", "note", "다른 일은 대화창 ＋에서 언제든 맡길 수 있어요"); qn.style.margin = "2px 2px 0"; v.appendChild(qn);
   // 'Bento가 한 일' 기록은 보관함에 있다. 홈에는 Bento가 지켜보고 있다는 한 줄만 남긴다.
   if (lastChecked) { const lc = h("div", "note", `${fmtTime(lastChecked)} 확인${tasks.length ? ` · 실행한 일 ${tasks.length}개는 보관함에` : ""}`); lc.style.textAlign = "center"; lc.style.margin = "6px 0 0"; v.appendChild(lc); }
 }
