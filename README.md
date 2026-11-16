@@ -8,8 +8,8 @@
 | 문서 | 링크 |
 |---|---|
 | 배포 / 데모 | (제출 전에 채우기) |
-| 기능명세서 (Notion) | (제출 전에 채우기) |
-| 프로토타입 (화면 시안) | (제출 전에 채우기) |
+| 기능명세서 (Notion) | https://app.notion.com/p/41a74ed5ffce816c9174e84558855a89 |
+| 프로토타입 (화면 시안) | https://claude.ai/artifact/XYafR8CsNqyoVyFXfvB8Jr |
 | 발표 자료 | (제출 전에 채우기) |
 
 ## 왜 만들었나
