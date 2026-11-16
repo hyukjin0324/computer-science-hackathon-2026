@@ -1,6 +1,6 @@
 """GitHub App으로 저장소를 읽고 쓰는 얇은 클라이언트.
 
-Bento가 쓰는 권한: Contents 읽기, Pull requests·Issues 읽기/쓰기, Checks 읽기.
+Bento가 쓰는 권한: Contents 읽기, Pull requests·Issues 읽기/쓰기, Checks 읽기. (초대 목록은 Administration 읽기가 있어야 보이고, 없으면 그 점검만 건너뛴다)
 머지·푸시에 필요한 Contents 쓰기 권한은 받지 않는다.
 """
 
@@ -109,6 +109,31 @@ class GitHub:
 
     def members(self) -> list[str]:
         return [u["login"] for u in self.api("GET", self._r("/assignees"), params={"per_page": 100})]
+
+    # 팀 상태 신호 읽기: 커밋·활동·초대·파일 목록 (모두 읽기만 한다)
+    def commits(self, branch: str | None = None, since: str | None = None, per_page: int = 50):
+        params = {"per_page": per_page}
+        if branch:
+            params["sha"] = branch
+        if since:
+            params["since"] = since
+        return self.api("GET", self._r("/commits"), params=params)
+
+    def commit(self, sha: str):
+        return self.api("GET", self._r(f"/commits/{sha}"))
+
+    def tree(self, sha: str):
+        r = self.api("GET", self._r(f"/git/trees/{sha}"), params={"recursive": "1"})
+        return [t for t in r.get("tree", []) if t.get("type") == "blob"]
+
+    def events(self):
+        return self.api("GET", self._r("/events"), params={"per_page": 100})
+
+    def invitations(self):
+        return self.api("GET", self._r("/invitations"), params={"per_page": 100})
+
+    def pr_commits(self, n: int):
+        return self.api("GET", self._r(f"/pulls/{n}/commits"), params={"per_page": 100})
 
     # 제출 점검용 읽기 (Contents·Metadata 읽기 권한)
     def repo_info(self):

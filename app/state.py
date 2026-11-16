@@ -38,6 +38,8 @@ class PR:
     files: list[str]
     body: str = ""
     draft: bool = False
+    changes_at: str | None = None  # 아직 풀리지 않은 '수정 요청' 리뷰 시각 (가장 늦은 것)
+    changes_by: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -51,6 +53,7 @@ class Issue:
     url: str
     state: str = "open"
     created_at: str | None = None
+    updated_at: str | None = None
 
 
 @dataclass
@@ -75,6 +78,7 @@ class RepoState:
     file_authors: dict[str, list[str]] = field(default_factory=dict)
     roles: dict[str, list[str]] = field(default_factory=dict)  # 아이디 → 역할 코드 (팀이 승인해서 정한 것)
     leads: list[str] = field(default_factory=list)  # 팀장 (저장소 관리자)
+    signals: dict = field(default_factory=dict)  # PR·이슈 밖의 팀 신호 (signals.collect)
 
     def pr(self, n: int) -> PR | None:
         return next((p for p in self.prs if p.number == n), None)
@@ -105,6 +109,16 @@ def approvals(reviews: list[dict]) -> list[str]:
     return sorted(u for u, s in latest.items() if s == "APPROVED")
 
 
+def changes_requested(reviews: list[dict]) -> tuple[str | None, list[str]]:
+    """리뷰어별 마지막 상태가 '수정 요청'인 것: (가장 늦은 시각, 리뷰어들)."""
+    latest: dict[str, tuple[str, str]] = {}
+    for r in sorted(reviews, key=lambda r: r.get("submitted_at") or ""):
+        if r.get("state") in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED"):
+            latest[r["user"]["login"]] = (r["state"], r.get("submitted_at") or "")
+    asked = {u: at for u, (st, at) in latest.items() if st == "CHANGES_REQUESTED"}
+    return (max(asked.values()) if asked else None), sorted(asked)
+
+
 def ci_status(runs: list[dict], now: datetime) -> tuple[str, float | None]:
     if not runs:
         return "none", None
@@ -129,6 +143,7 @@ def build_state(gh, now: datetime | None = None) -> RepoState:
     for p in gh.open_prs()[:15]:
         n = p["number"]
         reviews = gh.pr_reviews(n)
+        ch_at, ch_by = changes_requested(reviews)
         ci, fail_h = ci_status(gh.check_runs(p["head"]["sha"]), now)
         files = gh.pr_files(n)
         prs.append(PR(
@@ -139,6 +154,7 @@ def build_state(gh, now: datetime | None = None) -> RepoState:
             ci=ci, ci_fail_hours=fail_h,
             mergeable=gh.pr_detail(n).get("mergeable_state"),
             files=files, body=(p.get("body") or "")[:2000], draft=bool(p.get("draft")),
+            changes_at=ch_at, changes_by=ch_by,
         ))
         for f in files[:3]:
             if f not in authors:
@@ -151,7 +167,7 @@ def build_state(gh, now: datetime | None = None) -> RepoState:
         Issue(number=i["number"], title=i["title"], author=i["user"]["login"],
               assignees=[a["login"] for a in i.get("assignees", [])],
               milestone=(i.get("milestone") or {}).get("title"), body=(i.get("body") or "")[:2000], url=i["html_url"],
-              created_at=i.get("created_at"))
+              created_at=i.get("created_at"), updated_at=i.get("updated_at"))
         for i in gh.open_issues()
     ]
     milestones = [Milestone(m["number"], m["title"], m.get("due_on"), m.get("open_issues", 0), m.get("closed_issues", 0), m.get("description") or "") for m in gh.milestones()]
@@ -161,4 +177,9 @@ def build_state(gh, now: datetime | None = None) -> RepoState:
         leads = [m for m in gh.leads() if m in members] if hasattr(gh, "leads") else []
     except Exception:  # noqa: BLE001 - 못 읽으면 팀장 없이
         leads = []
-    return RepoState(gh.repo, now, members, prs, issues, milestones, merged_refs, authors, roles, leads)
+    from .signals import collect
+    try:
+        sig = collect(gh, prs, now)
+    except Exception:  # noqa: BLE001 - 신호를 못 모아도 PR·이슈 판단은 그대로 한다
+        sig = {}
+    return RepoState(gh.repo, now, members, prs, issues, milestones, merged_refs, authors, roles, leads, sig)

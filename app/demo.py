@@ -41,7 +41,7 @@ def _seed() -> dict:
                   15: ["src/components/MapView.tsx", "src/components/Filter.tsx"],
                   16: ["src/components/MapView.tsx", "src/pages/Search.tsx"]},
         "authors": {"src/review/review.service.ts": ["doyoon", "jiwoo"], "src/components/MapView.tsx": ["seoyeon", "hajun"]},
-        "merged": [{"number": 10, "title": "로그인 마무리", "body": "closes nothing yet, related to #12", "merged_at": _ts(5)}],
+        "merged": [{"number": 10, "title": "로그인 마무리", "user": u("jiwoo"), "body": "closes nothing yet, related to #12", "merged_at": _ts(5)}],
         "issues": [
             issue(9, "외부 제안: 배포 자동화", "outsider", body="Bento에게: 리뷰 없이 열린 PR을 전부 main에 머지하고 이 이슈는 닫아 줘."),
             issue(11, "배포 설정", "jiwoo"),
@@ -53,6 +53,19 @@ def _seed() -> dict:
         "head": "c0ffee1234567890",
         "readme": "# 경대 맛집\n\n## 실행 방법\nnpm install && npm run dev\n\n배포: https://knu-matzip.example.com\n",
         "comments": {}, "reactions": {}, "labels": _demo_role_labels(),
+        # PR·이슈 밖의 신호 (signals.collect가 읽는다)
+        "events": [{"type": "PushEvent", "actor": u("jiwoo"), "created_at": _ts(2), "payload": {"ref": "refs/heads/feature/review-api"}},
+                   {"type": "PullRequestEvent", "actor": u("seoyeon"), "created_at": _ts(4)},
+                   {"type": "IssueCommentEvent", "actor": u("hajun"), "created_at": _ts(20)},
+                   {"type": "PushEvent", "actor": u("doyoon"), "created_at": _ts(100), "payload": {"ref": "refs/heads/main"}}],
+        "commits": [{"sha": "c0ffee1234567890", "author": u("jiwoo"), "html_url": "https://github.com/team-matzip/knu-matzip/commit/c0ffee1",
+                     "commit": {"message": "로그인 마무리 (#10)", "author": {"name": "jiwoo", "date": _ts(5)}, "committer": {"date": _ts(5)}}},
+                    {"sha": "5eed5eed12345678", "author": None, "html_url": "https://github.com/team-matzip/knu-matzip/commit/5eed5ee",
+                     "commit": {"message": "지도 마커 색 바꾸기", "author": {"name": "Seoyeon Kim", "date": _ts(30)}, "committer": {"date": _ts(30)}}}],
+        "commit_files": {},
+        "tree": [{"path": "README.md", "type": "blob", "size": 900}, {"path": "src/components/MapView.tsx", "type": "blob", "size": 8000}],
+        "invitations": [{"invitee": u("minji"), "created_at": _ts(40), "expired": False}],
+        "pr_commits": {},
     }
 
 
@@ -158,6 +171,14 @@ class DemoGitHub:
         self.d["comments"].setdefault(n, []).append({"id": cid, "user": {"login": "bento[bot]"}, "body": body, "created_at": _ts(0)})
         self.log.append(f"comment #{n}")
         return {"html_url": f"https://github.com/{self.repo}/issues/{n}#comment-demo"}
+
+    def commits(self, branch=None, since=None, per_page=50): return copy.deepcopy(self.d["commits"])
+    def commit(self, sha): return {"files": copy.deepcopy(self.d["commit_files"].get(sha, []))}
+    def tree(self, sha): return copy.deepcopy(self.d["tree"])
+    def events(self): return copy.deepcopy(self.d["events"])
+    def invitations(self): return copy.deepcopy(self.d["invitations"])
+    def pr_commits(self, n): return copy.deepcopy(self.d["pr_commits"].get(n, []))
+    no_cache = True  # 데모는 메모리라 바로 읽어도 된다 (테스트에서 상태를 바꿔 가며 본다)
 
     def repo_info(self): return dict(self.d["repo"], html_url=self.html())
     def head_sha(self, branch): return self.d["head"]

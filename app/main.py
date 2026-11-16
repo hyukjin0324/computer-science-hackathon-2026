@@ -337,6 +337,43 @@ def fetch_url(body: FetchIn, request: Request, x_bento_code: str | None = Header
         raise HTTPException(422, str(e)) from e
 
 
+class RecheckIn(BaseModel):
+    url: str
+    base: dict | None = None  # 지난번에 읽은 값 {hash, apply_deadline_iso, submit_deadline_iso}
+
+
+@app.post("/api/notice/recheck")
+def notice_recheck(body: RecheckIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    """공고가 바뀌었는지 (하루 한 번). AI를 쓰지 않고 규칙으로만 다시 읽는다.
+
+    같은 규칙으로 읽은 지난번 값과 비교하므로, 처음 분석이 AI였어도 규칙 차이 때문에 '바뀌었다'고 하지 않는다.
+    본문이 바뀌어도 마감이 그대로면 알리지 않는다 (조회수·댓글 같은 변화는 무시).
+    """
+    _check_code(x_bento_code, request)
+    try:
+        page = fetch_notice(body.url)
+    except FetchError as e:
+        raise HTTPException(422, str(e)) from e
+    text = notice_mod.clean_text(page["text"])
+    h = notice_mod.notice_hash(text)
+    from .rules import rule_extract
+    try:
+        ex = rule_extract(text)
+        now_vals = {"apply_deadline_iso": ex.apply_deadline_iso, "submit_deadline_iso": ex.submit_deadline_iso}
+    except Exception:  # noqa: BLE001 - 날짜를 못 읽으면 비교하지 않는다
+        now_vals = {"apply_deadline_iso": None, "submit_deadline_iso": None}
+    cur = {"hash": h, **now_vals}
+    base = body.base or {}
+    if not base.get("hash"):
+        return {"changed": False, "first": True, "base": cur, "diffs": []}
+    diffs = []
+    if h != base["hash"]:
+        for k, label in (("apply_deadline_iso", "신청 마감"), ("submit_deadline_iso", "제출 마감")):
+            if base.get(k) and now_vals[k] and base[k] != now_vals[k]:
+                diffs.append({"field": k, "label": label, "old": base[k], "new": now_vals[k]})
+    return {"changed": bool(diffs), "first": False, "base": cur, "diffs": diffs, "text_changed": h != base["hash"]}
+
+
 class ScheduleIn(BaseModel):
     extract: notice_mod.NoticeExtract
 
@@ -474,6 +511,8 @@ def lazy_tick(repo: str | None, now: datetime | None = None) -> dict:
         if not first or own.level(age) < 1 or not own.lazy_ok(first["actions"], rules):
             continue
         status = own.lazy_status(gh, it, first["actions"], rules, st.members, now)
+        if not status.get("status"):
+            continue  # 번호가 없는 일(팀원 안부 등)은 '반대 없으면 실행'을 쓰지 않는다
         if status["status"] == "none":  # 예고: 지금부터 정한 시간 동안 반대를 받는다
             key = own.key_of(gh.repo, first["actions"])
             gh.comment(status["number"], own.notice_text(owner, first["label"], rules["hours"], key, now))

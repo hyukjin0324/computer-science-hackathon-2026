@@ -988,3 +988,154 @@ def test_board_groups_tasks_per_person_and_suggests_rebalance():
     assert ok["ok"]
     after = client.get("/api/board").json()
     assert next(p for p in after["people"] if p["login"] == m[0])["open"] < heavy["open"]
+
+
+# ---------- PR·이슈 밖의 일 (watch.py) ----------
+from app.demo import DemoGitHub, _ts  # noqa: E402
+from app.state import build_state  # noqa: E402
+from app.signals import key_kinds, secret_file  # noqa: E402
+from app.watch import watch  # noqa: E402
+
+
+def _w(mutate=None):
+    gh = DemoGitHub()
+    if mutate:
+        mutate(gh.d)
+    st = build_state(gh)
+    return {it["id"]: it for it in watch(st)}, st
+
+
+def test_watch_demo_finds_quiet_member_invite_unlinked_selfmerge():
+    w, _ = _w()
+    assert "quiet-doyoon" in w and w["quiet-doyoon"]["who"] == "jiwoo"  # 팀장 몫
+    assert "invite" in w and "minji" in w["invite"]["title"]
+    assert "unlinked" in w and "Seoyeon Kim" in w["unlinked"]["title"]
+    assert "@" not in w["unlinked"]["why"]  # 이메일은 보여 주지 않는다
+    assert "selfmerge-10" in w
+    assert not {"main-ci", "secret", "bigfile", "late-commit"} & set(w)
+
+
+def test_watch_quiet_needs_others_active_and_own_work():
+    def all_quiet(d):
+        for e in d["events"]:
+            e["created_at"] = _ts(200)
+        d["commits"] = []
+    w, _ = _w(all_quiet)
+    assert not any(k.startswith("quiet-") for k in w)  # 팀 전체가 쉬는 중이면 한 사람을 지목하지 않는다
+
+    def no_work(d):
+        for i in d["issues"]:
+            i["assignees"] = [a for a in i["assignees"] if a["login"] != "doyoon"]
+    w, _ = _w(no_work)
+    assert "quiet-doyoon" not in w  # 맡은 일이 없으면 조용해도 괜찮다
+
+
+def test_watch_main_ci_broken():
+    def broken(d):
+        d["checks"][d["head"]] = [{"name": "test", "status": "completed", "conclusion": "failure", "completed_at": _ts(3)}]
+    w, _ = _w(broken)
+    it = w["main-ci"]
+    assert it["sev"] == "긴급" and it["who"] == "jiwoo"
+    assert it["options"][0]["actions"][0].assignees == ["jiwoo"]
+
+
+def test_watch_secret_never_shows_value():
+    key = "ghp_" + "A" * 36
+    def leak(d):
+        d["tree"].append({"path": "backend/.env", "type": "blob", "size": 120})
+        d["tree"].append({"path": ".env.example", "type": "blob", "size": 50})
+        d["commit_files"]["c0ffee1234567890"] = [{"filename": "src/config.ts", "patch": f"@@ -1 +1 @@\n-const t = ''\n+const t = '{key}'"}]
+    w, _ = _w(leak)
+    it = w["secret"]
+    blob = str(it)
+    assert key not in blob and "backend/.env" in it["title"] and ".env.example" not in it["title"]
+    cmds = " ".join(h.get("command", "") for h in it["handoff"] if h)
+    assert "git rm --cached 'backend/.env'" in cmds and "src/config.ts" not in cmds  # 키가 적힌 코드 파일은 지우지 않는다
+    assert "GitHub 토큰" in it["why"] and it["options"] == []  # 공개 댓글로 알리지 않는다
+    assert secret_file("a/.env.local") and not secret_file(".env.sample") and not secret_file("src/env.ts")
+    assert key_kinds("-sk-ant-" + "x" * 30) == [] and key_kinds("+-----BEGIN PRIVATE KEY-----") == ["개인 키"]  # 지운 줄은 안 본다
+
+
+def test_watch_big_files_and_junk_dirs():
+    def heavy(d):
+        d["tree"] += [{"path": "assets/demo.mov", "type": "blob", "size": 48 * 1024 * 1024},
+                      {"path": "web/node_modules/react/index.js", "type": "blob", "size": 100}]
+    w, _ = _w(heavy)
+    it = w["bigfile"]
+    assert "demo.mov (48MB)" in it["title"] and "node_modules/ 폴더" in it["title"]
+    assert "git rm -r --cached node_modules" in it["handoff"][0]["command"]
+
+
+def test_watch_changes_requested_without_new_commit():
+    def asked(d):
+        d["reviews"][14] = [{"user": {"login": "seoyeon"}, "state": "CHANGES_REQUESTED", "submitted_at": _ts(30)}]
+    w, _ = _w(asked)
+    assert "changes-14" in w and w["changes-14"]["who"] == "jiwoo"
+
+    def fixed(d):
+        asked(d)
+        d["pr_commits"][14] = [{"commit": {"committer": {"date": _ts(2)}}}]
+    w, _ = _w(fixed)
+    assert "changes-14" not in w
+
+
+def test_watch_stale_assigned_issue():
+    def old(d):
+        d["issues"].append({"number": 20, "title": "검색 API", "user": {"login": "jiwoo"}, "assignees": [{"login": "hajun"}], "body": "",
+                            "created_at": _ts(200), "updated_at": _ts(100), "milestone": None, "html_url": "https://github.com/x/y/issues/20"})
+    w, _ = _w(old)
+    assert "stale" in w and "#20" in w["stale"]["why"]
+
+    def has_pr(d):
+        old(d)
+        d["prs"][2]["title"] = "검색 화면 (#20)"
+    w, _ = _w(has_pr)
+    assert "stale" not in w  # 이 일을 다루는 PR이 열려 있으면 괜찮다
+
+
+def test_watch_deadline_soon_and_commits_after_deadline():
+    def soon(d):
+        due = (datetime.now(KST) + timedelta(hours=3)).strftime("%Y-%m-%dT23:59:00+09:00")
+        d["milestones"].append({"number": 1, "title": "해커톤 제출", "due_on": (datetime.now(timezone.utc) + timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M:%SZ"), "description": ""})
+    w, st = _w(soon)
+    # 마일스톤 마감은 날짜만 남아서 그날 23:59로 본다. 3시간 뒤가 다음 날로 넘어가면 '곧 마감'이 아닐 수 있다
+    from app.watch import deadline_of
+    left = deadline_of(st) - st.now
+    assert ("deadline-soon" in w) == (left <= timedelta(hours=6))
+
+    def passed(d):
+        d["milestones"].append({"number": 1, "title": "해커톤 제출", "due_on": (datetime.now(timezone.utc) - timedelta(days=2)).strftime("%Y-%m-%dT00:00:00Z"), "description": ""})
+    w, _ = _w(passed)
+    it = w["late-commit"]
+    assert it["sev"] == "긴급" and "jiwoo" in it["why"]
+
+
+def test_triage_includes_watch_items_and_owner():
+    r = client.get("/api/triage").json()
+    ids = {i["id"]: i for i in r["items"]}
+    assert "invite" in ids and ids["invite"]["owner"] == "jiwoo"
+    assert ids["selfmerge-10"]["owner"] == "hajun"
+
+
+def test_plan_adds_midpoint_deadlines_for_slides_and_video():
+    steps = [s["title"] for s in work_plan(SAMPLE_EXTRACT)]
+    if any("발표" in d.name for d in SAMPLE_EXTRACT.deliverables):
+        assert steps.index("발표 자료 초안 공유") < steps.index("발표 자료 완성")
+    if any("영상" in d.name for d in SAMPLE_EXTRACT.deliverables):
+        assert steps.index("시연 시나리오 정하기") < steps.index("시연 영상 촬영")
+    from app.ownership import role_codes_for
+    assert role_codes_for("시연 시나리오 정하기") == ["pt", "ds"]
+
+
+def test_notice_recheck_only_alerts_on_deadline_change(monkeypatch):
+    pages = {"v": "2026 해커톤\n제출 마감: 2026년 11월 24일 12:00\n조회수 10"}
+    monkeypatch.setattr(main, "fetch_notice", lambda url: {"text": pages["v"], "url": url})
+    first = client.post("/api/notice/recheck", json={"url": "https://example.com/n"}).json()
+    assert first["first"] and not first["changed"]
+    pages["v"] = pages["v"].replace("조회수 10", "조회수 99")
+    r = client.post("/api/notice/recheck", json={"url": "https://example.com/n", "base": first["base"]}).json()
+    assert not r["changed"] and r["text_changed"]  # 조회수만 바뀌면 알리지 않는다
+    pages["v"] = pages["v"].replace("11월 24일", "11월 27일")
+    r = client.post("/api/notice/recheck", json={"url": "https://example.com/n", "base": first["base"]}).json()
+    if first["base"]["submit_deadline_iso"]:
+        assert r["changed"] and r["diffs"][0]["label"] == "제출 마감" and "11-27" in r["diffs"][0]["new"]

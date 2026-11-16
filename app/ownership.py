@@ -35,6 +35,8 @@ def _num(item_id: str) -> int | None:
 
 
 def owner_and_age(item: dict, state: RepoState, review_wait_hours: float, now: datetime) -> tuple[str | None, float]:
+    if "age" in item:  # watch.py가 정한 주인(없으면 오늘 당번)과 기다린 시간
+        return (item.get("who") if item.get("who") in state.members else duty(state.members, now)), max(0.0, float(item.get("age") or 0))
     kind, n = item["id"].split("-")[0], _num(item["id"])
     pr = state.pr(n) if n else None
     if kind == "review" and pr:  # 리뷰가 밀려 제일 답답한 사람 = PR 작성자
@@ -144,7 +146,7 @@ ROLES = {"pm": "기획·PM", "fe": "프론트엔드", "be": "백엔드", "ds": "
 ROLE_PREFIX = "bento-role:"
 # 할 일 제목 → 맡을 역할 (위에서부터 먼저 맞는 것)
 _ROLE_RULES = [
-    (r"발표|PPT|슬라이드|피치|시연\s*영상|영상", ["pt", "ds"]),
+    (r"발표|PPT|슬라이드|피치|시연|영상|시나리오", ["pt", "ds"]),
     (r"디자인|UI|UX|화면\s*설계|피그마|figma", ["ds", "fe"]),
     (r"README|배포|서버|API|DB|데이터베이스|백엔드|인프라", ["be"]),
     (r"프론트|화면|페이지|컴포넌트", ["fe"]),

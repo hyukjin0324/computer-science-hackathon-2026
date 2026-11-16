@@ -1017,6 +1017,29 @@ async function planToGithub(steps) {
   approval(r.proposal, (ok) => { if (ok) { loadCalState(); chip("캘린더 보기", () => showTab("cal")); } });
 }
 
+/* ---------- 공고 변경 감지: 하루 한 번 공고를 다시 읽고(규칙만 · AI 0), 마감이 바뀌면 알린다 ---------- */
+async function noticeWatch(force) {
+  const key = projKey(); const url = noticeUrl(); if (!url || !extract) return;
+  const w = store.get("noticeWatch:" + key, null);
+  if (!force && w && Date.now() - w.at < 20 * 36e5) return;
+  let r; try { r = await api("/notice/recheck", { method: "POST", body: JSON.stringify({ url, base: w && w.base }) }); } catch (e) { return; }
+  if (projKey() !== key) return;  // 그사이 다른 대회로 바꿨으면 버린다
+  store.set("noticeWatch:" + key, { at: Date.now(), base: r.base });
+  if (!r.changed) return;
+  const f = (iso) => { const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()} ${fmtTime(d)}`; };
+  bot(`${projName()} 공고가 바뀌었어요.\n` + r.diffs.map((d) => `· ${d.label}: ${f(d.old)} → ${f(d.new)}`).join("\n"));
+  if ($("v-chat").hidden) { $("badge").hidden = false; $("badge").textContent = pending || "!"; }  // 대화 탭에 표시 (승인 대기 수는 그대로)
+  const c = add(h("div", "task")); c.appendChild(h("div", "note", "공고에서 직접 확인하고 반영해 주세요. 반영하면 캘린더 날짜가 바뀌어요."));
+  const rb = h("div", "row-btns"); rb.appendChild(link("공고 다시 보기", url));
+  const yes = h("button", "btn primary", "바뀐 날짜로 고치기"); yes.type = "button";
+  yes.onclick = () => {
+    yes.disabled = true; const ex = { ...extract };
+    r.diffs.forEach((d) => { ex[d.field] = d.new; ex[d.field.replace(/_iso$/, "")] = f(d.new); });
+    setExtract(ex); renderHome(); bot("바뀐 마감을 반영했어요. 계획도 새 날짜에 맞춰 다시 짜 둘까요?"); chip("계획 다시 짜기", planFlow);
+  };
+  rb.appendChild(yes); c.appendChild(rb); scroll();
+}
+
 /* ---------- 진행 점검 → 다시 계획 (에이전트 루프) ---------- */
 function hashText(t) { let x = 0; for (const ch of t) x = (x * 31 + ch.charCodeAt(0)) | 0; return String(x); }
 async function progressCheck(auto) {
@@ -1098,6 +1121,16 @@ function kindOf(it) {
   if (/^merge-/.test(id)) return ["PR 머지", "any"];
   if (/^conflict-|^fix-/.test(id)) return ["PR 고치기", "any"];
   if (/^close-|^flag-/.test(id)) return ["이슈 정리", "any"];
+  if (/^changes-/.test(id)) return ["PR 고치기", "any"];
+  if (/^selfmerge-/.test(id)) return ["머지 뒤 리뷰", "any"];
+  if (id === "main-ci") return ["빌드 고치기", "any"];
+  if (id === "secret") return ["비밀키 정리", "any"];
+  if (/^quiet-/.test(id)) return ["팀원 챙기기", "lead"];
+  if (id === "stale") return ["할 일 진행 확인", "lead"];
+  if (id === "invite") return ["팀원 초대", "lead"];
+  if (id === "bigfile") return ["저장소 정리", "lead"];
+  if (id === "unlinked") return ["계정 설정", "lead"];
+  if (id === "late-commit" || id === "deadline-soon") return ["제출 마감", "lead"];
   return ["확인", "any"];
 }
 function findTag(f) { return f.sev === "긴급" || /^late:/.test(f.id || "") ? ["늦음", "crit"] : ["곧 마감", "warn"]; }
@@ -2116,6 +2149,7 @@ $("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); 
     reminders();
     loadDiscover();  // 학과 게시판·해커톤 목록에서 대회를 먼저 찾아온다 (1시간 캐시)
     if (!curDraft()) setTimeout(() => progressCheck(true), 400);  // 열 때마다 Bento가 먼저 점검한다
+    setTimeout(() => noticeWatch(false), 1500);  // 공고가 바뀌었는지 (하루 한 번)
     const inst = new URLSearchParams(location.search).get("installed");
     if (inst != null) {
       try { history.replaceState(history.state, "", location.pathname + location.hash); } catch (e) { /* 무시 */ }

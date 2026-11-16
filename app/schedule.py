@@ -6,11 +6,14 @@ from .notice import NoticeExtract
 from .rules import KST
 
 # (제출물에 이 말이 있으면, 단계 이름, 마감 전 남겨 둘 비율)
+# 발표자료·영상은 마지막 날 몰아서 하다 터지기 쉬워서, 중간 마감(초안·시나리오)을 하나씩 더 둔다.
 DELIV_STEPS = [
-    (("readme", "배포", "실행"), "README·배포 정리", 0.18),
-    (("기획서", "보고서", "계획서", "제안서"), "기획서·보고서 완성", 0.15),
-    (("발표", "ppt", "슬라이드"), "발표 자료 완성", 0.12),
-    (("영상", "시연", "데모"), "시연 영상 촬영", 0.08),
+    (("readme", "배포", "실행"), "README·배포 정리", 0.18, "공고의 제출물"),
+    (("기획서", "보고서", "계획서", "제안서"), "기획서·보고서 완성", 0.15, "공고의 제출물"),
+    (("발표", "ppt", "슬라이드"), "발표 자료 초안 공유", 0.3, "중간 마감 · 팀이 같이 보고 고칠 시간을 남겨요"),
+    (("발표", "ppt", "슬라이드"), "발표 자료 완성", 0.12, "공고의 제출물"),
+    (("영상", "시연", "데모"), "시연 시나리오 정하기", 0.22, "중간 마감 · 무엇을 어떤 순서로 보여 줄지 정해 두면 촬영이 빨라요"),
+    (("영상", "시연", "데모"), "시연 영상 촬영", 0.08, "공고의 제출물"),
 ]
 
 
@@ -38,9 +41,9 @@ def work_plan(ex: NoticeExtract, now: datetime | None = None) -> list[dict]:
         raw += [("아이디어·역할 확정", _evening(now + span * 0.12, due), "step", "누가 무엇을 맡을지 이슈 담당자로 정해요"),
                 ("핵심 기능 완성 (MVP)", _evening(now + span * 0.5, due), "step", "시연에 꼭 필요한 흐름 하나가 끝까지 돌아가게"),
                 ("기능 마무리·버그 수정", _evening(now + span * 0.72, due), "step", "새 기능은 멈추고 다듬기")]
-    for keys, title, frac in DELIV_STEPS:
-        if any(k in names for k in keys):
-            raw.append((title, _evening(due - span * frac, due), "step", "공고의 제출물"))
+    for keys, title, frac, note in DELIV_STEPS:
+        if any(k in names for k in keys) and (frac < 0.2 or span > timedelta(days=2)):  # 시간이 짧으면 중간 마감은 뺀다
+            raw.append((title, _evening(due - span * frac, due), "step", note))
     raw.append(("최종 점검", due - max(timedelta(hours=3), span * 0.03), "step", "제출물 링크·README·권한(공개 여부) 확인"))
     raw.append(("제출 마감", due, "due", ex.submit_deadline or ""))
     seen, out = set(), []

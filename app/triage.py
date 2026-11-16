@@ -147,6 +147,10 @@ def triage(state: RepoState, review_wait_hours: float = 24) -> list[dict]:
                           "evidence": [{"label": f"이슈 #{i.number}", "url": i.url}],
                           "handoff": [{"label": f"이슈 #{i.number} 직접 확인하기", "url": i.url}], "options": []})
 
+    # 8~. PR·이슈 밖의 일: main 빌드·비밀키·큰 파일·조용한 팀원·초대·수정 요청·혼자 머지·계정 연결·마감
+    from .watch import watch
+    items += watch(state)
+
     for it in items:
         it["handoff"] = [h for h in it.get("handoff", []) if h]
     return sorted(items, key=lambda it: SEV_ORDER.get(it["sev"], 9))
