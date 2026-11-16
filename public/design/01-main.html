@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390">
+<meta charset="utf-8">
+<title>Bento 첫 화면</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#3A3D44}a:hover{color:#17181C}
+.mascot.anim{animation:popout .7s cubic-bezier(.3,1.45,.5,1) both;transform-origin:50% 80%}
+.mascot.anim .c{transform-box:fill-box;transform-origin:center;animation:fillin .4s cubic-bezier(.3,1.4,.5,1) both}
+.mascot.anim .c1{animation-delay:.35s}.mascot.anim .c2{animation-delay:.47s}.mascot.anim .c3{animation-delay:.59s}.mascot.anim .c4{animation-delay:.71s}
+.mascot.anim .face{animation:fadein .25s .85s both}
+.mascot.anim .cheek{animation:blush .5s 1.2s both}
+.mascot.anim .flat{opacity:0;animation:fadeout .2s 1.05s both}
+.mascot.anim .mouth{transform-box:fill-box;transform-origin:50% 0;animation:smile .5s 1.05s cubic-bezier(.3,1.6,.5,1) both}
+.mascot.anim .eye{transform-box:fill-box;transform-origin:center;animation:blink 3.6s 2s infinite}
+.rise{animation:riseup .55s cubic-bezier(.2,.8,.2,1) both}
+@keyframes popout{0%{opacity:0;transform:translateY(40px) scale(.4) rotate(-10deg)}60%{opacity:1;transform:translateY(-6px) scale(1.06) rotate(3deg)}100%{opacity:1;transform:none}}
+@keyframes fillin{from{transform:scale(0)}to{transform:scale(1)}}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+@keyframes fadeout{from{opacity:1}to{opacity:0}}
+@keyframes blush{0%{opacity:0}60%{opacity:1}100%{opacity:.85}}
+@keyframes blink{0%,92%,100%{transform:none}94%{transform:scaleY(.1)}}
+@keyframes riseup{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes smile{0%{opacity:0;transform:scaleY(.15) scaleX(.9)}1%{opacity:1;transform:scaleY(.15) scaleX(.9)}100%{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.mascot.anim,.mascot.anim *,.rise{animation:none!important;opacity:1!important;transform:none!important}.mascot.anim .flat{opacity:0!important}}
+</style>
+<title>Bento 시안 · ① 첫 화면</title>
+<style>html,body{margin:0;padding:0} body{width:390px;min-height:844px}</style>
+</head>
+<body>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #FAFAF7; color: #17181C; font-family: 'Noto Sans KR', system-ui, sans-serif; display: flex; flex-direction: column; padding: 20px 24px 28px">
+  <div style="display: flex; align-items: center; justify-content: space-between; height: 44px">
+    <div style="display: flex; align-items: center; gap: 8px">
+      <svg width="26" height="26" viewBox="0 0 120 120" aria-hidden="true"><rect x="6" y="6" width="108" height="108" rx="30" fill="#17181C"></rect><rect x="18" y="18" width="40" height="40" rx="12" fill="#FFC83D"></rect><rect x="62" y="18" width="40" height="40" rx="12" fill="#FFFFFF"></rect><rect x="18" y="62" width="40" height="40" rx="12" fill="#FFFFFF"></rect><rect x="62" y="62" width="40" height="40" rx="12" fill="#3DBE7A"></rect></svg>
+      <span style="font-weight: 800; font-size: 18px; letter-spacing: -0.3px">Bento</span>
+    </div>
+    <button type="button" style="height: 44px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent; font: inherit; font-size: 15px; font-weight: 600; color: #3A3D44">로그인</button>
+  </div>
+
+  <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 22px">
+    <svg class="mascot anim" width="132" height="132" viewBox="0 0 120 120" role="img" aria-label="Bento 마스코트: 웃는 얼굴의 4칸 도시락"><rect x="6" y="6" width="108" height="108" rx="30" fill="#17181C"></rect><rect class="c c1" x="18" y="18" width="40" height="40" rx="12" fill="#FFC83D"></rect><rect class="c c2" x="62" y="18" width="40" height="40" rx="12" fill="#FFFFFF"></rect><rect class="c c3" x="18" y="62" width="40" height="40" rx="12" fill="#FFFFFF"></rect><rect class="c c4" x="62" y="62" width="40" height="40" rx="12" fill="#3DBE7A"></rect><g class="face"><circle class="eye" cx="75" cy="35" r="3.4" fill="#17181C"></circle><circle class="eye" cx="89" cy="35" r="3.4" fill="#17181C"></circle><path class="flat" d="M75 46 H89" fill="none" stroke="#17181C" stroke-width="2.8" stroke-linecap="round"></path><path class="mouth" d="M74 44 Q82 51 90 44" fill="none" stroke="#17181C" stroke-width="2.8" stroke-linecap="round"></path><circle class="cheek" cx="70" cy="41" r="3" fill="#FFB4A8"></circle><circle class="cheek" cx="94" cy="41" r="3" fill="#FFB4A8"></circle></g></svg>
+    <h1 style="margin: 0; font-size: 34px; line-height: 1.25; font-weight: 800; letter-spacing: -1px"><span class="rise" style="display:block;animation-delay:.55s">Bento,</span><span class="rise" style="display:block;animation-delay:.67s">팀플을 대신</span><span class="rise" style="display:block;animation-delay:.79s">챙겨주는 AI</span></h1>
+    <p class="rise" style="animation-delay:.95s; margin: 0; font-size: 16px; line-height: 1.6; color: #5B5F66; max-width: 290px">공고를 읽고, 계획을 짜고,<br>늦어지면 먼저 알려 드려요.</p>
+    <div style="display: flex; gap: 8px; margin-top: 4px" aria-label="Bento가 돕는 단계">
+      <span class="rise" style="animation-delay:1.10s; padding: 7px 12px; border-radius: 999px; background: #ECEDE8; font-size: 13px; font-weight: 700; color: #3A3D44">신청</span>
+      <span class="rise" style="animation-delay:1.17s; padding: 7px 12px; border-radius: 999px; background: #FFF1C7; font-size: 13px; font-weight: 700; color: #6B4E00">협업</span>
+      <span class="rise" style="animation-delay:1.24s; padding: 7px 12px; border-radius: 999px; background: #ECEDE8; font-size: 13px; font-weight: 700; color: #3A3D44">제출</span>
+      <span class="rise" style="animation-delay:1.31s; padding: 7px 12px; border-radius: 999px; background: #DDF3E6; font-size: 13px; font-weight: 700; color: #17633A">완료</span>
+    </div>
+  </div>
+
+  <div class="rise" style="animation-delay:1.35s; display: flex; flex-direction: column; gap: 10px">
+    <a href="02-home.html" style="height: 56px; border-radius: 999px; background: #17181C; color: #FFFFFF; font-size: 17px; font-weight: 700; display: flex; align-items: center; justify-content: center; text-decoration: none">시작하기</a>
+    <p style="margin: 2px 0 0; font-size: 12.5px; line-height: 1.5; color: #5B5F66; text-align: center">GitHub 저장소 연결은 나중에 해도 돼요</p>
+    <p style="margin: 0; font-size: 12.5px; line-height: 1.5; color: #5B5F66; text-align: center">승인한 일만 실행해요. 머지·푸시·코드 수정은 하지 않아요.</p>
+  </div>
+</div>
+</body>
+</html>

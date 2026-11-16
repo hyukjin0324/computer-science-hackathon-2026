@@ -981,3 +981,13 @@ def demo_reset():
 def index():
     """로컬 실행용. Vercel에서는 public/index.html을 바로 내보낸다."""
     return FileResponse("public/index.html", headers={"Cache-Control": "no-cache"})  # 고친 화면이 바로 보이게
+
+
+@app.get("/design/")
+@app.get("/design/{name}")
+def design_page(name: str = "index.html"):
+    """피그마 가져오기용 시안 (로컬 실행용). Vercel에서는 public/design/을 바로 내보낸다."""
+    path = os.path.join("public", "design", os.path.basename(name))
+    if not name.endswith(".html") or not os.path.isfile(path):
+        raise HTTPException(404, "없는 시안이에요")
+    return FileResponse(path, headers={"Cache-Control": "no-cache"})

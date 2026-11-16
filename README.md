@@ -10,6 +10,7 @@
 | 배포 / 데모 | https://racing-basalt-z9sddsr-mini33392-6593.vercel.app (데모 저장소로 동작, 로그인 없이 체험) |
 | 기능명세서 (Notion) | https://app.notion.com/p/41a74ed5ffce816c9174e84558855a89 |
 | 프로토타입 (화면 시안) | https://claude.ai/artifact/XYafR8CsNqyoVyFXfvB8Jr |
+| 피그마 가져오기용 시안 | https://racing-basalt-z9sddsr-mini33392-6593.vercel.app/design/ (html.to.design 플러그인에 주소를 넣으면 고칠 수 있는 레이어로 들어와요) |
 | 발표 자료 | (제출 전에 채우기) |
 
 ## 왜 만들었나

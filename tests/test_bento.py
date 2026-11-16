@@ -1267,3 +1267,10 @@ def test_search_asks_again_for_missing_items_and_merges():
     assert len(fake.prompts) == 2 and "참가 자격" in fake.prompts[1]
     assert "누구나" in out["text"] and "대회 주제" in out["text"] and out["missing"] == []
     assert "https://daker.ai/public/hackathons/jeju-test" in ws_mod._cache
+
+
+def test_design_pages_for_figma_are_served_safely():
+    assert client.get("/design/").status_code == 200
+    assert client.get("/design/02-home.html").status_code == 200
+    assert client.get("/design/..%2F..%2F.env").status_code == 404
+    assert client.get("/design/nope.html").status_code == 404
