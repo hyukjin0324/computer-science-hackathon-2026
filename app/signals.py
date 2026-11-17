@@ -124,7 +124,11 @@ def collect(gh, prs, now: datetime) -> dict:
                 continue
             author = (m.get("user") or {}).get("login")
             revs = _safe(lambda m=m: gh.pr_reviews(m["number"]), []) or []
-            if not any(r.get("state") == "APPROVED" and (r.get("user") or {}).get("login") != author for r in revs):
+            if any(r.get("state") == "APPROVED" and (r.get("user") or {}).get("login") != author for r in revs):
+                continue
+            # 이미 리뷰를 부탁했으면(Bento가 남긴 댓글) 다시 제안하지 않는다 — 같은 댓글이 두 번 달리지 않게
+            cms = _safe(lambda m=m: gh.issue_comments(m["number"]), []) or []
+            if not any("bento-op:" in (c.get("body") or "") for c in cms):
                 out.append({"number": m["number"], "title": m.get("title", ""), "author": author, "url": m.get("html_url") or gh.html(f"/pull/{m['number']}"), "merged_at": m.get("merged_at")})
         sig["merged_unreviewed"] = out
 

@@ -1368,3 +1368,14 @@ def test_comment_on_recently_merged_pr_is_allowed():
     assert any("#23이 없어요" in e for e in validate(acts, st))  # 머지 기록이 없으면 막는다
     st.merged_numbers = {23}
     assert validate(acts, st) == []
+
+
+def test_selfmerge_not_proposed_again_after_bento_asked():
+    """한 번 리뷰를 부탁한 머지된 PR은 다시 제안하지 않는다 (같은 댓글이 두 번 달리지 않게)"""
+    import app.signals as sg
+    sg._CACHE.clear()
+    def asked(d):
+        d["comments"].setdefault(10, []).append({"body": "@jiwoo 님, 리뷰 부탁해요\n<!-- bento-op:abc-0 -->", "user": {"login": "bento[bot]"}})
+    w, _ = _w(asked)
+    assert "selfmerge-10" not in w
+    sg._CACHE.clear()
