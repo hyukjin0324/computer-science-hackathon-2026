@@ -152,8 +152,8 @@ def validate(actions: list, state: RepoState) -> list[str]:
             if not a.users:
                 bad("리뷰어가 비어 있어요")
         elif isinstance(a, Comment):
-            if not state.pr(a.number) and not state.issue(a.number):
-                bad(f"열린 PR이나 이슈 #{a.number}이 없어요")
+            if not state.pr(a.number) and not state.issue(a.number) and a.number not in getattr(state, "merged_numbers", set()):
+                bad(f"열린 PR이나 이슈 #{a.number}이 없어요")  # 최근 머지된 PR에는 '머지 뒤 리뷰 부탁' 댓글을 달 수 있다
             if p := _text_problem(a.body):
                 bad(p)
         elif isinstance(a, CreateIssue):

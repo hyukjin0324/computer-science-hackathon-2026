@@ -79,6 +79,7 @@ class RepoState:
     roles: dict[str, list[str]] = field(default_factory=dict)  # 아이디 → 역할 코드 (팀이 승인해서 정한 것)
     leads: list[str] = field(default_factory=list)  # 팀장 (저장소 관리자)
     signals: dict = field(default_factory=dict)  # PR·이슈 밖의 팀 신호 (signals.collect)
+    merged_numbers: set[int] = field(default_factory=set)  # 최근 머지된 PR (머지 뒤 리뷰 부탁 댓글은 여기에 단다)
 
     def pr(self, n: int) -> PR | None:
         return next((p for p in self.prs if p.number == n), None)
@@ -174,7 +175,9 @@ def build_state(gh, now: datetime | None = None) -> RepoState:
             if f not in authors:
                 authors[f] = gh.file_authors(f)
     merged_refs: dict[int, int] = {}
+    merged_numbers: set[int] = set()
     for mp in gh.merged_prs():
+        merged_numbers.add(mp["number"])
         for ref in closing_refs(f"{mp['title']}\n{mp.get('body') or ''}"):
             merged_refs.setdefault(ref, mp["number"])
     issues = [
@@ -196,4 +199,6 @@ def build_state(gh, now: datetime | None = None) -> RepoState:
         sig = collect(gh, prs, now)
     except Exception:  # noqa: BLE001 - 신호를 못 모아도 PR·이슈 판단은 그대로 한다
         sig = {}
-    return RepoState(gh.repo, now, members, prs, issues, milestones, merged_refs, authors, roles, leads, sig)
+    st = RepoState(gh.repo, now, members, prs, issues, milestones, merged_refs, authors, roles, leads, sig)
+    st.merged_numbers = merged_numbers
+    return st
