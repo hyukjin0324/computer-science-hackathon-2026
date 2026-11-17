@@ -1198,6 +1198,7 @@ def test_chat_button_follows_the_feature_the_reply_recommends():
     assert chat_mod.align("계획 짜기 버튼을 눌러 보세요.", "plan") == "plan"
     assert chat_mod.align("대회 찾기를 하고, 계획 짜기도 해 보세요.", "submit") == "none"
     assert chat_mod.align("고마워요!", "none") == "none"
+    assert chat_mod.align("저는 Bento예요. 대회 찾기, 계획 짜기 등을 도와요.", "none") == "none"  # 자기소개에는 버튼 없음
     chat_mod._hits.clear()
     fake = _FakeChatClaude('{"action": "plan", "reply": "아직 대회를 못 정했다면 대회 찾기부터 해 보세요."}')
     assert chat_mod.ask("뭐부터 하지", who="t4", client=fake)["label"] == "대회 찾기"
@@ -1379,3 +1380,27 @@ def test_selfmerge_not_proposed_again_after_bento_asked():
     w, _ = _w(asked)
     assert "selfmerge-10" not in w
     sg._CACHE.clear()
+
+
+def test_named_owner_in_issue_title():
+    from app.ownership import named_owner
+    m = ["hyukjin0324", "dlfdu", "mango767"]
+    assert named_owner("[팀장] 제출 준비 (담당: hyukjin)", m) == "hyukjin0324"
+    assert named_owner("[디자인] 캘린더 (담당: 김일여)", m, {"dlfdu": "Ilyeo Kim / 김일여"}) == "dlfdu"
+    assert named_owner("[디자인] 홈 (담당: B)", m) == "?"  # 누군지 모르면 마음대로 나누지 않는다
+    assert named_owner("[백엔드] 데모 데이터 문제", m) is None
+    assert named_owner("[팀장] 제출 준비와 마감 점검 (담당: 혁진)", m, leads=["hyukjin0324"]) == "hyukjin0324"
+
+
+def test_bulk_assign_skips_named_and_drops_comment_spam():
+    from app.state import RepoState, Issue
+    from app.triage import triage
+    iss = [Issue(number=n, title=t, author="a", assignees=[], milestone=None, body="", url=f"u{n}")
+           for n, t in [(1, "[디자인] 홈 (담당: B)"), (2, "[팀장] 마감 점검 (담당: mango)"), (3, "할 일 3"), (4, "할 일 4"), (5, "할 일 5"), (6, "할 일 6")]]
+    st = RepoState("o/r", NOW, ["hyukjin0324", "dlfdu", "mango767"], [], iss, [])
+    it = next(i for i in triage(st) if i["id"] == "assign")
+    acts = it["options"][0]["actions"]
+    assert {(a.issue, tuple(a.users)) for a in acts if a.type == "assign_issue"} >= {(2, ("mango767",))}
+    assert not any(a.type == "assign_issue" and a.issue == 1 for a in acts)  # '담당: B'는 빼고
+    assert not any(a.type == "comment" for a in acts)  # 여러 개면 댓글은 안 단다
+    assert "직접 정해 주세요" in it["options"][0]["sub"]

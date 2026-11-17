@@ -208,3 +208,29 @@ def pick_by_role(members: list[str], roles: dict, load: dict, title: str, skip=(
         who = min(pool, key=lambda m: (load.get(m, 0), m))
         return who, "맡은 일이 가장 적어요"
     return None, ""
+
+
+_NAMED = re.compile(r"담당\s*[:：]\s*([^)\]\n]+)")
+
+
+def named_owner(title: str, members: list[str], names: dict[str, str] | None = None, leads: list[str] | None = None) -> str | None:
+    """이슈 제목에 '(담당: 혁진)'처럼 담당이 적혀 있으면 그 사람.
+
+    - 아이디나 GitHub 프로필 이름에 맞는 팀원이 있으면 그 아이디
+    - 적혀 있지만 누군지 모르면(A·B·발표·전원·한글 이름) '?' → Bento가 마음대로 나누지 않는다
+    - 안 적혀 있으면 None
+    """
+    m = _NAMED.search(title or "")
+    if not m:
+        return None
+    names = names or {}
+    for tok in re.split(r"[,+/·\s]+", m.group(1)):
+        t = tok.strip().lower()
+        if len(t) < 2:
+            continue
+        for login in members:
+            if t == login.lower() or (len(t) >= 3 and login.lower().startswith(t)) or t in (names.get(login) or "").lower():
+                return login
+    if leads and (title or "").startswith("[팀장]") and leads[0] in members:
+        return leads[0]  # '[팀장] … (담당: 혁진)'처럼 팀장 몫으로 적힌 일은 팀장에게
+    return "?"

@@ -115,6 +115,7 @@ details.history > .bub { margin-top: 8px; }
 .pick { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; text-align: left; padding: 12px 8px; border-radius: var(--r-box); min-height: 64px; }
 .pick:hover { background: var(--surface-2); }
 .linkbtn { background: none; border: 0; padding: 4px 2px; font: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.task.folded > :not(.task-h) { display: none; }  /* 취소한 승인: 제목·'취소함'만 대화에 남긴다 */
 .btn.upfile { display: inline-flex; align-items: center; justify-content: center; gap: 8px; align-self: flex-start; }
 .pick .em { width: 40px; height: 40px; border-radius: var(--r-badge); background: var(--surface); border: 1px solid var(--line); color: var(--ink); display: grid; place-items: center; }
 .pick b { display: block; font-size: var(--fs-body); } .pick small { color: var(--muted); font-size: var(--fs-small); }
@@ -605,6 +606,7 @@ function moveRoom(from, to) {
   const l = store.get("log:" + from, null); if (l) store.set("log:" + to, [...store.get("log:" + to, []), ...l].slice(-12));
   if (roomKey === from) roomKey = to;
 }
+let booted = false;  // 처음 열 때는 아래 시작 코드가 할 일을 한꺼번에 부른다
 function useProject(next, quiet) {
   const fromKey = roomKey || (cur ? projKey() : null);
   cur = next; store.set("cur", cur);
@@ -612,7 +614,7 @@ function useProject(next, quiet) {
   const d = curDraft();
   extract = d ? d.extract || null : store.get("extract:" + projKey(), null);
   calState = null; lastTriage = null; lastProgress = null; lastBoard = null; renderHead(); renderCal(); renderMe(); renderHome();
-  if (!d) { loadCalState(); if (!extract) loadSaved(); }
+  if (!d) { loadCalState(); if (!extract) loadSaved(); if (booted) refreshHome(); }  // 다른 팀플로 바꾸면 할 일을 다시 읽는다 (안 그러면 '불러오는 중'에 머문다)
   const toKey = projKey(); const fresh = fromKey && fromKey !== toKey && !ROOMS[toKey];
   switchRoom(fromKey, toKey); roomKey = toKey;
   if ($("resume") && (quiet || fresh)) resumeChat();
@@ -785,7 +787,7 @@ function approval(proposal, onDone) {
   const lock = () => { if (later.isConnected) later.remove(); go.disabled = no.disabled = true; tas.forEach((t) => (t.disabled = true)); boxes.forEach((b) => (b.disabled = true)); };
   // 실행이 시작되면 체크박스 자리를 진행 표시(빈칸 → 실행 중 → ✓)로 바꾼다
   const toDots = () => boxes.forEach((b, i) => { const d = h("span", "dot", b.checked ? "" : "–"); b.replaceWith(d); if (!b.checked) lis[i].lastChild.appendChild(h("small", null, "건너뜀")); });
-  no.onclick = () => { lock(); setBadge(-1); tg.textContent = "취소함"; tg.className = "tag skip"; toChat(); bot("알겠어요. 취소했어요."); if (onDone) onDone(false); };
+  no.onclick = () => { lock(); setBadge(-1); tg.textContent = "취소함"; tg.className = "tag skip"; c.classList.add("folded"); toChat(); bot("알겠어요. 취소했어요."); if (onDone) onDone(false); };  // 취소한 시트는 제목 한 줄만 남긴다
   go.onclick = async () => {
     const skip = boxes.map((b, i) => (b.checked ? -1 : i)).filter((i) => i >= 0);
     lock(); toDots(); tg.textContent = "실행 중";
@@ -850,7 +852,7 @@ function notice(fresh) {
 }
 function noticeForm(target, draft, opts = {}) {
   const noAi = !!(opts.noAi || (draft && draft.noAi));
-  bot("공고 링크를 주거나, 포스터·첨부파일(HWP·PDF·사진)을 올려 주세요. 읽어서 마감·자격·낼 것을 정리해 드릴게요." + (H.ai ? "" : "\n지금은 규칙으로 읽어서 날짜가 맞는지 한 번 확인해 주세요."));
+  if (!opts.autoLoad) bot("공고 링크를 주거나, 포스터·첨부파일(HWP·PDF·사진)을 올려 주세요. 읽어서 마감·자격·낼 것을 정리해 드릴게요." + (H.ai ? "" : "\n지금은 규칙으로 읽어서 날짜가 맞는지 한 번 확인해 주세요."));
   const c = add(h("div", "task")); const id = "notice" + Date.now();
   const ul = h("label", "lab", "공고 링크"); ul.htmlFor = id + "u"; const row = h("div", "urlrow"); const url = h("input"); url.id = ul.htmlFor; url.type = "url"; url.inputMode = "url"; url.placeholder = "https://… 공고 페이지 주소"; url.value = (draft && draft.url) || opts.url || "";
   const fb = h("button", "btn primary", "분석하기"); fb.type = "button"; row.appendChild(url); row.appendChild(fb);
@@ -934,7 +936,7 @@ function noticeForm(target, draft, opts = {}) {
     } catch (e) { fail(e); go.disabled = ta.disabled = fb.disabled = url.disabled = false; }
   };
   scroll(); url.focus();
-  if (opts.autoLoad && url.value) setTimeout(load);
+  if (opts.autoLoad && url.value) setTimeout(run);  // 찾아온 대회: 읽어 오기에서 멈추지 않고 분석까지 이어서
 }
 function showExtract(r) {
   const ex = r.extract;
@@ -2060,6 +2062,9 @@ function allProjects() {
   const out = drafts.map((d) => ({ key: "d:" + d.id, name: d.title, draft: d.id, extract: d.extract || null, plan: store.get("plan:d:" + d.id, []) }));
   let keys = []; try { keys = Object.keys(localStorage); } catch (e) { /* 저장소를 못 읽으면 지금 팀플만 */ }
   const repos = new Set(keys.filter((k) => /^bento:(extract|plan):r:/.test(k)).map((k) => k.replace(/^bento:(extract|plan):r:/, "")));
+  // 서버가 알려 준 팀플 목록이 있으면, 거기 없는 예전 저장소(예: 지난 데모 knu-matzip) 기록은 빼고 보여 준다
+  const known = Array.isArray(projects) && projects.length ? new Set(projects.map((p) => p.repo)) : null;
+  if (known) [...repos].forEach((r) => { if (!known.has(r)) repos.delete(r); });
   if (!curDraft() && curRepo()) repos.add(curRepo());
   repos.forEach((r) => out.push({ key: "r:" + r, name: r.split("/")[1] || r, repo: r, extract: store.get("extract:r:" + r, null), plan: store.get("plan:r:" + r, []) }));
   return out;
@@ -2353,8 +2358,8 @@ $("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); 
     if (!cur || (cur.draft && !curDraft())) cur = { repo: curRepo() };
     if (!curDraft() && store.get("extract:" + projKey(), null) == null && store.get("extract", null)) store.set("extract:" + projKey(), store.get("extract", null));  // 예전 버전 기록 옮기기
     if (cur && cur.draft && !curDraft()) cur = { repo: curRepo() };
-    useProject(cur, true); resumeChat();
-    loadProjects().catch(() => {});  // 팀플 목록을 미리 받아 두면 고르기 화면이 바로 뜬다
+    useProject(cur, true); resumeChat(); booted = true;
+    loadProjects().then(() => { renderHome(); renderCal(); }).catch(() => {});  // 팀플 목록을 미리 받아 두면 고르기 화면이 바로 뜬다 (받은 뒤 지난 저장소 기록을 걸러 다시 그림)
     reminders();
     loadDiscover();  // 학과 게시판·해커톤 목록에서 대회를 먼저 찾아온다 (1시간 캐시)
     if (!curDraft()) setTimeout(() => progressCheck(true), 400);  // 열 때마다 Bento가 먼저 점검한다
@@ -2375,8 +2380,11 @@ $("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); 
     }
     if (curDraft()) return;
     // 알림은 지난번에 열었을 때 없던 긴급한 일이 새로 생겼을 때만 잠깐 띄운다.
-    try { const lz = await api("/lazy/tick", { method: "POST", body: JSON.stringify({ repo: curRepo() }) }); if (lz.ran && lz.ran.length) bot(`반대가 없어서 팀 규칙에 따라 ${lz.ran.length}개를 실행했어요.`); } catch (e) { /* 규칙이 없거나 읽지 못하면 넘어간다 */ }
-    const t = await api("/triage"); lastTriage = t; lastChecked = new Date(); renderHome(); renderMe(); loadBoard();
+    // 할 일(triage)·팀원별 일(board)은 처음부터 같이 부른다. 하나씩 기다리면 홈이 20초쯤 '불러오는 중'에 머문다
+    const tP = api("/triage"); loadBoard();
+    let ranLazy = false; try { const lz = await api("/lazy/tick", { method: "POST", body: JSON.stringify({ repo: curRepo() }) }); if (lz.ran && lz.ran.length) { ranLazy = true; } if (lz.ran && lz.ran.length) bot(`반대가 없어서 팀 규칙에 따라 ${lz.ran.length}개를 실행했어요.`); } catch (e) { /* 규칙이 없거나 읽지 못하면 넘어간다 */ }
+    let t = await tP; if (ranLazy) t = await api("/triage");  // 규칙으로 방금 실행한 게 있으면 다시 읽는다
+    lastTriage = t; lastChecked = new Date(); renderHome(); renderMe(); if (ranLazy) loadBoard();
     const urgent = t.items.filter((i) => i.sev === "긴급");
     const seen = store.get("seen", null);
     store.set("seen", urgent.map((i) => i.id));

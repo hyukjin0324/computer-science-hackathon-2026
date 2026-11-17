@@ -71,19 +71,29 @@ def triage(state: RepoState, review_wait_hours: float = 24) -> list[dict]:
                   and not is_submit_act(re.sub(r"^\[[^\]]*\]\s*", "", i.title)) and not i.title.startswith("[승인 요청]")]  # 예전에 만든 '[제출] 제출 폼 작성'은 나눌 일이 아니다
     solo = len(state.members) <= 1  # 혼자인 저장소는 다 내 일이라 나누자고 하지 않는다
     if unassigned and not solo:
-        from .ownership import pick_by_role
-        pairs, given = [], dict(load)
-        for i in unassigned:  # 역할이 정해져 있으면 그 역할 팀원부터, 아니면 맡은 일이 적은 순서
-            who = pick_by_role(state.members, state.roles, given, i.title)[0]
+        from .ownership import named_owner, pick_by_role
+        pairs, given, asked = [], dict(load), []
+        for i in unassigned:  # 제목에 담당이 적혀 있으면 그 사람, 아니면 역할 → 맡은 일이 적은 순서
+            who = named_owner(i.title, state.members, getattr(state, "names", None), state.leads)
+            if who == "?":
+                asked.append(i)  # '담당: A·발표' 처럼 누군지 모르는 건 팀장이 직접 정하게 둔다
+                continue
+            who = who or pick_by_role(state.members, state.roles, given, i.title)[0]
             if who:
                 given[who] = given.get(who, 0) + 1
                 pairs.append((i, who))
+        # 한두 개면 이유를 댓글로 남기고, 여러 개면 담당자 지정 알림만으로 충분하다 (댓글 폭탄 막기)
+        acts = [AssignIssue(issue=i.number, users=[u], expect_assignees=list(i.assignees)) for i, u in pairs]
+        if len(pairs) <= 3:
+            acts += [Comment(number=i.number, body=f"@{u} 님, 이 일을 맡아 주실 수 있을까요? 어려우면 편하게 말씀해 주세요!") for i, u in pairs]
+        sub = " · ".join(f"#{i.number} → {u}" for i, u in pairs[:4])
+        if asked:
+            sub += (" · " if sub else "") + f"제목에 담당이 적힌 {len(asked)}개({', '.join('#' + str(i.number) for i in asked[:3])}{'…' if len(asked) > 3 else ''})는 직접 정해 주세요"
         items.append({"id": "assign", "sev": "긴급" if _due_soon(state, unassigned) else "주의", "title": f"담당자 없는 이슈 {len(unassigned)}개",
                       "why": ", ".join(f"#{i.number} {i.title}" for i in unassigned[:4]),
                       "evidence": [{"label": f"이슈 #{i.number}", "url": i.url} for i in unassigned[:4]],
                       "options": [{"label": "역할대로 나누기" if state.roles else "맡은 일이 적은 순서로 나누기", "recommended": True,
-                                   "sub": " · ".join(f"#{i.number} → {u}" for i, u in pairs[:4]),
-                                   "actions": [a for i, u in pairs for a in (AssignIssue(issue=i.number, users=[u], expect_assignees=list(i.assignees)), Comment(number=i.number, body=f"@{u} 님, 이 일을 맡아 주실 수 있을까요? 어려우면 편하게 말씀해 주세요!"))]}]})
+                                   "sub": sub, "actions": acts}] if pairs else []})
 
     # 3. 같은 파일을 동시에 고치는 PR
     for a, b in combinations(state.prs, 2):

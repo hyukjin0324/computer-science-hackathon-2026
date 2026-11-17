@@ -107,6 +107,9 @@ class GitHub:
             pass
         return [self.owner]
 
+    def user_name(self, login: str) -> str | None:
+        return (self.api("GET", f"/users/{login}") or {}).get("name")
+
     def members(self) -> list[str]:
         return [u["login"] for u in self.api("GET", self._r("/assignees"), params={"per_page": 100})]
 

@@ -119,6 +119,11 @@ def _same_time(a: str | None, b: str | None) -> bool:
         return a == b
 
 
+def eul(n: int) -> str:
+    """숫자 뒤 목적격 조사: 2·4·5·9로 끝나면 '를'(이·사·오·구), 나머지는 '을'"""
+    return "를" if str(n)[-1] in "2459" else "을"
+
+
 def is_suspicious(text: str) -> bool:
     return bool(SUSPICIOUS.search(text or ""))
 
@@ -241,9 +246,9 @@ def label(a, discord: bool) -> tuple[str, str]:
     if isinstance(a, CreateIssue):
         return f"할 일 추가: {a.title}", (f"담당 {', '.join(a.assignees)}" if a.assignees else "담당은 나중에 정해요") + (f" · '{a.milestone_title}'에 넣어요" if a.milestone_title else "")
     if isinstance(a, AssignIssue):
-        return f"할 일 #{a.issue}을 {', '.join(a.users)}님에게 맡기기", ""
+        return f"할 일 #{a.issue}{eul(a.issue)} {', '.join(a.users)}님에게 맡기기", ""
     if isinstance(a, ReassignIssue):
-        return f"할 일 #{a.issue}을 {', '.join(a.expect_assignees) or '담당 없음'} → {', '.join(a.users)}님에게 넘기기", "일이 몰린 사람의 일을 나눠요"
+        return f"할 일 #{a.issue}{eul(a.issue)} {', '.join(a.expect_assignees) or '담당 없음'} → {', '.join(a.users)}님에게 넘기기", "일이 몰린 사람의 일을 나눠요"
     if isinstance(a, CloseIssue):
         return f"할 일 #{a.issue} 닫기", "이유를 댓글로 남겨요 · 다시 열 수 있어요"
     if isinstance(a, CreateMilestone):
