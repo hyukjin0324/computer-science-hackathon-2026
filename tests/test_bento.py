@@ -1357,3 +1357,13 @@ def test_closing_refs_needs_a_closing_word():
     assert closing_refs("다른 계정으로 테스트(#14, #11)할 때 쓰려고") == set()
     assert closing_refs("Closes #3\nfix #5, #7 참고") == {3, 5}
     assert closing_refs("#12 해결: 리뷰 API 연결") == {12}
+
+
+def test_comment_on_recently_merged_pr_is_allowed():
+    """머지 뒤 리뷰 부탁: 닫힌(머지된) PR에도 댓글은 달 수 있어야 한다. 팀 저장소 테스트(#14)에서 막혔던 것"""
+    from app.state import RepoState
+    st = RepoState("o/r", NOW, ["a", "b"], [], [], [])
+    acts = [Comment(number=23, body="@b 님, 이 PR이 리뷰 없이 머지됐어요.")]
+    assert any("#23이 없어요" in e for e in validate(acts, st))  # 머지 기록이 없으면 막는다
+    st.merged_numbers = {23}
+    assert validate(acts, st) == []
