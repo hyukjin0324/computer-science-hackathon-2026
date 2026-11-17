@@ -114,6 +114,7 @@ details.history > .bub { margin-top: 8px; }
 .picks { display: flex; flex-direction: column; padding: 4px 8px 8px; }
 .pick { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; text-align: left; padding: 12px 8px; border-radius: var(--r-box); min-height: 64px; }
 .pick:hover { background: var(--surface-2); }
+.btn.upfile { display: inline-flex; align-items: center; justify-content: center; gap: 8px; align-self: flex-start; }
 .pick .em { width: 40px; height: 40px; border-radius: var(--r-badge); background: var(--surface); border: 1px solid var(--line); color: var(--ink); display: grid; place-items: center; }
 .pick b { display: block; font-size: var(--fs-body); } .pick small { color: var(--muted); font-size: var(--fs-small); }
 .chev { color: var(--muted); }
@@ -661,8 +662,21 @@ const LINE = {  // 바로 맡기기 아이콘: 이모지 대신 얇은 선 아�
   cal: "M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM4 10h16M8 3v4M16 3v4",
   search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4",
   send: "M21 3 10 14M21 3l-6.5 18-4-8.5L2 9z",
+  clip: "M21 11.5 12.5 20a5 5 0 0 1-7-7L14 4.5a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4L15.5 7.6",
 };
 const lineIcon = (k) => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${LINE[k]}"/></svg>`;
+// 올릴 사진은 긴 변 2000px·JPEG로 줄여 보낸다 (서버가 한 번에 받는 크기 제한)
+async function shrinkImage(f) {
+  if (!/^image\//.test(f.type) || f.type === "image/gif") return f;
+  try {
+    const bm = await createImageBitmap(f); const k = Math.min(1, 2000 / Math.max(bm.width, bm.height));
+    if (k === 1 && f.size < 1.5e6) return f;
+    const cv = document.createElement("canvas"); cv.width = Math.round(bm.width * k); cv.height = Math.round(bm.height * k);
+    cv.getContext("2d").drawImage(bm, 0, 0, cv.width, cv.height);
+    return await new Promise((ok) => cv.toBlob((b) => ok(b || f), "image/jpeg", 0.86));
+  } catch (e) { return f; }
+}
+const toBase64 = (blob) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = () => no(new Error("파일을 읽지 못했어요")); r.readAsDataURL(blob); });
 function pickIcon(k) { const e = h("span", "em"); e.innerHTML = lineIcon(k); return e; }
 function PICKS() {
   return [["trophy", "새 대회 고르기", "Bento가 찾아온 대회에서 고르거나 공고 링크로 추가", () => discoverChat("새 대회 준비할래")], ["list", "오늘 팀플 할 일 정리", "급한 순서대로 보여 드려요", today], ["cal", "마감까지 계획 짜기", "할 일을 날짜별로 나눠 캘린더와 GitHub에", planFlow], ["search", "진행 점검·다시 계획", "늦어진 단계를 찾아 남은 시간에 맞게 다시 짜요", () => progressCheck(false)], ["send", "제출 전 점검하기", "제출물과 저장소를 대조해요", submit]];
@@ -817,7 +831,7 @@ function notice(fresh) {
 }
 function noticeForm(target, draft, opts = {}) {
   const noAi = !!(opts.noAi || (draft && draft.noAi));
-  bot("공고 링크를 주세요. 읽어 와서 마감·자격·낼 것을 정리해 드릴게요." + (H.ai ? "" : "\n지금은 규칙으로 읽어서 날짜가 맞는지 한 번 확인해 주세요."));
+  bot("공고 링크를 주거나, 포스터·첨부파일(HWP·PDF·사진)을 올려 주세요. 읽어서 마감·자격·낼 것을 정리해 드릴게요." + (H.ai ? "" : "\n지금은 규칙으로 읽어서 날짜가 맞는지 한 번 확인해 주세요."));
   const c = add(h("div", "task")); const id = "notice" + Date.now();
   const ul = h("label", "lab", "공고 링크"); ul.htmlFor = id + "u"; const row = h("div", "urlrow"); const url = h("input"); url.id = ul.htmlFor; url.type = "url"; url.inputMode = "url"; url.placeholder = "https://… 공고 페이지 주소"; url.value = (draft && draft.url) || opts.url || "";
   const fb = h("button", "btn primary", "분석하기"); fb.type = "button"; row.appendChild(url); row.appendChild(fb);
@@ -825,7 +839,12 @@ function noticeForm(target, draft, opts = {}) {
   const ta = h("textarea"); ta.id = id; ta.value = (draft && draft.text) || ""; ta.placeholder = "공고 본문을 붙여넣어 주세요"; ta.style.minHeight = "150px";
   const src = h("div", "note"); src.hidden = true;
   const rb = h("div", "row-btns"); const go = h("button", "btn primary", "이 내용으로 분석하기"); go.type = "button"; rb.appendChild(go);
-  [ul, row, lb, ta, src, rb].forEach((x) => c.appendChild(x));
+  // 포스터·첨부파일: 공고가 이미지나 HWP로만 나오는 경우가 많다
+  const fileIn = h("input"); fileIn.type = "file"; fileIn.accept = ".hwp,.hwpx,.pdf,image/*"; fileIn.hidden = true; fileIn.id = id + "f";
+  const upb = h("button", "btn upfile"); upb.type = "button"; upb.innerHTML = `${lineIcon("clip")}<span>포스터·첨부파일 올리기</span>`; upb.onclick = () => fileIn.click();
+  const uph = h("div", "note", "HWP·HWPX·PDF·사진(포스터 캡처). 한글 파일은 AI 없이 글자만 꺼내요.");
+  let fromFile = false;
+  [ul, row, upb, uph, fileIn, lb, ta, src, rb].forEach((x) => c.appendChild(x));
   // 기본은 링크 한 칸. 붙여넣기 칸은 링크를 못 읽었을 때만 보여 준다
   const showPaste = (on) => { lb.hidden = ta.hidden = rb.hidden = !on; if (on) ta.focus(); };
   showPaste(false);
@@ -855,6 +874,23 @@ function noticeForm(target, draft, opts = {}) {
   // 링크 → 읽어 오기 → 바로 분석. 링크가 없고 이미 내용이 있으면(다시 분석) 그 내용으로
   const run = async () => { if (url.value.trim()) { if (await load()) go.onclick(); } else if (ta.value.trim()) go.onclick(); else { snack("공고 링크를 넣어 주세요"); url.focus(); } };
   fb.onclick = run; url.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); run(); } });
+  const readUpload = async () => {
+    const f = fileIn.files && fileIn.files[0]; fileIn.value = ""; if (!f) return;
+    upb.disabled = true;
+    try {
+      const blob = await shrinkImage(f);
+      const r = await thinking(/\.hwpx?$/i.test(f.name) ? "한글 파일에서 공고를 꺼내고 있어요" : "파일의 글자를 옮겨 적고 있어요",
+        api("/notice/file", { method: "POST", body: JSON.stringify({ name: f.name, mime: blob.type || f.type || null, data: await toBase64(blob) }) }));
+      ta.value = r.text; fromFile = true; url.value = "";
+      src.hidden = false; src.style.whiteSpace = "pre-line"; src.textContent = `올린 파일: ${f.name}${r.note ? "\n" + r.note : ""}`;
+      go.onclick();
+    } catch (e) {
+      if (e.status === 401 && e.login) { src.hidden = false; src.textContent = "사진·PDF를 읽으려면 GitHub로 로그인해 주세요."; c.appendChild(ghBtn("GitHub로 로그인", false)); }
+      else if (e.status === 401) askCode(readUpload);
+      else { snack(e.message || "파일을 읽지 못했어요"); showPaste(true); }
+    } finally { upb.disabled = false; }
+  };
+  fileIn.onchange = readUpload;
   go.onclick = async () => {
     if (!ta.value.trim()) return showPaste(true);
     go.disabled = ta.disabled = fb.disabled = url.disabled = true;
@@ -862,6 +898,10 @@ function noticeForm(target, draft, opts = {}) {
       const r = await thinking("공고를 읽고 있어요", api("/notice", { method: "POST", body: JSON.stringify({ text: ta.value, repo: target, new_project: !target, no_ai: noAi }) }));
       if (opts.title) r.extract.title = opts.title;  // 찾아온 대회는 이미 아는 제목을 쓴다
       if (pageUrl) r.extract.source_url = pageUrl;  // 원문 주소는 분석 결과와 같이 다닌다
+      if (fromFile && !r.extract.submit_deadline_iso && r.extract.apply_deadline_iso) {  // 공모전 공고는 접수 기간 하나뿐인 경우가 많다: 접수 = 제출
+        r.extract.submit_deadline_iso = r.extract.apply_deadline_iso; r.extract.submit_deadline = r.extract.apply_deadline; r.extract.same_deadline = true;
+        snack("공고에 기간이 하나라 제출 마감도 접수 마감과 같은 날로 잡았어요");
+      }
       if (opts.deadline_iso && !r.extract.apply_deadline_iso) { r.extract.apply_deadline_iso = opts.deadline_iso; r.extract.apply_deadline = opts.deadline_text || dtxt(opts.deadline_iso); }  // 공고에서 못 읽은 접수 마감은 대회 목록 값으로
       if (!target) {
         let dd = draft || drafts.find((x) => x.title === r.extract.title);

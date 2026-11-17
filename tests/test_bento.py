@@ -1275,3 +1275,61 @@ def test_design_pages_for_figma_are_served_safely():
     assert client.get("/design/02-home.html").status_code == 200
     assert client.get("/design/..%2F..%2F.env").status_code == 404
     assert client.get("/design/nope.html").status_code == 404
+
+
+# ---------- 포스터·첨부파일 공고 ----------
+from app import attach  # noqa: E402
+
+
+def _rec(tag, payload):
+    import struct
+    return struct.pack("<I", tag | (len(payload) << 20)) + payload
+
+
+def test_hwp_records_text_reads_paragraphs_skips_controls_and_keeps_emoji():
+    import struct
+    ctrl = struct.pack("<8H", 11, 0, 0, 0, 0, 0, 0, 11)  # 표 같은 개체 자리(16바이트)는 건너뛴다
+    t1 = ctrl + "□ 공모기간 : 11월 20일(금) 17:00".encode("utf-16-le") + struct.pack("<H", 13)
+    t2 = "📌 대한민국 국민 누구나".encode("utf-16-le")
+    data = _rec(66, b"\x00" * 8) + _rec(67, t1) + _rec(68, b"\x00" * 4) + _rec(67, t2)
+    assert attach.hwp_records_text(data) == ["□ 공모기간 : 11월 20일(금) 17:00", "📌 대한민국 국민 누구나"]
+
+
+def test_hwpx_text_reads_runs_and_table_cells():
+    import io
+    import zipfile
+    ns = 'xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph"'
+    xml = (f'<hs:sec xmlns:hs="http://www.hancom.co.kr/hwpml/2011/section" {ns}>'
+           '<hp:p><hp:run><hp:t>공모대상 : 누구나</hp:t></hp:run></hp:p>'
+           '<hp:p><hp:run><hp:tbl><hp:tr><hp:tc><hp:subList><hp:p><hp:run><hp:t>접수 마감 11월 20일</hp:t></hp:run></hp:p></hp:subList></hp:tc></hp:tr></hp:tbl></hp:run></hp:p>'
+           '</hs:sec>')
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("Contents/section0.xml", xml)
+    assert attach.hwpx_text(buf.getvalue()) == "공모대상 : 누구나\n접수 마감 11월 20일"
+
+
+def test_attach_rejects_unknown_type_and_broken_hwp():
+    import base64
+    r = client.post("/api/notice/file", json={"name": "공고.docx", "data": base64.b64encode(b"x").decode()})
+    assert r.status_code == 422 and "HWP" in r.json()["detail"]
+    r = client.post("/api/notice/file", json={"name": "공고.hwp", "data": base64.b64encode(b"not an ole file" * 4).decode()})
+    assert r.status_code == 422
+
+
+def test_attach_image_needs_ai_and_is_transcribed_by_haiku():
+    import base64
+    r = client.post("/api/notice/file", json={"name": "poster.png", "mime": "image/png", "data": base64.b64encode(b"\x89PNG" + b"0" * 64).decode()})
+    assert r.status_code == 503  # 키가 없으면 사진은 못 읽는다고 알려 준다
+    attach._hits.clear()
+    fake = _FakeChatClaude("2026 대구광역시 공공데이터 AI 활용대회\n접수기간 2026.10.12.(월) ~ 11.20.(금) 17:00까지\n대한민국 국민 누구나")
+    out = attach.read_file("poster.png", "image/png", b"\x89PNG" + b"0" * 64, who="t-attach", client=fake)
+    assert out["kind"] == "image" and "11.20.(금) 17:00" in out["text"] and "옮겨 적었어요" in out["note"]
+    block = fake.sent["messages"][0]["content"][0]
+    assert fake.sent["model"] == "claude-haiku-5-5" and block["type"] == "image" and block["source"]["media_type"] == "image/png"
+
+
+def test_attach_size_limit():
+    import base64
+    big = base64.b64encode(b"0" * (attach.MAX_BYTES + 10)).decode()
+    assert client.post("/api/notice/file", json={"name": "a.pdf", "data": big}).status_code == 413

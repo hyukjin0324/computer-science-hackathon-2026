@@ -359,6 +359,38 @@ def fetch_url(body: FetchIn, request: Request, x_bento_code: str | None = Header
     return page
 
 
+class FileIn(BaseModel):
+    name: str
+    mime: str | None = None
+    data: str  # base64
+
+
+@app.post("/api/notice/file")
+def notice_file(body: FileIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    """포스터·첨부파일(HWP·HWPX·PDF·사진)에서 공고 글을 꺼낸다. 꺼낸 글은 /api/notice로 분석한다.
+
+    한글 파일은 서버에서 글자만 뽑고(AI 없음), 사진·PDF는 AI가 옮겨 적는다(비용이 들어 로그인·접근 코드 필요).
+    """
+    import base64
+    import binascii
+    from . import attach, websearch
+    if len(body.data) > attach.MAX_BYTES * 4 // 3 + 8:
+        raise HTTPException(413, "파일이 너무 커요(3MB까지)")
+    try:
+        raw = base64.b64decode(body.data, validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise HTTPException(422, "파일을 읽지 못했어요") from e
+    try:
+        ai = attach.kind_of(body.name, body.mime) in ("pdf", "image")
+        if ai:
+            _check_code(x_bento_code, request)
+        u = current_user(request) if settings.login_enabled else None
+        who = (u or {}).get("login") or (request.client.host if request.client else "anon")
+        return attach.read_file(body.name, body.mime, raw, who=who, ai_ready=ai and websearch.ready())
+    except attach.AttachError as e:
+        raise HTTPException(e.status, str(e)) from e
+
+
 class ChatIn(BaseModel):
     message: str
     history: list[dict] | None = None  # 이 자유 대화에서 오간 말만 [{role, text}]
