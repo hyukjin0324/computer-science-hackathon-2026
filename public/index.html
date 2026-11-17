@@ -1788,14 +1788,18 @@ function journey(kind) {
   const ex = extract || {}; const dd = ddays(kind === "apply" ? ex.apply_deadline_iso : ex.submit_deadline_iso);
   const mark = add(h("div")); mark.style.height = "1px"; mark.setAttribute("aria-hidden", "true");  // 카드가 위에 붙었는지 보는 표시
   const c = add(h("div", "journey pin")); c.setAttribute("role", "group"); c.setAttribute("aria-label", kind === "apply" ? "신청 단계" : "제출 단계");
-  let gap0 = null;  // 붙지 않았을 때 표시와 카드 사이 간격 (대화 칸 사이 여백)
+  // 위에 붙었는지는 카드 바로 위 표시(mark)가 붙는 자리보다 위로 올라갔는지로 본다.
+  // 접으면 카드가 짧아져 스크롤 위치가 밀리므로(특히 맨 아래), 펼치는 기준은 접힌 만큼 더 내려와야 한다 → 접힘↔펼침이 빠르게 반복되지 않는다.
+  let shrink = 0;
   const stick = () => {
     if (!c.isConnected) return document.removeEventListener("scroll", stick, true);
-    const gap = c.getBoundingClientRect().top - mark.getBoundingClientRect().bottom;
-    if (gap0 === null) gap0 = gap;
-    c.classList.toggle("stuck", c.classList.contains("pin") && gap > gap0 + 8);
+    if (!c.classList.contains("pin")) { c.classList.remove("stuck"); return; }
+    const pinTop = parseFloat(getComputedStyle(c).top) || 0;
+    const y = mark.getBoundingClientRect().bottom - chat.getBoundingClientRect().top;
+    if (!c.classList.contains("stuck")) {
+      if (y < pinTop - 4) { const h0 = c.offsetHeight; c.classList.add("stuck"); shrink = Math.max(0, h0 - c.offsetHeight); }
+    } else if (y > pinTop + shrink + 24) { c.classList.remove("stuck"); }
   };
-  requestAnimationFrame(() => { gap0 = c.getBoundingClientRect().top - mark.getBoundingClientRect().bottom; });
   document.addEventListener("scroll", stick, true);
   const hd = h("div", "j-h"); hd.appendChild(h("b", null, `${kind === "apply" ? "신청하기" : "제출하기"}${ex.title ? " · " + ex.title : ""}`)); const st = h("span", "tag"); hd.appendChild(st); c.appendChild(hd);
   const ol = h("ol", "j-steps"); const lis = steps.map(([n, who], i) => { const li = h("li"); li.appendChild(h("i", null, String(i + 1))); const t = h("span"); t.appendChild(h("b", null, n)); t.appendChild(h("small", null, who)); li.appendChild(t); ol.appendChild(li); return li; }); c.appendChild(ol);
