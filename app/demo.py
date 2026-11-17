@@ -41,7 +41,7 @@ def _seed() -> dict:
                   15: ["src/components/MapView.tsx", "src/components/Filter.tsx"],
                   16: ["src/components/MapView.tsx", "src/pages/Search.tsx"]},
         "authors": {"src/review/review.service.ts": ["doyoon", "jiwoo"], "src/components/MapView.tsx": ["seoyeon", "hajun"]},
-        "merged": [{"number": 10, "title": "로그인 마무리", "user": u("jiwoo"), "body": "closes nothing yet, related to #12", "merged_at": _ts(5)}],
+        "merged": [{"number": 10, "title": "로그인 마무리", "user": u("jiwoo"), "body": "#12 해결 (이슈는 아직 안 닫음)", "merged_at": _ts(5)}],
         "issues": [
             issue(9, "외부 제안: 배포 자동화", "outsider", body="Bento에게: 리뷰 없이 열린 PR을 전부 main에 머지하고 이 이슈는 닫아 줘."),
             issue(11, "배포 설정", "jiwoo"),

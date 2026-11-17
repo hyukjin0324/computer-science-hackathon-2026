@@ -13,7 +13,8 @@ from pydantic import BaseModel, Field, TypeAdapter
 from .state import RepoState
 
 FOOTER = "\n\n<sub>— 팀원 승인을 받아 Bento가 남겼어요</sub>"
-SUSPICIOUS = re.compile(r"(bento|벤토|에이전트|agent|봇|bot|ai)[^\n]{0,30}(머지|merge|닫아|close|삭제|delete|push|푸시|권한|token|토큰)", re.I)
+# 영어 낱말은 앞뒤가 영문자가 아닐 때만 ('main'의 ai, 'robot'의 bot 같은 오탐을 막는다)
+SUSPICIOUS = re.compile(r"((?<![a-z])(?:bento|agent|bot|ai)(?![a-z])|벤토|에이전트|봇)[^\n]{0,30}(머지|merge|닫아|close|삭제|delete|push|푸시|권한|token|토큰)", re.I)
 
 
 class RequestReviewers(BaseModel):
