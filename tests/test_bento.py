@@ -1333,3 +1333,11 @@ def test_attach_size_limit():
     import base64
     big = base64.b64encode(b"0" * (attach.MAX_BYTES + 10)).decode()
     assert client.post("/api/notice/file", json={"name": "a.pdf", "data": big}).status_code == 413
+
+
+def test_open_eligibility_sentence_is_not_split_into_unclear_conditions():
+    from app.eligibility import rules
+    ex = NoticeExtract(title="t", facts=[{"label": "참가 자격", "value": "공공데이터 및 AI 활용에 관심 있는 대한민국 국민 누구나(개인)",
+                                          "quote": "□ 공모대상 : 공공데이터 및 AI 활용에 관심 있는 대한민국 국민 누구나(개인)"}])
+    r = rules(ex)
+    assert r["open"] and r["unclear"] == []

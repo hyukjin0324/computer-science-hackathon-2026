@@ -64,6 +64,8 @@ def rules(ex: NoticeExtract) -> dict:
     # 규칙으로 읽지 못한 조건 문장 → 주최 측 확인 필요
     unclear = []
     for quote in q:
+        if re.search(r"누구나|제한\s*(?:없|무)", quote):
+            continue  # '…에 관심 있는 국민 누구나'처럼 누구나 되는 문장의 앞부분은 조건이 아니라 설명이다
         for chunk in re.split(r"[,·/]|\s및\s", quote):
             c = chunk.strip(" .()")
             if len(c) >= 4 and not _KNOWN.search(c):

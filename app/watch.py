@@ -74,7 +74,7 @@ def watch(state: RepoState) -> list[dict]:
         parts = [f"{b['path'].split('/')[-1]} ({_mb(b['size'])})" for b in tree.get("big", [])[:2]] + [f"{j}/ 폴더" for j in tree.get("junk", [])[:2]]
         cmds = [f"git rm -r --cached {j} && echo '{j}/' >> .gitignore" for j in tree.get("junk", [])[:2]]
         cmds += [f"git rm --cached '{b['path']}'" for b in tree.get("big", [])[:2]]
-        items.append({"id": "bigfile", "sev": "주의", "who": lead, "age": 0, "title": f"저장소에 무거운 파일이 있어요 · {', '.join(parts)}",
+        items.append({"id": "bigfile", "sev": "정리", "who": lead, "age": 0, "title": f"저장소에 무거운 파일이 있어요 · {', '.join(parts)}",
                       "why": "저장소가 무거워지고 100MB가 넘으면 푸시가 막혀요. 영상·데이터는 드라이브 링크로, 설치 폴더는 .gitignore로 빼요",
                       "evidence": [{"label": b["path"], "url": f"{gh_url}/blob/{branch}/{b['path']}"} for b in tree.get("big", [])[:2]] or [{"label": "저장소 파일", "url": gh_url}],
                       "handoff": [{"label": "저장소에서 빼기", "command": " && ".join(cmds)}] if cmds else [], "options": []})
@@ -194,7 +194,7 @@ def watch(state: RepoState) -> list[dict]:
                           "handoff": ([{"label": "마감 전 마지막 커밋에 제출본 표시", "command": f"git tag submission {before['sha'][:7]} && git push origin submission"}] if before else []),
                           "options": []})
         elif timedelta(0) < due - now <= timedelta(hours=6):
-            items.append({"id": "deadline-soon", "sev": "확인", "who": lead, "age": 0, "title": f"제출 마감까지 {max(1, int((due - now).total_seconds() // 3600))}시간",
+            items.append({"id": "deadline-soon", "sev": "긴급", "who": lead, "age": 0, "title": f"제출 마감까지 {max(1, int((due - now).total_seconds() // 3600))}시간",
                           "why": "마감 뒤에는 푸시하지 마세요. 제출할 커밋이 정해지면 태그로 표시해 두면 심사 때 헷갈리지 않아요",
                           "evidence": [{"label": "제출 마감", "url": f"{gh_url}/milestones"}],
                           "handoff": [{"label": "지금 커밋을 제출본으로 표시", "command": "git tag submission && git push origin submission"}], "options": []})

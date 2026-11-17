@@ -677,9 +677,27 @@ async function shrinkImage(f) {
   } catch (e) { return f; }
 }
 const toBase64 = (blob) => new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = () => no(new Error("파일을 읽지 못했어요")); r.readAsDataURL(blob); });
+// 공고 파일을 골라 글을 꺼낸다. 성공하면 done({text, kind, note}, 파일 이름)
+function pickNoticeFile(btn, done) {
+  const fi = h("input"); fi.type = "file"; fi.accept = ".hwp,.hwpx,.pdf,image/*"; fi.hidden = true; document.body.appendChild(fi);
+  const go = async () => {
+    const f = fi.files && fi.files[0]; fi.remove(); if (!f) return;
+    if (btn) btn.disabled = true;
+    try {
+      const blob = await shrinkImage(f);
+      const r = await thinking(/\.hwpx?$/i.test(f.name) ? "한글 파일에서 공고를 꺼내고 있어요" : "파일의 글자를 옮겨 적고 있어요",
+        api("/notice/file", { method: "POST", body: JSON.stringify({ name: f.name, mime: blob.type || f.type || null, data: await toBase64(blob) }) }));
+      await done(r, f.name);
+    } catch (e) {
+      if (e.status === 401 && !e.login) askCode(() => pickNoticeFile(btn, done));
+      else snack(e.status === 401 ? "사진·PDF를 읽으려면 GitHub로 로그인해 주세요" : e.message || "파일을 읽지 못했어요");
+    } finally { if (btn) btn.disabled = false; }
+  };
+  fi.onchange = go; fi.click();
+}
 function pickIcon(k) { const e = h("span", "em"); e.innerHTML = lineIcon(k); return e; }
 function PICKS() {
-  return [["trophy", "새 대회 고르기", "Bento가 찾아온 대회에서 고르거나 공고 링크로 추가", () => discoverChat("새 대회 준비할래")], ["list", "오늘 팀플 할 일 정리", "급한 순서대로 보여 드려요", today], ["cal", "마감까지 계획 짜기", "할 일을 날짜별로 나눠 캘린더와 GitHub에", planFlow], ["search", "진행 점검·다시 계획", "늦어진 단계를 찾아 남은 시간에 맞게 다시 짜요", () => progressCheck(false)], ["send", "제출 전 점검하기", "제출물과 저장소를 대조해요", submit]];
+  return [["trophy", "새 대회 고르기", "Bento가 찾아온 대회에서 고르거나 공고 링크로 추가", () => discoverChat("새 대회 준비할래")], ["clip", "공고 파일로 시작", "포스터·HWP·PDF를 올리면 마감·자격을 정리해요", () => { me("공고 파일 올릴게"); noticeForm(null, null); }], ["list", "오늘 팀플 할 일 정리", "급한 순서대로 보여 드려요", today], ["cal", "마감까지 계획 짜기", "할 일을 날짜별로 나눠 캘린더와 GitHub에", planFlow], ["search", "진행 점검·다시 계획", "늦어진 단계를 찾아 남은 시간에 맞게 다시 짜요", () => progressCheck(false)], ["send", "제출 전 점검하기", "제출물과 저장소를 대조해요", submit]];
 }
 function openPicks() {
   // 입력창 ＋: 대화가 길어져도 언제든 '바로 맡겨 보기'를 연다
@@ -1752,6 +1770,17 @@ function eligBox(card, membersInput, saved, title) {
         const tried = store.get("reread2:" + src2, 0);  // 웹 검색이 생겨서 예전에 실패한 공고도 한 번 더 읽어 본다
         if (!tried) { store.set("reread2:" + src2, Date.now()); rb2.onclick(); }
       }
+      // 포스터·첨부파일(HWP·PDF·사진)로 나온 공고: 파일을 올리면 다시 분석해서 자격·마감을 채운다
+      const ub = h("button", "btn upfile"); ub.type = "button"; ub.innerHTML = `${lineIcon("clip")}<span>공고 파일 올리기 (HWP·PDF·사진)</span>`;
+      ub.onclick = () => pickNoticeFile(ub, async (r, name) => {
+        const a = await thinking("올린 공고를 다시 읽고 있어요", api("/notice", { method: "POST", body: JSON.stringify({ text: r.text, new_project: true }) }));
+        const m = a.extract || {}; const labels = new Set((m.facts || []).map((f) => f.label));
+        const next = { ...extract, facts: [...(extract.facts || []).filter((f) => !labels.has(f.label)), ...(m.facts || [])] };
+        ["team_min", "team_max", "apply_deadline", "apply_deadline_iso", "submit_deadline", "submit_deadline_iso"].forEach((k) => { if (next[k] == null && m[k] != null) next[k] = m[k]; });
+        if (!(next.deliverables || []).length && (m.deliverables || []).length) next.deliverables = m.deliverables;
+        setExtract(next); snack(`${name}에서 공고를 다시 읽었어요`); qs.innerHTML = ""; refresh();
+      });
+      verdict.appendChild(ub);
       const pb = h("button", "btn", "이 문장으로 판정하기"); pb.type = "button";
       pb.onclick = () => { const t = ta.value.trim(); if (t.length < 4) return ta.focus(); setExtract({ ...extract, facts: [...(extract.facts || []).filter((f) => f.label !== "참가 자격"), { label: "참가 자격", value: t.slice(0, 200), quote: t.slice(0, 200) }] }); qs.innerHTML = ""; refresh(); };
       verdict.append(pl, ta, pb);
