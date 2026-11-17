@@ -163,7 +163,7 @@ def watch(state: RepoState) -> list[dict]:
                           "title": f"PR #{m['number']}이 리뷰 승인 없이 머지됐어요",
                           "why": f"{m['title']} · {m['author']} 님. 급해서 그랬을 수 있어요. 머지된 뒤라도 한 사람이 훑어보면 실수를 일찍 찾아요",
                           "evidence": [{"label": f"PR #{m['number']}", "url": m["url"]}],
-                          "options": [{"label": f"{others[0]} 님께 머지 뒤 리뷰 부탁하기", "recommended": True, "sub": "PR 댓글", "actions": [
+                          "options": [{"label": "팀원에게 머지 뒤 리뷰 부탁하기", "recommended": True, "sub": f"PR 댓글 · 추천 {others[0]} (댓글에서 바꿀 수 있어요)", "actions": [
                               Comment(number=m["number"], body=f"@{others[0]} 님, 이 PR이 리뷰 없이 머지됐어요. 시간 될 때 한 번 훑어봐 주실 수 있을까요?")]}]})
 
     # 9. 계정에 연결되지 않은 커밋 (기여도에 안 잡힌다). 이메일은 보여 주지 않는다

@@ -770,6 +770,8 @@ def run_proposal(body: ExecuteIn, request: Request, x_bento_code: str | None = H
             raise HTTPException(409, {"message": "팀 전체에 영향을 주는 변경이라, 제안한 사람이 아닌 팀원이나 팀장이 승인해야 해요", "need_second": True,
                                       "leads": st.leads})
     results = _run(data["repo"], actions, by=who or None, require_member=settings.login_enabled, proposer=data.get("by"))
+    from . import signals as _sig
+    _sig._CACHE.clear()  # 방금 실행한 일이 다음 목록에 바로 반영되게 (같은 제안을 두 번 누르지 않게)
     if all(r["ok"] for r in results):
         _close_request(data["repo"], body.token, who)
     for i, r in zip(ran, results):
