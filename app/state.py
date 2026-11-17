@@ -135,6 +135,20 @@ def issue_refs(text: str) -> set[int]:
     return {int(n) for n in re.findall(r"(?<![\w/])#(\d{1,6})\b", text or "")}
 
 
+_CLOSE_BEFORE = re.compile(r"(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|닫[음기아]|해결|완료)\s*:?\s*$", re.I)
+_CLOSE_AFTER = re.compile(r"^\s*(?:을|를|이|가)?\s*(?:해결|완료|끝|닫)", re.I)
+
+
+def closing_refs(text: str) -> set[int]:
+    """머지된 PR이 '끝냈다'고 한 이슈만. 'Closes #3', '#3 해결'은 맞고, 그냥 '#3 참고'처럼 언급만 한 건 뺀다."""
+    out: set[int] = set()
+    for m in re.finditer(r"(?<![\w/])#(\d{1,6})\b", text or ""):
+        before, after = text[max(0, m.start() - 20):m.start()], text[m.end():m.end() + 12]
+        if _CLOSE_BEFORE.search(before) or _CLOSE_AFTER.search(after):
+            out.add(int(m.group(1)))
+    return out
+
+
 def build_state(gh, now: datetime | None = None) -> RepoState:
     now = now or datetime.now(timezone.utc)
     members = gh.members()
@@ -161,7 +175,7 @@ def build_state(gh, now: datetime | None = None) -> RepoState:
                 authors[f] = gh.file_authors(f)
     merged_refs: dict[int, int] = {}
     for mp in gh.merged_prs():
-        for ref in issue_refs(f"{mp['title']}\n{mp.get('body') or ''}"):
+        for ref in closing_refs(f"{mp['title']}\n{mp.get('body') or ''}"):
             merged_refs.setdefault(ref, mp["number"])
     issues = [
         Issue(number=i["number"], title=i["title"], author=i["user"]["login"],
