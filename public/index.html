@@ -116,6 +116,9 @@ details.history > .bub { margin-top: 8px; }
 .pick:hover { background: var(--surface-2); }
 .linkbtn { background: none; border: 0; padding: 4px 2px; font: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .task.folded > :not(.task-h) { display: none; }  /* 취소한 승인: 제목·'취소함'만 대화에 남긴다 */
+.dcard .dpick { align-self: flex-start; padding: 2px 0; font-size: var(--fs-small); font-weight: 700; }
+button.bigrow:disabled:not(.chosen) { opacity: .45; cursor: default; }  /* 이미 골라서 잠긴 줄은 흐리게 */
+button.bigrow.chosen { box-shadow: inset 0 0 0 1.5px var(--ink); }
 .btn.upfile { display: inline-flex; align-items: center; justify-content: center; gap: 8px; align-self: flex-start; }
 .pick .em { width: 40px; height: 40px; border-radius: var(--r-badge); background: var(--surface); border: 1px solid var(--line); color: var(--ink); display: grid; place-items: center; }
 .pick b { display: block; font-size: var(--fs-body); } .pick small { color: var(--muted); font-size: var(--fs-small); }
@@ -802,7 +805,8 @@ function approval(proposal, onDone) {
       r.results.forEach((res) => { const li = lis[res.index ?? 0]; if (!li) return; li.className = res.ok ? "ok" : ""; li.querySelector(".dot").textContent = res.ok ? "✓" : "!"; if (res.note || res.error) li.lastChild.appendChild(h("small", null, res.note || res.error)); if (res.url) { const a = h("a", null, " 열기 ↗"); a.href = res.url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.style.color = "var(--blue)"; li.lastChild.firstChild.after(a); } });
       lis.forEach((li) => { if (li.className === "run") li.className = ""; });
       tg.textContent = r.ok ? "완료" : "중간에 멈춤"; tg.className = "tag" + (r.ok ? " done" : "");
-      if (inSheet) { const cl = h("button", "btn primary lg", "확인"); cl.type = "button"; cl.onclick = () => toChat(); rb.replaceWith(cl); cl.focus(); await new Promise((res) => { const iv = setInterval(() => { if (!inSheet) { clearInterval(iv); res(); } }, 120); }); }
+      note.hidden = true;  // 끝났으니 '확인을 누르면 적용돼요' 안내는 뺀다
+      if (inSheet) { const cl = h("button", "btn primary lg", "확인"); cl.type = "button"; cl.onclick = () => toChat(); rb.replaceWith(cl); cl.focus(); await new Promise((res) => { const iv = setInterval(() => { if (!inSheet) { clearInterval(iv); res(); } }, 120); }); cl.remove(); }  // 시트를 닫으면 '확인'은 할 일이 없으니 대화에 남기지 않는다
       lastTriage = null; refreshHome();
       tasks.unshift({ title: proposal.summary, status: r.ok ? "완료" : "중간에 멈춤", detail: r.results.map((x) => (x.ok ? "✓ " : "✕ ") + x.label).join("\n"), at: Date.now() }); saveLists();
       bot(r.ok ? "끝났어요. 한 일은 보관함에 기록해 뒀어요." : "중간에 멈췄어요. 어디까지 했는지 카드에 표시해 뒀어요.");
@@ -836,7 +840,7 @@ function setBadge(d) { pending = Math.max(0, pending + d); $("badge").hidden = !
 function pickRow(box, title, sub, fn) {
   const b = h("button", "bigrow"); b.type = "button"; b.style.gridTemplateColumns = "1fr auto";
   const tx = h("span"); tx.appendChild(h("b", null, title)); tx.appendChild(h("small", null, sub)); b.appendChild(tx); b.appendChild(h("span", "chev", "›"));
-  b.onclick = () => { box.querySelectorAll("button").forEach((x) => (x.disabled = true)); fn(); }; box.appendChild(b); return b;
+  b.onclick = () => { box.querySelectorAll("button").forEach((x) => (x.disabled = true)); b.classList.add("chosen"); fn(); }; box.appendChild(b); return b;
 }
 function notice(fresh) {
   if (fresh === true) return discoverChat("새 대회 준비할래");
@@ -1411,9 +1415,9 @@ function renderHome() {
   } else {
     dtx.appendChild(h("span", "dl", "아직 고른 대회가 없어요"));
     dtx.appendChild(h("b", "dnum pickc", "대회 고르기"));
-    dtx.appendChild(h("span", "dname", "눌러서 나갈 만한 대회 찾기 ›"));
-    dc.setAttribute("role", "button"); dc.tabIndex = 0; dc.style.cursor = "pointer";
-    const go = () => { showTab("chat"); discoverChat(); }; dc.onclick = go; dc.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
+    // 카드 전체가 아니라 이 버튼만 대화로 넘어간다 (카드 아무 데나 눌러도 넘어가던 것)
+    const pick = h("button", "linkbtn dpick", "나갈 만한 대회 찾기 ›"); pick.type = "button"; pick.onclick = () => { showTab("chat"); discoverChat(); };
+    dtx.appendChild(pick);
   }
   const ms = h("span", "dmas"); ms.innerHTML = MASCOT(64, true); dtop.appendChild(dtx); dtop.appendChild(ms); dc.appendChild(dtop);
   const steps = h("div", "dsteps"); ["신청", "협업", "제출", "끝"].forEach((n, i) => steps.appendChild(h("span", i < st ? "done" : i === st && extract ? "now" : "", i < st ? `${n} ✓` : n))  /* 대회를 고르기 전엔 지금 단계도 칠하지 않는다 */); dc.appendChild(steps);
@@ -1643,7 +1647,11 @@ async function today() {
   [...shown, ...rest].forEach((it, i) => {
     const b = h("button", "bigrow sev-" + itemTag(it)[1]); b.type = "button"; b.appendChild(h("span", "n", String(i + 1)));
     const tx = h("span"); const bt = h("b"); bt.appendChild(h("span", "sev " + itemTag(it)[1], itemTag(it)[0])); bt.appendChild(document.createTextNode(it.title)); tx.appendChild(bt); tx.appendChild(h("small", null, it.why)); { const ec = evChip(it); if (ec) tx.appendChild(ec); } b.appendChild(tx); b.appendChild(h("span", "chev", "›"));
-    b.onclick = () => { box.querySelectorAll("button").forEach((x) => (x.disabled = true)); openItem(it); };
+    b.onclick = () => {  // 다른 줄도 계속 누를 수 있다. 이미 연 일은 다시 열지 않고 그 카드로 간다
+      if (b._card && b._card.isConnected) { b._card.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+      const n0 = chat.childElementCount; b.classList.add("chosen"); openItem(it);
+      setTimeout(() => { b._card = chat.children[n0] || null; }, 0);
+    };
     (i < shown.length ? box : more).appendChild(b);
   });
   if (rest.length) {
@@ -1682,7 +1690,7 @@ function openItem(it) {
     c.appendChild(h("div", "lab", "Bento가 대신 할 수 있는 일"));
     const tiles = h("div", "big");
     it.options.forEach((o) => { const t = h("button", "bigrow"); t.type = "button"; t.style.gridTemplateColumns = "1fr auto"; const tx = h("span"); const b = h("b", null, o.label); if (o.recommended) { const tg = h("span", "sev ok", "추천"); tg.style.marginLeft = "6px"; b.appendChild(tg); } tx.appendChild(b); tx.appendChild(h("small", null, o.sub)); t.appendChild(tx); t.appendChild(h("span", "chev", "›"));
-      t.onclick = () => { tiles.querySelectorAll("button").forEach((x) => (x.disabled = true)); me(o.label); approval(o.proposal, (ok) => chip("다음 할 일 보기", today)); }; tiles.appendChild(t); });
+      t.onclick = () => { tiles.querySelectorAll("button").forEach((x) => (x.disabled = true)); t.classList.add("chosen"); me(o.label); approval(o.proposal, (ok) => chip("다음 할 일 보기", today)); }; tiles.appendChild(t); });
     c.appendChild(tiles);
   } else { const ok = h("button", "btn", "확인했어요"); ok.type = "button"; ok.onclick = () => { ok.disabled = true; chip("다음 할 일 보기", today); }; c.appendChild(ok); }
   scroll();
@@ -1750,7 +1758,7 @@ function eligBox(card, membersInput, saved, title) {
   const memberCount = () => (membersInput ? membersInput.value.split(",").map((x) => x.trim()).filter(Boolean).length : 0);
   const refresh = async () => {
     let r; try { r = await api("/eligibility", { method: "POST", body: JSON.stringify({ extract, answers: ans, source_url: noticeUrl() }) }); } catch (e) { verdict.textContent = "판정을 불러오지 못했어요"; return; }
-    if (!qs.childNodes.length) drawQs(r.questions);
+    if (!qs.childNodes.length) { drawQs(r.questions); if (locked) qs.querySelectorAll("button, input, select").forEach((x) => (x.disabled = true)); }  // 확인을 끝낸 뒤 다시 그린 칸은 눌러도 안 바뀌니 잠가 둔다
     verdict.innerHTML = ""; const bad = r.rows.filter((x) => x.status === "fail").length; lastFails = bad;
     verdict.appendChild(h("b", null, !r.rows.length ? "이 공고는 따로 확인할 자격 조건이 없어요" : bad ? `${bad}개 조건을 아직 못 채웠어요` : r.rows.some((x) => x.status === "warn") ? "남은 확인이 있어요" : "모든 조건을 채웠어요"));
     r.rows.forEach((x) => verdict.appendChild(crow(x)));
