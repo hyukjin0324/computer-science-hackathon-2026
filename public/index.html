@@ -114,6 +114,7 @@ details.history > .bub { margin-top: 8px; }
 .picks { display: flex; flex-direction: column; padding: 4px 8px 8px; }
 .pick { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; text-align: left; padding: 12px 8px; border-radius: var(--r-box); min-height: 64px; }
 .pick:hover { background: var(--surface-2); }
+.linkbtn { background: none; border: 0; padding: 4px 2px; font: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .btn.upfile { display: inline-flex; align-items: center; justify-content: center; gap: 8px; align-self: flex-start; }
 .pick .em { width: 40px; height: 40px; border-radius: var(--r-badge); background: var(--surface); border: 1px solid var(--line); color: var(--ink); display: grid; place-items: center; }
 .pick b { display: block; font-size: var(--fs-body); } .pick small { color: var(--muted); font-size: var(--fs-small); }
@@ -1568,7 +1569,10 @@ function onboarding() {
   if (ME.logged_in) {  // 이미 로그인: 누구로 들어가는지 보여 주고 시작하기
     const who = h("div", "fine"); who.style.display = "flex"; who.style.alignItems = "center"; who.style.justifyContent = "center"; who.style.gap = "8px";
     if (ME.avatar) { const im = h("img"); im.src = ME.avatar; im.alt = ""; im.width = 22; im.height = 22; im.style.borderRadius = "50%"; im.referrerPolicy = "no-referrer"; who.appendChild(im); }
-    who.appendChild(document.createTextNode(`@${ME.login}로 로그인돼 있어요`));
+    who.appendChild(document.createTextNode(`@${ME.login}로 로그인돼 있어요 ·`));
+    const out = h("button", "linkbtn", "로그아웃"); out.type = "button";  // 다른 계정으로 테스트할 때
+    out.onclick = async () => { out.disabled = true; try { await fetch("/auth/logout", { method: "POST" }); } catch (e) { /* 무시 */ } location.reload(); };
+    who.appendChild(out);
     bt.append(a, who); o.appendChild(bt);
     document.querySelector(".phone").appendChild(o); a.focus(); return;
   }
