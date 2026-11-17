@@ -93,8 +93,17 @@ details.history > .bub { margin-top: 8px; }
 .bub ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; white-space: normal; }
 .bub.me { align-self: flex-end; background: var(--primary); color: var(--primary-ink); border-color: transparent; }
 .bub.typing { color: var(--muted); }
-.chathero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 18px 12px 8px; }
-.chathero b { font-size: var(--fs-title); font-weight: 800; letter-spacing: -0.4px; margin-top: 6px; } .chathero span { font-size: var(--fs-small); color: var(--muted); }
+.chatbar { position: sticky; top: 0; z-index: 4; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0 10px; background: linear-gradient(var(--bg) 78%, rgb(0 0 0 / 0)); }
+.chatbar .cb-name { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-section); font-weight: 800; letter-spacing: -0.3px; }
+.chatbar .cb-st { font-size: var(--fs-caption); color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
+.chatbar .cb-st::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+.chatbar.busy .cb-st::before { background: var(--pop); }
+.chatbar .mascot .eye { transform-box: fill-box; transform-origin: center; animation: blink 4.2s infinite; }
+.chatbar.busy .mascot { animation: bob 1.1s ease-in-out infinite; }
+@keyframes blink { 0%, 90%, 96%, 100% { transform: scaleY(1); } 93% { transform: scaleY(.1); } }
+#v-chat .journey.pin { top: 64px; }
+.chathero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; padding: 10px 12px 8px; }
+.chathero b { font-size: var(--fs-title); font-weight: 800; letter-spacing: -0.4px; } .chathero span { font-size: var(--fs-small); color: var(--muted); }
 .bub.think { display: inline-flex; align-items: center; gap: 8px; } .bub.think .mascot { flex: none; animation: bob 1.1s ease-in-out infinite; }
 .work:not(.done) .wt .mascot { animation: bob 1.1s ease-in-out infinite; }
 .typing::after { content: "…"; animation: blink 1.2s infinite; } @keyframes blink { 50% { opacity: .25; } }
@@ -476,7 +485,7 @@ body.onboarding .dock { display: none; }  /* 첫 화면 뒤로 아래 막대가 
 .work { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .work .wt { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: var(--fs-body); }
 .work.done { padding: 10px 14px; } .work.done .steps { display: none; } .work.done .wt { font-weight: 600; font-size: var(--fs-small); color: var(--muted); }
-@media (prefers-reduced-motion: reduce) { .typing::after, .steps li.run .dot, .bub.think .mascot, .work .wt .mascot { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .typing::after, .steps li.run .dot, .bub.think .mascot, .work .wt .mascot, .chatbar .mascot, .chatbar .mascot .eye { animation: none; } }
 </style>
 
 </head>
@@ -639,7 +648,11 @@ async function working(title, labels, p) {
   try { const r = await p; clearInterval(tick); lis.forEach(ok); await wait(350); c.classList.add("done"); wt.lastChild.textContent = `${title} · ${labels.length}단계 끝`; return r; }
   catch (e) { clearInterval(tick); c.remove(); throw e; }
 }
-async function thinking(text, p) { const b = add(h("div", "bub typing think", text)); b.insertAdjacentHTML("afterbegin", MASCOT(22, true)); try { return await p; } finally { b.remove(); } }
+function barState(busy) {  // 위에 고정된 이름표: 생각하는 동안 '생각하는 중', 끝나면 '대기 중'
+  const bar = chat.querySelector(".chatbar"); if (!bar) return;
+  bar.classList.toggle("busy", busy); bar.querySelector(".cb-st").textContent = busy ? "생각하는 중" : "대기 중";
+}
+async function thinking(text, p) { const b = add(h("div", "bub typing think", text)); b.insertAdjacentHTML("afterbegin", MASCOT(22, true)); barState(true); try { return await p; } finally { b.remove(); barState(false); } }
 function fail(e) { bot(e.message + (e.errors ? "\n· " + e.errors.join("\n· ") : "")); }
 
 /* ---------- 첫 화면 ---------- */
@@ -659,8 +672,10 @@ function openPicks() {
 }
 function intro() {
   const d = new Date();
-  // 대화창 맨 위 가운데: 대화하는 상대가 Bento라는 걸 보여 준다 (대화가 길어지면 위로 올라가서 가리지 않는다)
-  const hero = h("div", "chathero"); hero.innerHTML = MASCOT(64, true, true);
+  // 대화창 맨 위 가운데에 고정: 마스코트(눈 깜빡임) + 이름 + 지금 상태. 대화를 내려도 그대로 있다
+  const bar = h("div", "chatbar"); const nm = h("div", "cb-name"); nm.innerHTML = MASCOT(30, true); nm.appendChild(h("span", null, "Bento"));
+  bar.appendChild(nm); bar.appendChild(h("div", "cb-st", "대기 중")); add(bar);
+  const hero = h("div", "chathero");
   hero.appendChild(h("b", null, "무엇을 맡길까요?")); hero.appendChild(h("span", null, "대회 찾기부터 제출 점검까지, 승인한 일만 대신 해요"));
   add(hero);
   add(h("div", "stamp", `${d.getMonth() + 1}월 ${d.getDate()}일 ${d.getHours() < 12 ? "오전" : "오후"} ${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}`));
