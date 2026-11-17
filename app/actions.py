@@ -14,7 +14,10 @@ from .state import RepoState
 
 FOOTER = "\n\n<sub>— 팀원 승인을 받아 Bento가 남겼어요</sub>"
 # 영어 낱말은 앞뒤가 영문자가 아닐 때만 ('main'의 ai, 'robot'의 bot 같은 오탐을 막는다)
-SUSPICIOUS = re.compile(r"((?<![a-z])(?:bento|agent|bot|ai)(?![a-z])|벤토|에이전트|봇)[^\n]{0,30}(머지|merge|닫아|close|삭제|delete|push|푸시|권한|token|토큰)", re.I)
+SUSPICIOUS = re.compile(
+    r"((?<![a-z])(?:bento|agent|bot|ai)(?![a-z])|벤토|에이전트|봇)[^\n]{0,30}"
+    # 한국어 낱말(권한·토큰·머지 등)은 뒤에 '~해/줘/하세요' 같은 부탁이 붙을 때만. 'AI 사용량 · 권한' 같은 설명은 빼려고
+    r"(merge|close|delete|push|token|닫아|지워|(?:머지|삭제|푸시|권한|토큰)[^\n]{0,8}?(?:해|하고|하세요|하라|줘|주세요|달라|적어|넘겨|알려))", re.I)
 
 
 class RequestReviewers(BaseModel):
