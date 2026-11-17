@@ -36,7 +36,7 @@ Bento가 할 수 있는 일:
 - notice: 공고 주소나 글을 읽고 마감·자격·제출물 정리
 - apply: 참가 자격 확인 후 신청 준비 (신청 버튼은 사용자가 직접 누른다)
 - plan: 마감에 맞춰 단계별 계획 짜기, GitHub 할 일로 만들기
-- today: 오늘 할 일·리뷰·담당 정하기 보기
+- today: 오늘 할 일·리뷰·담당 정하기 보기, 연락이 끊겼거나 맡은 일을 안 하는 팀원 챙기기(안부 댓글)
 - progress: 계획 대비 늦은 일 점검, 다시 계획
 - submit: 제출 전 빠진 것 점검
 규칙:
@@ -85,6 +85,8 @@ MENTION = [
 def align(reply: str, action: str) -> str:
     """답이 기능을 딱 하나 권했는데 버튼과 다르면, 답이 권한 기능으로 버튼을 바꾼다.
     여러 기능을 말했으면 고른 버튼이 그중 하나일 때만 두고, 아니면 버튼을 붙이지 않는다."""
+    if action == "none":
+        return "none"  # '계획 짜기 등을 도와요' 같은 자기소개에는 버튼을 붙이지 않는다
     said = [a for a, words in MENTION if any(w in reply for w in words)]
     if not said or action in said:
         return action  # 기능 이름을 안 썼거나, 쓴 것 중에 버튼이 있으면 그대로

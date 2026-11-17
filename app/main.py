@@ -252,7 +252,11 @@ def board(repo: str | None = None):
     unassigned.sort(key=key)
     load0 = {m: people[m]["open"] for m in people}
     for t in unassigned:  # 담당 없는 할 일: 제목으로 역할을 보고, 그 역할에서 맡은 일이 적은 사람을 추천
-        who, why = own.pick_by_role(st.members, st.roles, load0, t["title"])
+        named = own.named_owner(t["title"], st.members, getattr(st, "names", None), st.leads)
+        if named == "?":  # 제목에 '담당: A·발표'처럼 적혀 있지만 누군지 모르면 추천하지 않는다
+            t["suggest"] = {"who": None, "role": own.role_names(own.role_codes_for(t["title"])), "why": "제목에 담당이 적혀 있어요 · 직접 정해 주세요"}
+            continue
+        who, why = (named, "제목에 적힌 담당") if named else own.pick_by_role(st.members, st.roles, load0, t["title"])
         if who:
             load0[who] = load0.get(who, 0) + 1
         t["suggest"] = {"who": who, "role": own.role_names(own.role_codes_for(t["title"])), "why": why}

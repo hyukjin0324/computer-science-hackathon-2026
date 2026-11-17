@@ -80,6 +80,7 @@ class RepoState:
     leads: list[str] = field(default_factory=list)  # 팀장 (저장소 관리자)
     signals: dict = field(default_factory=dict)  # PR·이슈 밖의 팀 신호 (signals.collect)
     merged_numbers: set[int] = field(default_factory=set)  # 최근 머지된 PR (머지 뒤 리뷰 부탁 댓글은 여기에 단다)
+    names: dict[str, str] = field(default_factory=dict)  # 아이디 → GitHub 프로필 이름 (제목의 '담당: 김일여' 맞추기)
 
     def pr(self, n: int) -> PR | None:
         return next((p for p in self.prs if p.number == n), None)
@@ -150,6 +151,9 @@ def closing_refs(text: str) -> set[int]:
     return out
 
 
+_NAMES: dict[str, str] = {}
+
+
 def build_state(gh, now: datetime | None = None) -> RepoState:
     now = now or datetime.now(timezone.utc)
     members = gh.members()
@@ -201,4 +205,12 @@ def build_state(gh, now: datetime | None = None) -> RepoState:
         sig = {}
     st = RepoState(gh.repo, now, members, prs, issues, milestones, merged_refs, authors, roles, leads, sig)
     st.merged_numbers = merged_numbers
+    for m in members[:12]:  # 프로필 이름은 하루에 거의 안 바뀌어서 한 번만 읽는다
+        if m not in _NAMES:
+            try:
+                _NAMES[m] = gh.user_name(m) or ""
+            except Exception:  # noqa: BLE001 — 이름은 없어도 된다
+                _NAMES[m] = ""
+        if _NAMES[m]:
+            st.names[m] = _NAMES[m]
     return st
