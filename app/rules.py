@@ -77,6 +77,8 @@ def _title(lines: list[str]) -> str:
 
 def _team(lines: list[str]) -> tuple[int | None, int | None]:
     for l in lines:
+        if re.search(r"개인", l) and re.search(r"(?:팀|2\s*인|단체).{0,12}불가", l):  # '개인 (2인 이상 팀 단위 참여 불가)'
+            return 1, 1
         if not re.search(r"팀|인원|자격|구성|대상", l) or re.search(r"규모|\d+\s*팀\s*\(|약\s*\d+\s*명|총\s*\d+\s*명", l):
             continue
         if m := re.search(r"(\d+)\s*[~\-–]\s*(\d+)\s*(?:인|명)", l):
@@ -95,9 +97,27 @@ def _split_items(s: str) -> list[str]:
     return [p.strip(" .;") for p in parts if 1 < len(p.strip(" .;")) <= 60]
 
 
+HEAD_ONLY = re.compile(r"^(?:신청|접수|모집|제출|참가\s*신청)\s*(?:기간|마감|일정)?$")
+
+
+def _merge_headings(lines: list[str]) -> list[str]:
+    """포스터처럼 '모집기간' 제목 줄 아래 줄에 날짜가 오는 경우: '모집기간: ~ 11월 20일 (금)'으로 합친다. ('접 수'처럼 띄어 쓴 제목도 본다)"""
+    out, i = [], 0
+    while i < len(lines):
+        head = re.sub(r"\s+", "", lines[i]) if len(lines[i]) <= 12 else ""
+        if head and HEAD_ONLY.match(head) and i + 1 < len(lines) and DATE.search(lines[i + 1]) and len(lines[i + 1]) <= 80:
+            out.append(f"{head}: {lines[i + 1]}")
+            i += 2
+        else:
+            out.append(lines[i])
+            i += 1
+    return out
+
+
 def rule_extract(text: str, now: datetime | None = None) -> NoticeExtract:
     now = now or datetime.now(KST)
     lines = [l.strip() for l in text.splitlines() if l.strip()]
+    lines = _merge_headings(lines)
     facts: list[Fact] = []
     apply_hits: list[tuple[datetime, str]] = []
     submit_hits: list[tuple[datetime, str]] = []

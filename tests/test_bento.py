@@ -1440,3 +1440,12 @@ def test_rules_read_parenthesized_deliverable_label_from_hwpx_notice():
     ex = rule_extract("○ (제출 파일) 하기 파일을 모두 필수로 제출-①참가서류 한글파일: 서명 후 pdf ②결과제출서류 엑셀 파일\n○ (참가자격) 개인 또는 팀 단위(5인 이내)")
     assert [d.name for d in ex.deliverables] == ["참가서류 한글파일: 서명 후 pdf", "결과제출서류 엑셀 파일"]
     assert ex.team_max == 5
+
+
+def test_rules_read_poster_style_heading_then_date_and_individual_only():
+    """포스터(JTI·하나증권)에서 틀렸던 것: 제목 줄 아래 날짜, '개인(2인 이상 팀 불가)' (#13)."""
+    from app.rules import rule_extract
+    ex = rule_extract("모집기간\n~ 11월 20일 (금)\n지원방법\n인스타그램 DM")
+    assert ex.apply_deadline.startswith("11월 20일")
+    ex = rule_extract("접 수\n2026.11.02(월)~11.30(월)\n참가형태 개인(2인 이상 팀 단위 참여 불가)")
+    assert ex.apply_deadline.startswith("11월 30일") and (ex.team_min, ex.team_max) == (1, 1)
