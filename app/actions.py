@@ -5,6 +5,7 @@ AI가 무엇을 제안하든 여기서 코드가 다시 검사한 뒤에만 실�
 """
 
 import re
+from datetime import datetime
 from typing import Annotated, Literal, Union
 
 import httpx
@@ -81,6 +82,8 @@ class SetTeamRules(BaseModel):
     type: Literal["set_team_rules"] = "set_team_rules"
     lazy: list[str]  # 반대가 없으면 실행할 일: reviewers, reminders
     hours: int = 24
+    rotate_days: int | None = None  # 당번을 몇 날마다 바꿀지 (1~14). 안 넘기면 그대로
+    reshuffle: bool = False  # 당번 순서를 새로 섞기
 
 
 class SetRoles(BaseModel):
@@ -214,6 +217,8 @@ def validate(actions: list, state: RepoState) -> list[str]:
                 bad("반대가 없으면 실행할 수 있는 건 리뷰어 지정과 리마인드 댓글뿐이에요")
             if not 6 <= a.hours <= 72:
                 bad("기다리는 시간은 6~72시간 사이로 정해 주세요")
+            if a.rotate_days is not None and not 1 <= a.rotate_days <= 14:
+                bad("당번은 1~14일마다 바꿀 수 있어요")
         elif isinstance(a, SetRoles):
             from .ownership import ROLES
             if not a.roles:
@@ -259,7 +264,11 @@ def label(a, discord: bool) -> tuple[str, str]:
         return f"할 일 {', '.join('#' + str(n) for n in a.issues)}을 '{a.milestone_title}'에 묶기", ""
     if isinstance(a, SetTeamRules):
         names = {"reviewers": "리뷰어 지정", "reminders": "리마인드 댓글"}
-        return "Bento · 팀 규칙 바꾸기", ("반대가 없으면 실행: " + ", ".join(names[c] for c in a.lazy) + f" · {a.hours}시간 기다림") if a.lazy else "반대가 없으면 실행: 끄기 (모두 승인 필요)"
+        if a.rotate_days is not None or a.reshuffle:  # 당번 화면에서 낸 제안: 당번 얘기만 (반대가 없으면 실행 설정은 그대로 둔다)
+            sub = "당번 " + (f"{a.rotate_days}일마다 " if a.rotate_days is not None else "") + ("순서 새로 섞기" if a.reshuffle else "바꾸기") + " · 저장한 날부터 시작"
+        else:
+            sub = ("반대가 없으면 실행: " + ", ".join(names[c] for c in a.lazy) + f" · {a.hours}시간 기다림") if a.lazy else "반대가 없으면 실행: 끄기 (모두 승인 후 실행)"
+        return "Bento · 팀 규칙 바꾸기", sub
     if isinstance(a, SetRoles):
         from .ownership import role_names
         return "Bento · 팀 역할 정하기", " · ".join(f"{w} {role_names(c) or '역할 없음'}" for w, c in a.roles.items())
@@ -333,8 +342,14 @@ def execute(actions: list, gh, settings, op: str | None = None, by: str | None =
                 for n in a.issues:
                     gh.update_issue(n, milestone=milestone_numbers[a.milestone_title])
             elif isinstance(a, SetTeamRules):
-                from .ownership import write_rules
-                write_rules(gh, a.lazy, a.hours)
+                from .ownership import KST as _KST, read_rules, write_rules
+                import secrets as _secrets
+                cur = read_rules(gh)
+                rot = a.rotate_days if a.rotate_days is not None else cur["rotate"]
+                seed = _secrets.token_hex(3) if (a.reshuffle or (a.rotate_days is not None and not cur["seed"])) else None
+                moved = a.reshuffle or (a.rotate_days is not None and (a.rotate_days != cur["rotate"] or not cur["start"]))
+                start = datetime.now(_KST).strftime("%Y%m%d") if moved else None  # 바꾼 날부터 새 주기로 시작
+                write_rules(gh, a.lazy, a.hours, rot, seed, start)
                 url = gh.html("/labels")
             elif isinstance(a, SetRoles):
                 from .ownership import write_roles

@@ -8,6 +8,7 @@
 
 import hashlib
 import json
+import random
 import re
 from datetime import datetime, timedelta, timezone
 
@@ -21,12 +22,52 @@ REMIND_H, OPEN_H = 12, 24
 # ---------- 오늘의 당번 ----------
 
 
-def duty(members: list[str], now: datetime | None = None) -> str | None:
-    """팀원이 하루씩 돌아가며 맡는다 (한국 날짜 기준)."""
+def _start_ord(rules: dict | None) -> int:
+    v = (rules or {}).get("start") or ""
+    try:
+        return datetime.strptime(v, "%Y%m%d").date().toordinal()
+    except ValueError:
+        return 0
+
+
+def duty_order(members: list[str], rules: dict | None = None) -> list[str]:
+    """당번 순서. 팀이 순서를 섞어 두었으면(seed) 그 순서로 고정, 아니면 아이디 순."""
+    order = sorted(members)
+    seed = (rules or {}).get("seed")
+    if seed:
+        random.Random(seed).shuffle(order)
+    return order
+
+
+def duty_index(now: datetime, rules: dict | None = None) -> int:
+    rot = max(1, int((rules or {}).get("rotate") or 1))
+    day = now.astimezone(KST).date().toordinal()
+    return max(0, day - _start_ord(rules)) // rot
+
+
+def duty(members: list[str], now: datetime | None = None, rules: dict | None = None) -> str | None:
+    """팀원이 정해진 날수(기본 하루)씩 돌아가며 맡는다 (한국 날짜 기준)."""
     if not members:
         return None
-    day = (now or datetime.now(timezone.utc)).astimezone(KST).date().toordinal()
-    return sorted(members)[day % len(members)]
+    order = duty_order(members, rules)
+    return order[duty_index(now or datetime.now(timezone.utc), rules) % len(order)]
+
+
+def duty_schedule(members: list[str], rules: dict | None, now: datetime, n: int = 5) -> list[dict]:
+    """앞으로 돌아올 당번 일정: [{who, from, to}] (날짜는 한국 기준 YYYY-MM-DD). 첫 줄은 지금 당번."""
+    if not members:
+        return []
+    rot = max(1, int((rules or {}).get("rotate") or 1))
+    order = duty_order(members, rules)
+    idx = duty_index(now, rules)
+    first = _start_ord(rules) + idx * rot
+    if not _start_ord(rules):
+        first = now.astimezone(KST).date().toordinal() - (now.astimezone(KST).date().toordinal() % rot)
+    out = []
+    for k in range(n):
+        a = first + k * rot
+        out.append({"who": order[(idx + k) % len(order)], "from": datetime.fromordinal(a).date().isoformat(), "to": datetime.fromordinal(a + rot - 1).date().isoformat()})
+    return out
 
 
 def _num(item_id: str) -> int | None:
@@ -36,7 +77,7 @@ def _num(item_id: str) -> int | None:
 
 def owner_and_age(item: dict, state: RepoState, review_wait_hours: float, now: datetime) -> tuple[str | None, float]:
     if "age" in item:  # watch.py가 정한 주인(없으면 오늘 당번)과 기다린 시간
-        return (item.get("who") if item.get("who") in state.members else duty(state.members, now)), max(0.0, float(item.get("age") or 0))
+        return (item.get("who") if item.get("who") in state.members else duty(state.members, now, getattr(state, "rules", None))), max(0.0, float(item.get("age") or 0))
     kind, n = item["id"].split("-")[0], _num(item["id"])
     pr = state.pr(n) if n else None
     if kind == "review" and pr:  # 리뷰가 밀려 제일 답답한 사람 = PR 작성자
@@ -47,8 +88,23 @@ def owner_and_age(item: dict, state: RepoState, review_wait_hours: float, now: d
         return pr.author, 0.0
     if kind == "assign":
         ages = [hours(t, now) for i in state.issues if not i.assignees and (t := parse_ts(i.created_at))]
-        return duty(state.members, now), max(ages, default=0.0)
-    return duty(state.members, now), 0.0
+        return duty(state.members, now, getattr(state, "rules", None)), max(ages, default=0.0)
+    return duty(state.members, now, getattr(state, "rules", None)), 0.0
+
+
+def owner_reason(item: dict, state: RepoState, owner: str | None, now: datetime) -> str:
+    """이 일의 주인이 왜 이 사람인지 한 줄. owner_and_age와 같은 기준을 말로 옮긴 것."""
+    if not owner:
+        return ""
+    rules = getattr(state, "rules", None) or {}
+    rot = max(1, int(rules.get("rotate") or 1))
+    on_duty = f"당번이라서 · {'오늘' if rot == 1 else f'{rot}일마다 돌아가요'}"
+    if "age" in item:
+        return "이 일과 가장 관련 있는 사람으로 정했어요" if item.get("who") in state.members else on_duty
+    kind, n = item["id"].split("-")[0], _num(item["id"])
+    if kind in ("review", "fix", "merge", "conflict") and n and state.pr(n):
+        return "이 PR을 올린 사람이라서"
+    return on_duty
 
 
 def level(age: float) -> int:
@@ -69,21 +125,35 @@ def category(action) -> str | None:
 
 
 def read_rules(gh) -> dict:
+    base = {"lazy": [], "hours": 24, "rotate": 1, "seed": "", "start": ""}
     try:
         desc = gh.get_label(RULES).get("description") or ""
     except GitHubError:
-        return {"lazy": [], "hours": 24}
+        return base
     kv = dict(p.split("=", 1) for p in desc.split(";") if "=" in p)
     lazy = [c for c in kv.get("lazy", "").split(",") if c in CATEGORIES]
     try:
         h = min(72, max(6, int(kv.get("hours", "24"))))
     except ValueError:
         h = 24
-    return {"lazy": lazy, "hours": h}
+    try:
+        rot = min(14, max(1, int(kv.get("rot", "1"))))
+    except ValueError:
+        rot = 1
+    seed = kv.get("seed", "") if re.fullmatch(r"[0-9a-f]{1,12}", kv.get("seed", "")) else ""
+    start = kv.get("from", "") if re.fullmatch(r"\d{8}", kv.get("from", "")) else ""
+    return {"lazy": lazy, "hours": h, "rotate": rot, "seed": seed, "start": start}
 
 
-def write_rules(gh, lazy: list[str], hours_: int) -> None:
+def write_rules(gh, lazy: list[str], hours_: int, rotate: int | None = None, seed: str | None = None, start: str | None = None) -> None:
+    """팀 규칙 저장. 당번 주기·순서·시작일은 넘기지 않으면 지금 값을 그대로 둔다."""
+    cur = read_rules(gh)
+    rot = cur["rotate"] if rotate is None else rotate
+    sd = cur["seed"] if seed is None else seed
+    st = cur["start"] if start is None else start
     desc = f"lazy={','.join(lazy)};hours={hours_}"
+    if rot != 1 or sd or st:
+        desc += f";rot={rot};seed={sd};from={st}"
     try:
         gh.update_label(RULES, desc)
     except GitHubError:

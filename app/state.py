@@ -80,6 +80,7 @@ class RepoState:
     leads: list[str] = field(default_factory=list)  # 팀장 (저장소 관리자)
     signals: dict = field(default_factory=dict)  # PR·이슈 밖의 팀 신호 (signals.collect)
     merged_numbers: set[int] = field(default_factory=set)  # 최근 머지된 PR (머지 뒤 리뷰 부탁 댓글은 여기에 단다)
+    rules: dict = field(default_factory=dict)  # 팀 규칙 (반대가 없으면 실행, 당번 주기·순서)
     names: dict[str, str] = field(default_factory=dict)  # 아이디 → GitHub 프로필 이름 (제목의 '담당: 김일여' 맞추기)
 
     def pr(self, n: int) -> PR | None:
@@ -205,6 +206,11 @@ def build_state(gh, now: datetime | None = None) -> RepoState:
         sig = {}
     st = RepoState(gh.repo, now, members, prs, issues, milestones, merged_refs, authors, roles, leads, sig)
     st.merged_numbers = merged_numbers
+    try:
+        from .ownership import read_rules
+        st.rules = read_rules(gh)
+    except Exception:  # noqa: BLE001 - 규칙을 못 읽어도 기본(하루씩 아이디 순)으로
+        st.rules = {}
     for m in members[:12]:  # 프로필 이름은 하루에 거의 안 바뀌어서 한 번만 읽는다
         if m not in _NAMES:
             try:

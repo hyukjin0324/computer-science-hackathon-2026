@@ -269,7 +269,7 @@ def get_triage(repo: str | None = None):
     rules = own.read_rules(gh)
     for it in items:
         owner, age = own.owner_and_age(it, st, settings.review_wait_hours, now)
-        it.update(owner=owner, age_hours=round(age, 1), level=own.level(age))
+        it.update(owner=owner, owner_why=own.owner_reason(it, st, owner, now), age_hours=round(age, 1), level=own.level(age))
         first = next((o for o in it["options"] if o.get("recommended")), it["options"][0] if it["options"] else None)
         it["lazy"] = own.lazy_status(gh, it, first["actions"], rules, st.members, now) if first and rules["lazy"] else {"eligible": False}
         it["options"] = [{"label": o["label"], "recommended": o.get("recommended", False), "sub": o.get("sub", ""),
@@ -278,7 +278,17 @@ def get_triage(repo: str | None = None):
         lead = next((m for m in st.leads if m != it["proposed_by"]), None)
         it.update(owner=lead, age_hours=0, level=0 if lead else 2, lazy={"eligible": False})
         items.insert(0, it)
-    return {"repo": gh.repo, "items": items, "members": st.members, "duty": own.duty(st.members, now), "rules": rules, "roles": st.roles, "leads": st.leads}
+    return {"repo": gh.repo, "items": items, "members": st.members, "duty": own.duty(st.members, now, st.rules), "duty_schedule": own.duty_schedule(st.members, st.rules, now), "rules": rules, "roles": st.roles, "leads": st.leads}
+
+
+def _why_assigned(title: str, who: str, st) -> str:
+    """이 사람이 왜 이 일을 맡았는지. Bento가 정한 게 아니라 GitHub의 담당자 지정을 그대로 보여 준다."""
+    named = own.named_owner(title, st.members, getattr(st, "names", None), st.leads)
+    parts = ["제목에 담당으로 적혀 있어요" if named == who else "GitHub 담당자로 지정돼 있어요"]
+    mine = [c for c in own.role_codes_for(title) if c in st.roles.get(who, [])]
+    if mine:
+        parts.append(f"{own.role_names(mine)} 역할과 맞아요")
+    return " · ".join(parts)
 
 
 @app.get("/api/board")
@@ -304,7 +314,7 @@ def board(repo: str | None = None):
         raw[i.number] = i
         for who in i.assignees:
             if who in people:
-                people[who]["tasks"].append(t)
+                people[who]["tasks"].append({**t, "why": _why_assigned(i.title, who, st)})
         if not i.assignees and t["safe"] and not is_submit_act(re.sub(r"^\[[^\]]*\]\s*", "", i.title)):
             unassigned.append(t)  # 의심 지시가 있는 이슈·제출 행동은 담당을 나누지 않는다 ('이슈 정리'에서 따로 다룬다)
     key = lambda t: (t["due"] is None, t["due"] or "")
@@ -603,6 +613,8 @@ class RulesIn(BaseModel):
     repo: str | None = None
     lazy: list[str] = []
     hours: int = 24
+    rotate_days: int | None = None
+    reshuffle: bool = False
 
 
 class RolesIn(BaseModel):
@@ -633,7 +645,7 @@ def team_rules(body: RulesIn):
     """'반대가 없으면 실행' 규칙 바꾸기. 팀 전체에 영향을 주니 이것도 승인을 받는다."""
     gh, st = state_for(body.repo)
     lazy = [c for c in dict.fromkeys(body.lazy) if c in own.CATEGORIES]
-    return {"proposal": _proposal(gh.repo, "팀 규칙 바꾸기", [SetTeamRules(lazy=lazy, hours=body.hours)], "rules"), "current": own.read_rules(gh)}
+    return {"proposal": _proposal(gh.repo, "팀 규칙 바꾸기", [SetTeamRules(lazy=lazy, hours=body.hours, rotate_days=body.rotate_days, reshuffle=body.reshuffle)], "rules"), "current": own.read_rules(gh)}
 
 
 def lazy_tick(repo: str | None, now: datetime | None = None) -> dict:
@@ -701,6 +713,16 @@ def agent_run(authorization: str | None = Header(default=None)):
         sent = False
         hook = discord_mod.webhook_for(gh, settings)
         key = hashlib.sha256(r["summary"].encode()).hexdigest()[:12]
+        rules_now = getattr(st, "rules", {}) or {}
+        if rules_now.get("seed") and hook and os.getenv("BENTO_AUTO_NOTIFY") == "1":  # 당번 순서를 정해 둔 팀만: 새 당번이 시작하는 날 알린다
+            sched = own.duty_schedule(st.members, rules_now, datetime.now(timezone.utc), 2)
+            today_kst = datetime.now(own.KST).date().isoformat()
+            if len(sched) == 2 and sched[0]["from"] == today_kst and _LAST_ALERT.get("duty:" + repo) != today_kst:
+                import httpx
+                days = rules_now.get("rotate", 1)
+                httpx.post(hook, json={"content": f"[{repo}] 오늘부터 {days}일 동안 당번은 {sched[0]['who']}님이에요 (~{sched[0]['to'][5:].replace('-', '/')}). 다음 당번은 {sched[1]['who']}님, {sched[1]['from'][5:].replace('-', '/')}부터예요.",
+                                           "allowed_mentions": {"parse": []}}, timeout=10)
+                _LAST_ALERT["duty:" + repo] = today_kst
         if r["findings"] and hook and os.getenv("BENTO_AUTO_NOTIFY") == "1" and _LAST_ALERT.get(repo) != key:
             import httpx
             app_url = os.getenv("BENTO_APP_URL", "")
