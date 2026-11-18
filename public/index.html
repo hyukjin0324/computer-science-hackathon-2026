@@ -407,6 +407,10 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .dcard .dtop { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .dcard .dtx { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .dcard .dl { font-size: var(--fs-small); font-weight: 700; color: var(--muted); }
+.dcard .dnum.nodate { background: none; color: var(--muted); padding: 0; font-size: var(--fs-title-l); letter-spacing: -0.5px; }  /* 날짜를 모르는 건 노랑 칩이 아니라 조용한 회색 글자로 */
+.dcard .nodate-ask { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 4px 0 2px; }
+.dcard .nodate-ask .q { font-size: var(--fs-small); color: var(--ink); font-weight: 600; }
+.dcard .nodate-ask .btn { height: 38px; padding: 0 16px; font-size: var(--fs-small); }
 .dcard .dnum.pickc { background: none; color: var(--ink); padding: 0; font-size: var(--fs-title-l); letter-spacing: -0.5px; }
 .dcard .dnum { align-self: flex-start; font-size: var(--fs-display); font-weight: 800; line-height: 1.1; letter-spacing: -1px; background: var(--pop-soft); color: var(--pop-deep); padding: 4px 12px; border-radius: var(--r-box); margin: 2px 0; }
 .dcard .dname { font-size: var(--fs-small); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1496,7 +1500,11 @@ function renderHome() {
   const dd2 = needApply ? appD : subD;
   if (extract) {
     dtx.appendChild(h("span", "dl", needApply ? "신청 마감까지" : st >= 3 ? "제출 완료" : "제출 마감까지"));
-    dtx.appendChild(h("b", "dnum", st >= 3 ? "끝!" : dd2 == null ? "날짜 미정" : dd2 > 0 ? `D-${dd2}` : dd2 === 0 ? "D-day" : "마감 지남"));
+    dtx.appendChild(h("b", "dnum" + (dd2 == null && st < 3 ? " nodate" : ""), st >= 3 ? "끝!" : dd2 == null ? "날짜 미정" : dd2 > 0 ? `D-${dd2}` : dd2 === 0 ? "D-day" : "마감 지남"));
+    if (dd2 == null && st < 3 && !needApply) {  // 마감을 모르면 조용히 '미정'만 보여 주지 않고, 바로 입력하겠냐고 묻는다
+      const ask = h("div", "nodate-ask"); ask.appendChild(h("span", "q", "제출 마감을 못 찾았어요. 입력하실래요?"));
+      const sd = h("button", "btn primary", "마감 날짜 입력하기"); sd.type = "button"; sd.onclick = () => { showTab("chat"); askDeadline(); }; ask.appendChild(sd); dtx.appendChild(ask);
+    }
     dtx.appendChild(h("span", "dname", extract.title || ""));
   } else {
     dtx.appendChild(h("span", "dl", "아직 고른 대회가 없어요"));
@@ -2325,7 +2333,7 @@ function openMe(page) { mePage = page; setTimeout(() => syncNav("me")); try { hi
 function buildRoles(v, closeSheet) {
   if (curDraft()) { v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 정할 수 있어요.")); return; }
   const cr = h("div", "card"); cr.appendChild(h("b", null, "팀 역할"));
-  cr.appendChild(h("div", "note", "역할을 정해 두면 계획 단계와 할 일을 역할에 맞는 사람에게 맡기고, 리뷰어도 같은 역할 팀원을 먼저 추천해요. 한 사람이 3개까지 맡을 수 있어요. 바꾸는 것도 팀원 승인을 받아요."));
+  cr.appendChild(h("div", "note", "역할을 정해 두면 계획 단계와 할 일을 역할에 맞는 사람에게 맡기고, 리뷰어도 같은 역할 팀원을 먼저 추천해요. 한 사람이 3개까지 맡을 수 있어요. 저장하면 바로 팀 저장소에 남아 팀원 모두 같은 역할표를 봐요."));
   const body = h("div"); body.textContent = "역할표를 불러오고 있어요…"; cr.appendChild(body); v.appendChild(cr);
   api("/roles").then((r) => {
     body.textContent = ""; const pick = {}; const ex = (r.members || []);
@@ -2341,8 +2349,8 @@ function buildRoles(v, closeSheet) {
       });
       row.appendChild(chips); body.appendChild(row);
     });
-    const sv = h("button", "btn primary", "팀원에게 승인받고 저장"); sv.type = "button"; sv.style.marginTop = "12px";
-    sv.onclick = async () => { sv.disabled = true; try { const p = await api("/roles", { method: "POST", body: JSON.stringify({ repo: curRepo(), roles: pick }) }); if (!p.proposal) { snack(p.message); sv.disabled = false; return; } if (closeSheet) closeSheet(); else showTab("chat"); bot("팀 역할을 이렇게 정할게요. 승인하면 GitHub에 저장돼서 팀원 모두 같은 역할표를 봐요."); approval(p.proposal, (ok) => { if (ok) { lastTriage = null; refreshHome(); bot("역할을 저장했어요. 이제 계획과 할 일을 역할대로 나눠요."); } }); } catch (e) { sv.disabled = false; fail(e); } };
+    const sv = h("button", "btn primary", "역할 저장"); sv.type = "button"; sv.style.marginTop = "12px";
+    sv.onclick = async () => { sv.disabled = true; try { const r = await api("/roles", { method: "POST", body: JSON.stringify({ repo: curRepo(), roles: pick }) }); if (!r.saved) { snack(r.message || "바뀐 역할이 없어요"); sv.disabled = false; return; } snack("팀 역할을 저장했어요"); if (closeSheet) closeSheet(); lastTriage = null; refreshHome(); loadBoard(); if (mePage === "roles") renderMe(); bot("역할을 저장했어요. 이제 계획과 할 일을 역할대로 나눠요."); } catch (e) { sv.disabled = false; fail(e); } };
     body.appendChild(sv);
   }).catch((e) => { body.textContent = e.message; });
 }
