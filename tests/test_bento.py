@@ -1600,3 +1600,20 @@ def test_triage_items_say_why_their_owner_is_that_person():
     t = client.get("/api/triage").json()
     assert t["items"] and all(i.get("owner_why") for i in t["items"] if i.get("owner"))
     assert any("PR을 올린 사람" in i["owner_why"] for i in t["items"]) or any("당번" in i["owner_why"] for i in t["items"])
+
+
+def test_notice_uses_deadline_typed_by_user_when_notice_has_none():
+    """공고에서 제출 마감을 못 찾았을 때 사용자가 적은 날짜로 일정을 만든다."""
+    main._demo.reset()
+    text = "2026 어떤 해커톤\n주제: 서비스\n제출물: GitHub 링크, 발표 자료"
+    base = client.post("/api/notice", json={"text": text, "no_ai": True, "new_project": False}).json()
+    assert base["extract"]["submit_deadline_iso"] is None
+    r = client.post("/api/notice", json={"text": text, "no_ai": True, "submit_deadline_iso": "2026-11-24T12:00:00+09:00"}).json()
+    assert r["extract"]["submit_deadline_iso"].startswith("2026-11-24T12:00") and "11월 24일" in r["extract"]["submit_deadline"]
+    if r.get("plan"):
+        ms = [s for s in r["plan"]["steps"] if "마감일 만들기" in s["label"]]
+        assert ms and "날짜를 못 찾았어요" not in ms[0]["sub"]
+    bad = client.post("/api/notice", json={"text": text, "no_ai": True, "submit_deadline_iso": "내일"})
+    assert bad.status_code == 422
+    again = client.post("/api/notice", json={"text": text, "no_ai": True}).json()
+    assert again["extract"]["submit_deadline_iso"] is None  # 캐시된 분석 결과는 바뀌지 않는다
