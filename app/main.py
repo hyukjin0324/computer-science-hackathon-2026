@@ -88,7 +88,7 @@ import contextvars
 
 _ASKER: contextvars.ContextVar[str | None] = contextvars.ContextVar("asker", default=None)
 # 팀 전체에 영향을 주는 변경: 제안한 사람 혼자서는 실행하지 못한다 (팀장이거나 다른 팀원이 승인해야)
-TEAM_WIDE = {"set_roles", "set_team_rules", "update_milestone", "close_issue", "reassign_issue"}
+TEAM_WIDE = {"set_team_rules", "update_milestone", "close_issue", "reassign_issue"}
 APPROVE_PREFIX = "[승인 요청]"
 
 
@@ -638,14 +638,21 @@ def roles_get(repo: str | None = None):
 
 
 @app.post("/api/roles")
-def roles_set(body: RolesIn):
-    """팀 역할 바꾸기. 팀 전체에 영향을 주니 승인을 받는다."""
+def roles_set(body: RolesIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    """팀 역할 바꾸기. 저장 버튼을 누른 것이 확인이라 따로 승인을 받지 않는다. 로그인을 켠 서버에서는 그 저장소 팀원만."""
+    _check_code(x_bento_code, request)
     gh, st = state_for(body.repo)
+    actor = _discord_actor(request, st)
     roles = {m: [c for c in dict.fromkeys(cs) if c in own.ROLES][:3] for m, cs in body.roles.items() if m in st.members}
     changed = {m: c for m, c in roles.items() if sorted(c) != sorted(st.roles.get(m, []))}
     if not changed:
-        return {"proposal": None, "message": "바뀐 역할이 없어요"}
-    return {"proposal": _proposal(gh.repo, "팀 역할 정하기", [SetRoles(roles=changed)], "roles")}
+        return {"saved": False, "message": "바뀐 역할이 없어요", "roles": st.roles}
+    try:
+        own.write_roles(gh, changed)
+    except GitHubError as e:
+        raise HTTPException(502, f"GitHub에 저장하지 못했어요: {e}") from e
+    merged = {**st.roles, **changed}
+    return {"saved": True, "roles": {m: c for m, c in merged.items() if c}, "changed": sorted(changed), "by": actor}
 
 
 @app.post("/api/team-rules")

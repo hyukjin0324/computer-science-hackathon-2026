@@ -915,20 +915,22 @@ def test_github_milestone_dates_are_korean_dates():
     assert ms_due("2026-11-16T00:00:00Z").isoformat() == "2026-11-16T14:59:00+00:00"  # 그 날짜 한국 시간 23:59
 
 
-def test_roles_are_approved_then_used_for_tasks_and_reviewers():
+def test_roles_are_saved_directly_then_used_for_tasks_and_reviewers():
     import dataclasses
     from app import ownership as own
     from app.triage import triage
     r = client.get("/api/roles").json()
     m = r["members"]
     assert set(r["choices"]) == {"pm", "fe", "be", "ds", "pt"}
-    bad = client.post("/api/roles", json={"roles": {m[0]: ["pm", "x"]}}).json()["proposal"]  # 없는 역할은 빼고
-    assert "기획·PM" in bad["steps"][0]["sub"]
-    p = client.post("/api/roles", json={"roles": {m[0]: ["be"], m[1]: ["fe"], m[2]: ["pt", "ds"]}}).json()["proposal"]
-    assert client.post("/api/execute", json={"token": p["token"]}).json()["ok"]
+    one = client.post("/api/roles", json={"roles": {m[0]: ["pm", "x"]}}).json()  # 없는 역할은 빼고, 승인 없이 바로 저장
+    assert one["saved"] and one["roles"][m[0]] == ["pm"] and "proposal" not in one
+    out = client.post("/api/roles", json={"roles": {m[0]: ["be"], m[1]: ["fe"], m[2]: ["pt", "ds"]}}).json()
+    assert out["saved"] and sorted(out["changed"]) == sorted([m[0], m[1], m[2]])
     roles = client.get("/api/roles").json()["roles"]
     assert roles[m[0]] == ["be"] and roles[m[2]] == ["pt", "ds"]
-    assert client.post("/api/roles", json={"roles": roles}).json()["proposal"] is None  # 바뀐 게 없으면 승인할 것도 없음
+    again = client.post("/api/roles", json={"roles": roles}).json()
+    assert again["saved"] is False  # 바뀐 게 없으면 저장하지 않는다
+    assert client.post("/api/roles", json={"roles": {"stranger": ["be"]}}).json()["saved"] is False  # 팀원이 아닌 아이디는 무시
     # 할 일 제목으로 역할 고르기
     assert own.role_codes_for("[계획] README·배포 정리") == ["be"] and own.role_codes_for("[제출물] 발표 자료") == ["pt", "ds"]
     who, why = own.pick_by_role(m, roles, {}, "[제출물] 발표 자료")
@@ -951,7 +953,7 @@ def test_team_wide_change_needs_someone_other_than_proposer():
     lead = main.build_state(main._demo).leads[0]
     proposer = next(x for x in m if x != lead)
     hdr = {"X-Bento-User": proposer}
-    p = client.post("/api/roles", json={"roles": {m[1]: ["fe"]}}, headers=hdr).json()["proposal"]
+    p = client.post("/api/team-rules", json={"lazy": ["reviewers"], "hours": 36}, headers=hdr).json()["proposal"]
     assert p["by"] == proposer and p["team_wide"]
     r = client.post("/api/execute", json={"token": p["token"]}, headers=hdr)
     assert r.status_code == 409 and r.json()["detail"]["need_second"]  # 혼자서는 못 바꾼다
@@ -1617,3 +1619,16 @@ def test_notice_uses_deadline_typed_by_user_when_notice_has_none():
     assert bad.status_code == 422
     again = client.post("/api/notice", json={"text": text, "no_ai": True}).json()
     assert again["extract"]["submit_deadline_iso"] is None  # 캐시된 분석 결과는 바뀌지 않는다
+
+
+def test_after_merge_review_requests_are_spread_over_teammates():
+    """리뷰 없이 머지된 PR이 여러 개일 때 한 사람에게 몰리지 않고, 이유도 정확히 말한다."""
+    from app import watch
+    main._demo.reset()
+    gh, st = main.state_for(None)
+    author = st.members[0]
+    st.signals = {**(st.signals or {}), "merged_unreviewed": [{"number": n, "author": author, "title": f"t{n}", "url": f"https://github.com/x/y/pull/{n}"} for n in (101, 102, 103)]}
+    items = [i for i in watch.watch(st) if str(i.get("id", "")).startswith("selfmerge-")]
+    assert len(items) == 3
+    assert len({i["who"] for i in items}) == 3 and author not in {i["who"] for i in items}  # 세 사람에게 하나씩
+    assert all("맡은 일이 가장 적은" in i["who_why"] for i in items)

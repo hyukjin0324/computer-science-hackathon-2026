@@ -159,7 +159,8 @@ def watch(state: RepoState) -> list[dict]:
             others = sorted((x for x in state.members if x != m["author"]), key=lambda x: load[x])
             if not others:
                 continue
-            items.append({"id": f"selfmerge-{m['number']}", "sev": "확인", "who": others[0], "age": 0,
+            load[others[0]] += 1  # 같은 사람에게 몰리지 않게: 방금 맡긴 일을 센 다음 PR은 다른 사람에게
+            items.append({"id": f"selfmerge-{m['number']}", "sev": "확인", "who": others[0], "who_why": "맡은 일이 가장 적은 팀원이라서 (같으면 아이디 순)", "age": 0,
                           "title": f"PR #{m['number']}이 리뷰 승인 없이 머지됐어요",
                           "why": f"{m['title']} · {m['author']} 님. 급해서 그랬을 수 있어요. 머지된 뒤라도 한 사람이 훑어보면 실수를 일찍 찾아요",
                           "evidence": [{"label": f"PR #{m['number']}", "url": m["url"]}],

@@ -100,7 +100,9 @@ def owner_reason(item: dict, state: RepoState, owner: str | None, now: datetime)
     rot = max(1, int(rules.get("rotate") or 1))
     on_duty = f"당번이라서 · {'오늘' if rot == 1 else f'{rot}일마다 돌아가요'}"
     if "age" in item:
-        return "이 일과 가장 관련 있는 사람으로 정했어요" if item.get("who") in state.members else on_duty
+        if item.get("who") in state.members:
+            return item.get("who_why") or "이 일과 가장 관련 있는 사람으로 정했어요"
+        return on_duty
     kind, n = item["id"].split("-")[0], _num(item["id"])
     if kind in ("review", "fix", "merge", "conflict") and n and state.pr(n):
         return "이 PR을 올린 사람이라서"
