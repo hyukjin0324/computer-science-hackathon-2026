@@ -11,12 +11,15 @@ from .notice import Deliverable, Fact, NoticeExtract
 KST = timezone(timedelta(hours=9))
 WD = "월화수목금토일"
 DATE = re.compile(
-    r"(?:(20\d{2})\s*[.\-/년]\s*)?(\d{1,2})\s*[.\-/월]\s*(\d{1,2})\s*일?\.?"
+    r"(?<![\d.])(?:(20\d{2})\s*[.\-/년]\s*)?(\d{1,2})\s*[.\-/월]\s*(\d{1,2})\s*일?\.?"
     r"(?:\s*\(\s*[월화수목금토일]\s*\))?"
     r"(?:\s*(오전|오후)?\s*(\d{1,2})\s*(?::\s*(\d{2})|시(?:\s*(\d{1,2})\s*분)?))?"
+    r"(?!\d|\s*(?:[KMG]B|%|명|팀))"
 )
 APPLY = re.compile(r"신청|접수|모집|참가\s*등록|등록\s*마감")
-SUBMIT = re.compile(r"제출|마감|최종")
+SUBMIT = re.compile(r"제출|마감")
+NOT_SUBMIT = re.compile(r"발표|시상|심사|결과\s*(?:안내|통보)|오리엔|교육|오픈")
+MAX_LINE = 200  # 후기·본문 속 긴 문장은 일정 줄이 아니다
 DELIV_LABEL = re.compile(r"제출\s*(물|서류|자료|항목)")
 BULLET = re.compile(r"^\s*(?:[-•·*▪◦]|\d+[.)]|[①-⑳])\s*")
 FACT_LABELS = [("참가 자격", re.compile(r"자격|대상")), ("심사 기준", re.compile(r"심사|평가")), ("시상", re.compile(r"시상|상금|혜택")),
@@ -74,7 +77,7 @@ def _title(lines: list[str]) -> str:
 
 def _team(lines: list[str]) -> tuple[int | None, int | None]:
     for l in lines:
-        if not re.search(r"팀|인원|자격|구성|대상", l):
+        if not re.search(r"팀|인원|자격|구성|대상", l) or re.search(r"규모|\d+\s*팀\s*\(|약\s*\d+\s*명|총\s*\d+\s*명", l):
             continue
         if m := re.search(r"(\d+)\s*[~\-–]\s*(\d+)\s*(?:인|명)", l):
             return int(m.group(1)), int(m.group(2))
@@ -88,7 +91,7 @@ def _team(lines: list[str]) -> tuple[int | None, int | None]:
 def _split_items(s: str) -> list[str]:
     parts = [p for p in re.split(r"\s*[①-⑳]\s*", s) if p.strip()]
     if len(parts) <= 1:
-        parts = re.split(r"\s*,\s*|\s*·\s*|\s+및\s+", s)
+        parts = re.split(r"\s*,\s*|\s+·\s+|\s+및\s+", s)
     return [p.strip(" .;") for p in parts if 1 < len(p.strip(" .;")) <= 60]
 
 
@@ -103,13 +106,13 @@ def rule_extract(text: str, now: datetime | None = None) -> NoticeExtract:
     for i, line in enumerate(lines):
         lab, body = _label(line)
         key = lab or line
-        ds = _dates(line, now)
+        ds = _dates(line, now) if len(line) <= MAX_LINE else []
         if ds and not DELIV_LABEL.search(lab):
             if APPLY.search(lab) or (not lab and APPLY.search(line)):
                 apply_hits.append((max(ds), line))
                 if (m := re.search(r"\(([^()]{2,60})\)", re.sub(r"\(\s*[월화수목금토일]\s*\)", "", line))) and "," in m.group(1):
                     fields = [f.strip() for f in m.group(1).split(",") if 0 < len(f.strip()) <= 15]
-            elif SUBMIT.search(key) and not re.search(r"기간", lab):
+            elif SUBMIT.search(key) and not re.search(r"기간", lab) and not NOT_SUBMIT.search(key):
                 submit_hits.append((max(ds), line))
         if DELIV_LABEL.search(lab):
             items = _split_items(body) if body else []
@@ -119,6 +122,9 @@ def rule_extract(text: str, now: datetime | None = None) -> NoticeExtract:
                         break
                     items.append(BULLET.sub("", nxt).strip(" .;"))
             delivs += [Deliverable(name=it, quote=it) for it in items if it]
+        if not lab and len(line) <= MAX_LINE and (m := re.match(r"^[※*▶●○\-•\s]*(.{3,120}?)\s*(?:을|를)?\s*(?:모두\s*)?제출\s*(?:하|해|합|\.|$)", line)) \
+                and not DATE.search(line) and "," in m.group(1):
+            delivs += [Deliverable(name=it, quote=it) for it in _split_items(m.group(1))]
         for name, rx in FACT_LABELS:
             if name == "진행 기간" and (APPLY.search(lab) or SUBMIT.search(lab)):
                 continue

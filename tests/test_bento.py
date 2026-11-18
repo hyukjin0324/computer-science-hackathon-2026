@@ -1404,3 +1404,18 @@ def test_bulk_assign_skips_named_and_drops_comment_spam():
     assert not any(a.type == "assign_issue" and a.issue == 1 for a in acts)  # '담당: B'는 빼고
     assert not any(a.type == "comment" for a in acts)  # 여러 개면 댓글은 안 단다
     assert "직접 정해 주세요" in it["options"][0]["sub"]
+
+
+def test_rules_real_notice_regressions():
+    """실제 공고(#13)에서 틀렸던 것: 규모를 팀 인원으로 읽음, 시상식을 제출 마감으로 읽음, 파일 크기를 날짜로 읽음, 긴 후기 문장을 일정으로 읽음."""
+    from datetime import datetime, timedelta, timezone
+    from app.rules import rule_extract
+    now = datetime(2026, 6, 1, tzinfo=timezone(timedelta(hours=9)))
+    t = ("제1회 해커톤 참가자 모집\n참가 규모 : 약 100팀 (300~400명)\n참가 신청 및 팀 빌딩 : 2026.06.22 ~ 2026.07.03\n"
+         "최종 결과물 제출 : 2026.08.09\n최종 발표 및 시상식 : 2026.08.22 (오프라인)\n00_제출-양식.zip (105.7 KB)\n"
+         "※ 참가신청서, 개인정보 수집·이용 동의서, 작품개요서 제출\n" + "후기 " * 80 + "공모전 모집 3/24 마감 " + "후기 " * 20)
+    ex = rule_extract(t, now)
+    assert (ex.team_min, ex.team_max) == (None, None)
+    assert ex.apply_deadline.startswith("7월 3일")
+    assert ex.submit_deadline.startswith("8월 9일")
+    assert [d.name for d in ex.deliverables] == ["참가신청서", "개인정보 수집·이용 동의서", "작품개요서"]
