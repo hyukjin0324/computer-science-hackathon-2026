@@ -80,6 +80,9 @@ svg { display: block; }
 
 /* 내용 */
 .view { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 170px; display: flex; flex-direction: column; gap: 10px; }
+/* 데스크톱에서 항상 보이는 두꺼운 스크롤바가 화면 오른쪽을 덮고 내용이 잘려 보이던 것: 스크롤은 되되 막대는 숨긴다 (모바일 앱처럼) */
+.view, .sheet, .drawer { scrollbar-width: none; -ms-overflow-style: none; }
+.view::-webkit-scrollbar, .sheet::-webkit-scrollbar, .drawer::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .view > * { flex-shrink: 0; }
 .view[hidden] { display: none; }
 h1 { margin: 6px 0 8px; font-size: var(--fs-title-l); font-weight: 800; letter-spacing: -.6px; text-wrap: balance; }
