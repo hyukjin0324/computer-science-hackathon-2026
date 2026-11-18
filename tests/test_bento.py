@@ -1428,9 +1428,9 @@ def test_focus_detail_keeps_only_the_posting_of_aggregator_pages():
     page = "\n".join(["접수기간", "2026.09.16 ~ 2026.09.30", "상세내용", "추천 공고", "상세내용", "❍ 모집대상: 대학생",
                       "다른 공고 서포터즈 모집(~3/24)", "최종합격후기", "후기 글 ... 3/24 까지 모집"])
     out = focus_detail(page)
-    assert "후기 글" not in out and "접수기간: 2026.09.16 ~ 2026.09.30" in out
+    assert "후기 글" not in out and "사이트 접수기간: 2026.09.16 ~ 2026.09.30" in out
     assert focus_detail("본문만 있는 페이지\n상세내용") == "본문만 있는 페이지\n상세내용"
-    ex = rule_extract("접수기간: 2026.09.16 ~ 2026.09.30\n다른 공고 모집 ~ 2026.12.24", None)
+    ex = rule_extract("사이트 접수기간: 2026.09.16 ~ 2026.09.30\n다른 공고 모집 ~ 2026.12.24", None)
     assert ex.apply_deadline.startswith("9월 30일")
 
 
@@ -1449,3 +1449,16 @@ def test_rules_read_poster_style_heading_then_date_and_individual_only():
     assert ex.apply_deadline.startswith("11월 20일")
     ex = rule_extract("접 수\n2026.11.02(월)~11.30(월)\n참가형태 개인(2인 이상 팀 단위 참여 불가)")
     assert ex.apply_deadline.startswith("11월 30일") and (ex.team_min, ex.team_max) == (1, 1)
+
+
+def test_rules_apply_time_from_body_when_info_box_has_only_date():
+    from app.rules import rule_extract
+    ex = rule_extract("사이트 접수기간: 2026.09.16 ~ 2026.09.30\n❍ 모집기간: 26. 9. 16.(수) ~ 26. 9. 30.(수) 16:00까지")
+    assert ex.apply_deadline == "9월 30일(수) 16:00"
+
+
+def test_rules_heading_merge_does_not_override_explicit_deadline_line():
+    """'접수기간' 제목 아래가 행사 기간인 공고에서, 따로 적힌 신청 마감을 덮어쓰지 않는다 (#13)."""
+    from app.rules import rule_extract
+    ex = rule_extract("접수기간\n2026년 07월 20일(월)~2026년 07월 27일(월)\n신청 마감: 7월 26일(일) 23:55")
+    assert ex.apply_deadline.startswith("7월 26일")

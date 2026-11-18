@@ -165,7 +165,7 @@ def focus_detail(text: str) -> str:
     head: list[str] = []
     for i, l in enumerate(lines[:marks[0]]):
         if l.strip() in ("접수기간", "참여대상", "시상규모") and i + 1 < len(lines) and lines[i + 1].strip():
-            head.append(f"{l.strip()}: {lines[i + 1].strip()}")
+            head.append(f"사이트 {l.strip()}: {lines[i + 1].strip()}")
     body = lines[marks[-1] + 1:]
     stop = next((i for i, l in enumerate(body) if re.match(r"^(합격\s?스펙|최종합격후기|합격 ?후기|합격자료|담당자 Q&A|댓글|이 친구와)", l.strip()) and i > 0), len(body))
     return "\n".join(head + body[:stop])

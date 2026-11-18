@@ -11,7 +11,7 @@ from .notice import Deliverable, Fact, NoticeExtract
 KST = timezone(timedelta(hours=9))
 WD = "월화수목금토일"
 DATE = re.compile(
-    r"(?<![\d.])(?:(20\d{2})\s*[.\-/년]\s*)?(\d{1,2})\s*[.\-/월]\s*(\d{1,2})\s*일?\.?"
+    r"(?<![\d.])(?:(20\d{2}|\d{2})\s*[.\-/년]\s*)?(\d{1,2})\s*[.\-/월]\s*(\d{1,2})\s*일?\.?"
     r"(?:\s*\(\s*[월화수목금토일]\s*\))?"
     r"(?:\s*(오전|오후)?\s*(\d{1,2})\s*(?::\s*(\d{2})|시(?:\s*(\d{1,2})\s*분)?))?"
     r"(?!\d|\s*(?:[KMG]B|%|명|팀))"
@@ -48,7 +48,7 @@ def _dates(line: str, now: datetime) -> list[datetime]:
         mo, d = int(mo), int(d)
         if not (1 <= mo <= 12 and 1 <= d <= 31):
             continue
-        year = int(y) if y else now.year
+        year = (int(y) if len(y) == 4 else 2000 + int(y)) if y else now.year
         h, mi = (int(hh), int(mm or mm2 or 0)) if hh else (23, 59)
         if ampm == "오후" and h < 12:
             h += 12
@@ -97,6 +97,7 @@ def _split_items(s: str) -> list[str]:
     return [p.strip(" .;") for p in parts if 1 < len(p.strip(" .;")) <= 60]
 
 
+MERGED = "\u200b"  # 제목 줄과 합친 줄 표시(다른 줄에서 찾은 마감이 있으면 그쪽을 우선한다)
 HEAD_ONLY = re.compile(r"^(?:신청|접수|모집|제출|참가\s*신청)\s*(?:기간|마감|일정)?$")
 
 
@@ -106,12 +107,17 @@ def _merge_headings(lines: list[str]) -> list[str]:
     while i < len(lines):
         head = re.sub(r"\s+", "", lines[i]) if len(lines[i]) <= 12 else ""
         if head and HEAD_ONLY.match(head) and i + 1 < len(lines) and DATE.search(lines[i + 1]) and len(lines[i + 1]) <= 80:
-            out.append(f"{head}: {lines[i + 1]}")
+            out.append(f"{head}: {lines[i + 1]}{MERGED}")
             i += 2
         else:
             out.append(lines[i])
             i += 1
     return out
+
+
+def _quote(line: str) -> str:
+    """합친 줄은 원문에 없는 글자이므로, 근거 인용은 날짜가 있던 원래 줄만 쓴다."""
+    return (line.replace(MERGED, "").split(": ", 1)[-1] if line.endswith(MERGED) else line)[:120]
 
 
 def rule_extract(text: str, now: datetime | None = None) -> NoticeExtract:
@@ -157,13 +163,18 @@ def rule_extract(text: str, now: datetime | None = None) -> NoticeExtract:
                 nxt = next((x.strip() for x in lines[i + 1:i + 4] if x.strip()), "")
                 if nxt and not _heading(nxt):
                     facts.append(Fact(label=name, value=BULLET.sub("", nxt).strip()[:120], quote=nxt[:120]))
-    official = [h for h in apply_hits if re.match(r"^접수기간\s*:", h[1])]  # 사이트 정보 칸의 접수기간이 있으면 본문 속 날짜보다 우선
-    apply = max(official or apply_hits, default=None)
-    submit = max(submit_hits, default=None)
+    official = [h for h in apply_hits if re.match(r"^사이트 접수기간\s*:", h[1])]  # 사이트 정보 칸의 접수기간이 있으면 본문 속 날짜보다 우선
+    plain = [h for h in apply_hits if not h[1].endswith(MERGED)]
+    apply = max(official or plain or apply_hits, default=None)
+    if apply and official:  # 정보 칸에는 시각이 없으니, 같은 날짜가 시각과 함께 적힌 본문 줄이 있으면 그 시각을 쓴다
+        timed = next((h for h in apply_hits if h[0].date() == apply[0].date() and re.search(r"\d{1,2}\s*(?::\s*\d{2}|시)", h[1])), None)
+        if timed:
+            apply = (timed[0], apply[1])
+    submit = max([h for h in submit_hits if not h[1].endswith(MERGED)] or submit_hits, default=None)
     if apply:
-        facts.insert(1 if facts else 0, Fact(label="신청 마감", value=human(apply[0]), quote=apply[1][:120]))
+        facts.insert(1 if facts else 0, Fact(label="신청 마감", value=human(apply[0]), quote=_quote(apply[1])))
     if submit:
-        facts.insert(2 if len(facts) > 1 else len(facts), Fact(label="제출 마감", value=human(submit[0]), quote=submit[1][:120]))
+        facts.insert(2 if len(facts) > 1 else len(facts), Fact(label="제출 마감", value=human(submit[0]), quote=_quote(submit[1])))
     tmin, tmax = _team(lines)
     return NoticeExtract(
         title=_title(lines), facts=facts, team_min=tmin, team_max=tmax, apply_fields=fields,
