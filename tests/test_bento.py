@@ -1535,3 +1535,68 @@ def test_discord_connect_stores_per_team_and_team_message_uses_it(monkeypatch):
     assert out[0]["ok"] and sent == [(_HOOK, "안녕하세요")]
     assert client.post("/api/discord/disconnect", json={}).status_code == 200
     assert not [lb for lb in main._demo.labels() if lb["name"].startswith(dsc_mod.PREFIX)]
+
+
+# ---------- 당번 순서·주기 ----------
+def test_duty_default_is_unchanged_alphabetical_daily():
+    from datetime import datetime, timezone
+    now = datetime(2026, 11, 18, 3, tzinfo=timezone.utc)
+    members = ["seoyeon", "dlfdu", "hyukjin0324"]
+    d0 = own.duty(members, now)
+    assert d0 == sorted(members)[datetime(2026, 11, 18, 12).toordinal() % 3]
+    nxt = own.duty(members, datetime(2026, 11, 19, 3, tzinfo=timezone.utc))
+    assert nxt == sorted(members)[(datetime(2026, 11, 19).toordinal()) % 3]
+
+
+def test_duty_rotates_every_n_days_in_a_stable_random_order():
+    from datetime import datetime, timezone
+    members = ["a", "b", "c", "d"]
+    rules = {"rotate": 3, "seed": "a1b2c3", "start": "20261118"}
+    order = own.duty_order(members, rules)
+    assert sorted(order) == members and order == own.duty_order(members, rules)  # 섞였지만 매번 같은 순서
+    kst = lambda d, h=12: datetime(2026, 11, d, h, tzinfo=own.KST)
+    # 3일 동안 같은 사람, 그다음 사람
+    assert own.duty(members, kst(18), rules) == order[0] == own.duty(members, kst(20, 23), rules)
+    assert own.duty(members, kst(21), rules) == order[1] == own.duty(members, kst(23), rules)
+    assert own.duty(members, kst(30), rules) == order[(30 - 18) // 3 % 4]
+    sch = own.duty_schedule(members, rules, kst(19), 3)
+    assert [x["who"] for x in sch] == order[:3] and sch[0] == {"who": order[0], "from": "2026-11-18", "to": "2026-11-20"} and sch[1]["from"] == "2026-11-21"
+
+
+def test_team_rules_set_rotation_preserves_other_settings_and_shows_in_approval(monkeypatch):
+    main._demo.reset()
+    own.write_rules(main._demo, ["reviewers"], 36)
+    assert own.read_rules(main._demo)["rotate"] == 1
+    r = client.post("/api/team-rules", json={"lazy": ["reviewers"], "hours": 36, "rotate_days": 3}).json()
+    step = r["proposal"]["steps"][0]
+    assert "당번 3일마다" in step["sub"] and "반대가 없으면" not in step["sub"]
+    from app.actions import SetTeamRules as _STR, execute as _ex
+    out = _ex([_STR(lazy=["reviewers"], hours=36, rotate_days=3)], main._demo, main.settings)
+    assert out[0]["ok"]
+    rules = own.read_rules(main._demo)
+    assert rules["rotate"] == 3 and rules["lazy"] == ["reviewers"] and rules["hours"] == 36
+    assert rules["seed"] and len(rules["start"]) == 8  # 처음 정하면 순서를 섞고 오늘부터 시작
+    seed = rules["seed"]
+    _ex([_STR(lazy=[], hours=24)], main._demo, main.settings)  # 규칙만 바꿔도 당번 설정은 그대로
+    assert own.read_rules(main._demo)["seed"] == seed and own.read_rules(main._demo)["rotate"] == 3
+    _ex([_STR(lazy=[], hours=24, reshuffle=True)], main._demo, main.settings)
+    assert own.read_rules(main._demo)["seed"] != seed  # 새로 섞으면 순서 씨앗이 바뀐다
+    errs = validate(ActionList.validate_python([{"type": "set_team_rules", "lazy": [], "hours": 24, "rotate_days": 30}]), main.state_for(None)[1])
+    assert any("1~14일" in e for e in errs)
+
+
+def test_board_tells_why_each_person_has_a_task():
+    main._demo.reset()
+    b = client.get("/api/board").json()
+    tasks = [t for p in b["people"] for t in p["tasks"]]
+    assert tasks and all(t.get("why") for t in tasks)
+    assert all(("GitHub 담당자" in t["why"]) or ("제목에 담당" in t["why"]) for t in tasks)
+    t = client.get("/api/triage").json()
+    assert t["duty_schedule"] and {"who", "from", "to"} <= set(t["duty_schedule"][0])
+
+
+def test_triage_items_say_why_their_owner_is_that_person():
+    main._demo.reset()
+    t = client.get("/api/triage").json()
+    assert t["items"] and all(i.get("owner_why") for i in t["items"] if i.get("owner"))
+    assert any("PR을 올린 사람" in i["owner_why"] for i in t["items"]) or any("당번" in i["owner_why"] for i in t["items"])

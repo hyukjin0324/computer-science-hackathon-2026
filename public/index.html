@@ -124,6 +124,7 @@ details.history > .bub { margin-top: 8px; }
 .btn.danger { background: var(--crit); color: #FFFFFF; border-color: transparent; font-weight: 700; }
 .app.tap { width: 100%; text-align: left; border-radius: var(--r-box); transition: background-color .12s, transform .08s; }
 .app.tap:active { transform: scale(.985); }
+.arow small.why { display: block; margin-top: 4px; color: var(--muted); font-size: var(--fs-caption); }
 .app .conn { font-size: var(--fs-small); font-weight: 700; color: var(--blue); white-space: nowrap; }
 @media (hover: hover) { .app.tap:hover { background: var(--surface-2); } .btn.danger:not(:disabled):hover { background: color-mix(in srgb, var(--crit) 82%, var(--bg)); border-color: transparent; } }
 /* 누를 수 있는 것은 마우스를 올리면 살짝 달라진다 (터치 기기에서는 손을 뗀 뒤에도 남지 않도록 hover 기기에서만) */
@@ -1295,7 +1296,8 @@ function taskRow(t, who) {
   const dd = t.due ? ddays(t.due) : null;
   a.appendChild(h("span", "ai " + (t.late ? "crit" : dd != null && dd <= 2 ? "warn" : "ok"), t.late ? "늦음" : dd == null ? "할 일" : dd === 0 ? "오늘" : `D-${dd}`));
   const tx = h("span"); tx.appendChild(h("b", null, t.title)); tx.appendChild(h("small", null, `#${t.number}` + (who ? ` · ${who}` : "")));
-  if (t.suggest && t.suggest.who) tx.appendChild(h("small", "suggest", `추천: ${t.suggest.role ? t.suggest.role + " · " : ""}${t.suggest.who}`));
+  if (t.suggest && t.suggest.who) tx.appendChild(h("small", "suggest", `추천: ${t.suggest.role ? t.suggest.role + " · " : ""}${t.suggest.who}${t.suggest.why ? " · " + t.suggest.why : ""}`));
+  if (t.why) tx.appendChild(h("small", "why", t.why));
   a.appendChild(tx); a.appendChild(h("span", "chev", "↗"));
   return a;
 }
@@ -1333,7 +1335,7 @@ function itemRow(it, inGroup) {
   const [tl, cls] = turnLabel(it); const meta = h("span", "meta"); meta.appendChild(h("span", "kind", kindOf(it)[0]));
   if (!inGroup) meta.appendChild(h("span", "turn " + cls, tl)); else if (it.age_hours >= 12) meta.appendChild(h("span", "turn", `${Math.floor(it.age_hours)}시간째`));
   const ec = evChip(it); if (ec) meta.appendChild(ec);
-  tx.appendChild(meta);
+  tx.appendChild(meta); if (inGroup && it.owner_why) tx.appendChild(h("small", "why", it.owner_why));
   b.appendChild(tx); b.appendChild(h("span", "chev", "›")); b.onclick = () => { showTab("chat"); openItem(it); }; return b;
 }
 function homeBoard(v, me2, items) {
@@ -2378,6 +2380,29 @@ const ME_PAGES = {
     if (curDraft() || !lastTriage) v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 고를 수 있어요."));
   }],
   roles: ["팀 역할", (v) => buildRoles(v, null)],
+  duty: ["당번 돌아가기", (v) => {
+  if (curDraft() || !lastTriage || !lastTriage.members) { v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 정할 수 있어요.")); return; }
+  const rules = lastTriage.rules || { lazy: [], hours: 24, rotate: 1 }; const rot = rules.rotate || 1; const sch = lastTriage.duty_schedule || [];
+  const md = (iso) => { const d = new Date(iso + "T00:00:00"); return `${d.getMonth() + 1}/${d.getDate()}`; };
+  const card = h("div", "card"); card.appendChild(h("b", null, "당번 돌아가기"));
+  const n0 = h("div", "note", "승인을 맡은 사람이 없는 일은 그날의 당번이 먼저 챙겨요. 순서는 한 번 무작위로 정해서 고정하고, 정한 날수마다 다음 사람에게 넘어가요. 디스코드를 연결해 두면 당번이 바뀌는 날 알려 줘요(서버에서 자동 알림을 켠 경우)."); card.appendChild(n0);
+  const list = h("div"); list.style.marginTop = "8px";
+  sch.forEach((x, i) => { const r = h("div", "app"); r.style.gridTemplateColumns = "1fr auto"; const t = h("span"); t.appendChild(h("b", null, x.who + (i === 0 ? " · 지금" : ""))); r.appendChild(t); const dt = h("span", "note", x.from === x.to ? md(x.from) : `${md(x.from)} ~ ${md(x.to)}`); r.appendChild(dt); list.appendChild(r); });
+  card.appendChild(list);
+  const hl = h("div", "lab", "몇 일마다 바꿀까요?"); hl.style.marginTop = "12px"; card.appendChild(hl);
+  let pick = rot, reshuffle = false; const opts = [[1, "매일"], [2, "2일"], [3, "3일"], [7, "일주일"]]; if (!opts.some(([d]) => d === rot)) opts.push([rot, `${rot}일`]);
+  const seg = h("div", "hseg"); seg.setAttribute("role", "radiogroup"); seg.setAttribute("aria-label", "당번을 바꾸는 주기");
+  const sv = h("button", "btn primary", "팀원에게 승인받고 저장"); sv.type = "button"; sv.style.marginTop = "12px";
+  const dirty = () => pick !== rot || reshuffle || !rules.seed; const sync = () => { sv.disabled = !dirty(); seg.querySelectorAll(".hsegopt").forEach((b) => b.setAttribute("aria-checked", String(+b.dataset.d === pick))); };
+  opts.sort((a, b) => a[0] - b[0]).forEach(([d, name]) => { const b = h("button", "hsegopt", name); b.type = "button"; b.dataset.d = String(d); b.setAttribute("role", "radio"); b.onclick = () => { pick = d; sync(); }; seg.appendChild(b); });
+  card.appendChild(seg);
+  const sf = h("button", "btn", rules.seed ? "순서 다시 섞기" : "순서 무작위로 정하기"); sf.type = "button"; sf.style.marginTop = "10px"; sf.style.display = "block";
+  sf.onclick = () => { reshuffle = !reshuffle; sf.textContent = reshuffle ? "✓ 저장하면 순서를 새로 섞어요" : (rules.seed ? "순서 다시 섞기" : "순서 무작위로 정하기"); sync(); };
+  card.appendChild(sf);
+  const nn = h("div", "note", "바꾸면 팀 전체에 영향을 주니 팀원 승인을 받아요. 저장한 날부터 새 주기로 시작해요."); nn.style.marginTop = "8px"; card.appendChild(nn);
+  sv.onclick = async () => { sv.disabled = true; try { const p = await api("/team-rules", { method: "POST", body: JSON.stringify({ repo: curRepo(), lazy: rules.lazy || [], hours: rules.hours || 24, rotate_days: pick, reshuffle }) }); approval(p.proposal, (ok) => { if (ok) { refreshHome(); setTimeout(() => { if (mePage === "duty") renderMe(); }, 600); } else sync(); }); } catch (e) { snack(e.message); sync(); } };
+  card.appendChild(sv); v.appendChild(card); sync();
+  }],
   rules: ["반대가 없으면 실행", (v) => {
   if (!curDraft() && lastTriage && lastTriage.members) {
     const rules = lastTriage.rules || { lazy: [], hours: 24 };
@@ -2441,6 +2466,8 @@ function renderMe() {
   const rl = lastTriage && lastTriage.rules && lastTriage.rules.lazy.length ? `켜짐 · ${lastTriage.rules.hours}시간` : "꺼짐 · 모두 승인 필요";
   const rc = lastTriage && lastTriage.roles ? Object.keys(lastTriage.roles).length : 0;
   g1.appendChild(meRow("user", "팀 역할", curDraft() ? "저장소 연결 뒤에 정해요" : rc ? `${rc}명 정함` : "아직 안 정함 · 정하면 역할대로 나눠요", () => openMe("roles")));
+  const dr = lastTriage && lastTriage.rules ? lastTriage.rules.rotate || 1 : 1;
+  g1.appendChild(meRow("user", "당번 돌아가기", curDraft() ? "저장소 연결 뒤에 정해요" : lastTriage && lastTriage.duty ? `${dr === 1 ? "매일" : dr + "일마다"} · 지금 ${lastTriage.duty}님` : "승인을 맡은 사람이 없는 일은 당번이 먼저 챙겨요", () => openMe("duty")));
   g1.appendChild(meRow("vote", "반대가 없으면 실행", rl, () => openMe("rules")));
   g1.appendChild(meRow("box", "보관함", `실행한 일 ${tasks.length}개 · 초안 ${docs.length}개`, () => showTab("box")));
   v.appendChild(g1);
