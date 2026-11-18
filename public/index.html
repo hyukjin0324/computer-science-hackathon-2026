@@ -118,6 +118,19 @@ details.history > .bub { margin-top: 8px; }
 .picks { display: flex; flex-direction: column; padding: 4px 8px 8px; }
 .pick { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; text-align: left; padding: 12px 8px; border-radius: var(--r-box); min-height: 64px; }
 .pick:hover { background: var(--surface-2); }
+.tray-h { display: flex; align-items: baseline; justify-content: space-between; padding: 2px 4px 0; } .tray-h b { font-size: var(--fs-title); font-weight: 800; letter-spacing: -.3px; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 8px 4px 4px; }
+.tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 92px; border-radius: var(--r-card); background: var(--surface-2); font-size: var(--fs-small); font-weight: 700; color: var(--ink); transition: background-color .12s, transform .08s; }
+.tile .em { width: 40px; height: 40px; border-radius: 50%; background: var(--surface); display: grid; place-items: center; }
+.tile:active, .trow:active { transform: scale(.98); }
+.trows { display: flex; flex-direction: column; }
+.trow { display: grid; grid-template-columns: 36px 1fr auto; gap: 8px; align-items: center; text-align: left; min-height: 50px; padding: 4px 8px; border-radius: var(--r-box); color: var(--ink); transition: background-color .12s; }
+.trow b { font-weight: 600; font-size: var(--fs-body); }
+.trow .em { color: var(--ink); display: grid; place-items: center; }
+.trow .chev { color: var(--muted); }
+.tsep { border: 0; border-top: 1px solid var(--line); margin: 6px 4px; width: calc(100% - 8px); }
+@media (hover: hover) { .tile:hover { background: color-mix(in srgb, var(--surface-2) 86%, var(--ink)); } .trow:hover { background: var(--surface-2); } }
+
 .linkbtn { background: none; border: 0; padding: 4px 2px; font: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .linkbtn:hover, .linkbtn:focus-visible { background: var(--surface-2); border-radius: var(--r-pill); }
 .task.folded > :not(.task-h) { display: none; }  /* 취소한 승인: 제목·'취소함'만 대화에 남긴다 */
@@ -730,6 +743,9 @@ const LINE = {  // 바로 맡기기 아이콘: 이모지 대신 얇은 선 아�
   search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4",
   send: "M21 3 10 14M21 3l-6.5 18-4-8.5L2 9z",
   clip: "M21 11.5 12.5 20a5 5 0 0 1-7-7L14 4.5a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4L15.5 7.6",
+  camera: "M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+  doc: "M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7zM14 3v4h4M9 13h6M9 17h6",
+  link: "M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1",
 };
 const lineIcon = (k) => `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${LINE[k]}"/></svg>`;
 // 올릴 사진은 긴 변 2000px·JPEG로 줄여 보낸다 (서버가 한 번에 받는 크기 제한)
@@ -771,11 +787,22 @@ function openPicks() {
   const bg = h("div", "sheet-bg"); const sh = h("div", "sheet"); sh.setAttribute("role", "dialog"); sh.setAttribute("aria-modal", "true"); sh.setAttribute("aria-label", "바로 맡겨 보기"); bg.appendChild(sh);
   const close = () => { bg.remove(); document.removeEventListener("keydown", esc); $("plusBtn").focus(); }; const esc = (e) => { if (e.key === "Escape") close(); };
   bg.onclick = (e) => { if (e.target === bg) close(); }; document.addEventListener("keydown", esc);
-  sh.appendChild(h("div", null)).setAttribute("aria-hidden", "true"); sh.lastChild.style.cssText = "width:40px;height:5px;border-radius:var(--r-pill);background:var(--line);align-self:center";
-  const hd = h("div", "panel-h"); hd.appendChild(h("b", null, "바로 맡겨 보기")); hd.appendChild(h("span", "note", projName())); sh.appendChild(hd);
-  const picks = h("div", "picks");
-  PICKS().forEach(([em, t, s2, fn]) => { const x = h("button", "pick"); x.type = "button"; x.appendChild(pickIcon(em)); const tx = h("span"); tx.appendChild(h("b", null, t)); tx.appendChild(h("small", null, s2)); x.appendChild(tx); x.appendChild(h("span", "chev", "›")); x.onclick = () => { close(); showTab("chat"); fn(); }; picks.appendChild(x); });
-  sh.appendChild(picks); document.querySelector(".phone").appendChild(bg); picks.querySelector("button").focus();
+  // 카카오톡 첨부 시트처럼: 맨 위에는 가장 자주 하는 '공고 올리기'를 큰 타일로, 아래는 짧은 이름 한 줄씩 묶어서
+  const hd = h("div", "tray-h"); hd.appendChild(h("b", null, "공고 올리기")); hd.appendChild(h("span", "note", projName())); sh.appendChild(hd);
+  const go = (fn) => () => { close(); showTab("chat"); fn(); };
+  const upload = (kind) => () => { me(kind === "img" ? "공고 사진 올릴게" : "공고 파일 올릴게"); noticeForm(null, null); const fi = [...document.querySelectorAll("#v-chat input[type=file]")].pop(); if (fi) { fi.accept = kind === "img" ? "image/*" : ".hwp,.hwpx,.pdf"; fi.click(); } };
+  const byLink = () => { me("공고 링크로 시작할래"); noticeForm(null, null); const u = [...document.querySelectorAll("#v-chat input[type=url]")].pop(); if (u) u.focus(); };
+  const tiles = h("div", "tiles");
+  [["camera", "사진·포스터", upload("img")], ["doc", "HWP·PDF", upload("file")], ["link", "링크", byLink]].forEach(([k, t, fn]) => {
+    const x = h("button", "tile"); x.type = "button"; x.appendChild(pickIcon(k)); x.appendChild(h("span", null, t)); x.onclick = go(fn); tiles.appendChild(x);
+  });
+  sh.appendChild(tiles);
+  const rows = (items) => { const g = h("div", "trows"); items.forEach(([k, t, hint, fn]) => { const x = h("button", "trow"); x.type = "button"; x.title = hint; x.appendChild(pickIcon(k)); x.appendChild(h("b", null, t)); x.appendChild(h("span", "chev", "›")); x.onclick = go(fn); g.appendChild(x); }); return g; };
+  const all = PICKS(); const find = (name) => all.find((x) => x[1].includes(name));
+  sh.appendChild(rows([["trophy", "대회 찾기", find("새 대회 고르기")[2], find("새 대회 고르기")[3]]]));
+  sh.appendChild(h("hr", "tsep"));
+  sh.appendChild(rows([["list", "오늘 할 일 정리", find("할 일 정리")[2], find("할 일 정리")[3]], ["cal", "마감까지 계획 짜기", find("계획 짜기")[2], find("계획 짜기")[3]], ["search", "진행 점검·다시 계획", find("진행 점검")[2], find("진행 점검")[3]], ["send", "제출 전 점검", find("제출 전")[2], find("제출 전")[3]]]));
+  document.querySelector(".phone").appendChild(bg); tiles.querySelector("button").focus();
 }
 function intro() {
   const d = new Date();
