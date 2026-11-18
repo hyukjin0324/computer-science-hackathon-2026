@@ -65,7 +65,8 @@ svg { display: block; }
 .mascot > rect:first-child { fill: var(--mascot-body); }
 .bento { background: var(--mascot-body) !important; }
 .found:not(.calm) .k .bento { background: #FFFFFF !important; }
-.proj { height: 40px; max-width: 260px; padding: 0 14px; border-radius: var(--r-pill); background: var(--surface); border: 1px solid var(--line); color: var(--ink); font-size: var(--fs-body); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-flex; align-items: center; gap: 6px; }
+.proj { height: 40px; max-width: 100%; min-width: 0; flex: 0 1 auto; padding: 0 14px; border-radius: var(--r-pill); background: var(--surface); border: 1px solid var(--line); color: var(--ink); font-size: var(--fs-body); font-weight: 700; white-space: nowrap; overflow: hidden; display: inline-flex; align-items: center; gap: 6px; }
+.proj .pname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proj .pdot { width: 9px; height: 9px; border-radius: 50%; background: var(--pop); flex: none; }
 .proj small { color: var(--muted); font-weight: 500; }
 .sheet-bg { position: absolute; inset: 0; z-index: 100; background: rgb(23 24 28 / .45); display: flex; align-items: flex-end; margin: 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px))); }
@@ -499,7 +500,7 @@ body.onboarding .dock { display: none; }  /* 첫 화면 뒤로 아래 막대가 
 <body>
 <div class="phone">
   <div class="head">
-    <div style="display:flex;align-items:center;gap:2px;min-width:0">
+    <div style="display:flex;align-items:center;gap:2px;min-width:0;flex:0 1 auto">
 <button class="round" type="button" aria-label="메뉴 열기" id="menuBtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
     <button class="round" type="button" aria-label="뒤로" id="backBtn" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button>
     <button class="proj" type="button" id="projBtn" aria-label="팀플 바꾸기"><span class="pdot"></span>팀플 불러오는 중</button>
@@ -590,7 +591,7 @@ function projKey() { return cur && cur.draft ? "d:" + cur.draft : "r:" + curRepo
 function projName() { const d = curDraft(); return d ? d.title : (extract && extract.title) || (curRepo() || "").split("/")[1] || "팀플"; }
 function setExtract(ex) { extract = ex; const d = curDraft(); if (d) { d.extract = ex; saveDrafts(); } else store.set("extract:" + projKey(), ex); renderCal(); }
 function renderHead() {
-  const d = curDraft(); const b = $("projBtn"); b.textContent = ""; const dot = h("span", "pdot"); dot.style.background = `var(${colorOf(projKey())})`; b.appendChild(dot); if (d) b.appendChild(h("small", null, "준비 중")); b.appendChild(document.createTextNode(projName() + " ▾"));
+  const d = curDraft(); const b = $("projBtn"); b.textContent = ""; const dot = h("span", "pdot"); dot.style.background = `var(${colorOf(projKey())})`; b.appendChild(dot); if (d) b.appendChild(h("small", null, "준비 중")); b.appendChild(h("span", "pname", projName() + " ▾"));
   const pp = $("panelProj"); if (pp) pp.textContent = (d ? "준비 중 · " : "") + projName();
 }
 async function loadSaved() {  // 팀원이 이미 분석해 저장소에 저장한 공고가 있으면 다시 분석하지 않고 가져온다
