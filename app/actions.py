@@ -234,6 +234,30 @@ def validate(actions: list, state: RepoState) -> list[str]:
     return errors
 
 
+def _ms_day(iso: str | None) -> str:
+    """마일스톤 마감은 GitHub에 날짜만 남는다(보내는 값은 그 날짜의 00:00Z). 시각처럼 보이는 09:00 대신 날짜만 보여 준다."""
+    if not iso:
+        return "날짜 미정"
+    from datetime import datetime, timedelta, timezone
+    d = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    day = d.date() if iso.endswith("T00:00:00Z") else d.astimezone(timezone(timedelta(hours=9))).date()
+    return f"{day.month}월 {day.day}일({'월화수목금토일'[day.weekday()]})"
+
+
+def _real_time(a) -> str:
+    """같이 저장되는 공고 분석 결과에 실제 마감 시각이 있으면 '실제 마감 12:00'."""
+    try:
+        from .notice import from_descriptions
+        ex = from_descriptions([a.description])
+        if ex and ex.submit_deadline_iso:
+            from datetime import datetime, timedelta, timezone
+            d = datetime.fromisoformat(ex.submit_deadline_iso).astimezone(timezone(timedelta(hours=9)))
+            return f" · 실제 마감 {d:%H:%M}"
+    except Exception:  # noqa: BLE001 - 시각을 못 읽어도 날짜는 보여 준다
+        pass
+    return ""
+
+
 def _kst(iso: str | None) -> str:
     if not iso:
         return "날짜 미정"
@@ -257,9 +281,9 @@ def label(a, discord: bool) -> tuple[str, str]:
     if isinstance(a, CloseIssue):
         return f"할 일 #{a.issue} 닫기", "이유를 댓글로 남겨요 · 다시 열 수 있어요"
     if isinstance(a, CreateMilestone):
-        return f"'{a.title}' 마감일 만들기", _kst(a.due_on) if a.due_on else "공고에서 날짜를 못 찾았어요 · 나중에 정할 수 있어요"
+        return f"'{a.title}' 마감일 만들기", (_ms_day(a.due_on) + (_real_time(a) or " · GitHub에는 날짜만 남아요")) if a.due_on else "공고에서 날짜를 못 찾았어요 · 나중에 정할 수 있어요"
     if isinstance(a, UpdateMilestone):
-        return f"'{a.title}' 마감일을 {_kst(a.due_on)}로 옮기기", a.reason or "다시 짠 계획에 맞춰요"
+        return f"'{a.title}' 마감일을 {_ms_day(a.due_on)}로 옮기기", a.reason or "다시 짠 계획에 맞춰요"
     if isinstance(a, SetMilestone):
         return f"할 일 {', '.join('#' + str(n) for n in a.issues)}을 '{a.milestone_title}'에 묶기", ""
     if isinstance(a, SetTeamRules):

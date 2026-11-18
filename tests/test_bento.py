@@ -1632,3 +1632,16 @@ def test_after_merge_review_requests_are_spread_over_teammates():
     assert len(items) == 3
     assert len({i["who"] for i in items}) == 3 and author not in {i["who"] for i in items}  # 세 사람에게 하나씩
     assert all("맡은 일이 가장 적은" in i["who_why"] for i in items)
+
+
+def test_milestone_step_shows_date_not_a_fake_0900_and_real_deadline_time():
+    """GitHub 마일스톤은 날짜만 남아서 00:00Z를 보내는데, 승인 화면에 '09:00'으로 보이면 마감이 바뀐 것처럼 보인다."""
+    from app.actions import CreateMilestone, UpdateMilestone, label
+    t, sub = label(CreateMilestone(title="해커톤 제출", due_on="2026-11-24T00:00:00Z"), False)
+    assert "11월 24일(화)" in sub and "09:00" not in sub and "날짜만 남아요" in sub
+    main._demo.reset()
+    r = client.post("/api/notice", json={"text": SAMPLE_NOTICE, "no_ai": True}).json()
+    step = next(s for s in r["plan"]["steps"] if "마감일 만들기" in s["label"])
+    assert "11월 24일(화)" in step["sub"] and "실제 마감 12:00" in step["sub"] and "09:00" not in step["sub"]
+    _, up = label(UpdateMilestone(title="계획", due_on="2026-11-30T00:00:00Z", reason="r"), False)
+    assert "11월 30일" in _ and "09:00" not in _
