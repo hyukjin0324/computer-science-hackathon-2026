@@ -290,8 +290,15 @@ def execute(actions: list, gh, settings, op: str | None = None, by: str | None =
     """검증을 통과한 행동을 순서대로 실행한다. 실패하면 거기서 멈추고 그때까지의 결과를 돌려준다."""
     results: list[dict] = []
     milestone_numbers = {m["title"]: m["number"] for m in gh.milestones()}
+    hook = None
+    if any(isinstance(a, TeamMessage) for a in actions):
+        from .discord import webhook_for
+        try:
+            hook = webhook_for(gh, settings)
+        except Exception:  # noqa: BLE001 - 팀 연결을 못 읽으면 서버 기본값
+            hook = settings.discord_webhook
     for k, a in enumerate(actions):
-        title, _ = label(a, bool(settings.discord_webhook))
+        title, _ = label(a, bool(hook))
         try:
             url = None
             if isinstance(a, RequestReviewers):
@@ -334,10 +341,10 @@ def execute(actions: list, gh, settings, op: str | None = None, by: str | None =
                 write_roles(gh, a.roles)
                 url = gh.html("/labels")
             elif isinstance(a, TeamMessage):
-                if not settings.discord_webhook:
+                if not hook:
                     results.append({"label": title, "ok": True, "skipped": True, "note": "메신저가 연결되지 않아 보내지 않았어요. 복사해서 팀 채팅에 붙여넣어 주세요."})
                     continue
-                r = httpx.post(settings.discord_webhook, json={"content": a.text, "allowed_mentions": {"parse": []}}, timeout=10)
+                r = httpx.post(hook, json={"content": a.text, "allowed_mentions": {"parse": []}}, timeout=10)
                 r.raise_for_status()
             results.append({"label": title, "ok": True, "url": url})
         except Exception as e:  # noqa: BLE001 - 사용자에게 어디서 멈췄는지 보여 준다

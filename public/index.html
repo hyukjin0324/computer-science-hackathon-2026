@@ -663,6 +663,7 @@ function moveRoom(from, to) {
 }
 let booted = false;  // 처음 열 때는 아래 시작 코드가 할 일을 한꺼번에 부른다
 function useProject(next, quiet) {
+  if (typeof H !== "undefined" && H && H.ok) loadDiscord();  // 팀마다 디스코드 연결이 다르다
   const fromKey = roomKey || (cur ? projKey() : null);
   cur = next; store.set("cur", cur);
   if (next.repo) { repo = next.repo; store.set("repo", repo); }
@@ -834,6 +835,10 @@ function approval(proposal, onDone) {
     const ta = h("textarea"); ta.id = id; ta.value = s.text; ta.oninput = () => { edits[i] = ta.value; }; tas.push(ta);
     c.appendChild(lb); c.appendChild(ta);
   });
+  if (proposal.steps.some((x) => /메신저 미연결/.test(x.label)) && !DISC.connected) {  // 팀 메시지를 보내려는 바로 그 순간에 연결을 권한다
+    const dl = h("button", "linkbtn", "디스코드를 연결하면 복사 없이 바로 보내요 ›"); dl.type = "button"; dl.style.alignSelf = "flex-start";
+    dl.onclick = () => openDiscordConnect(() => snack("연결했어요. 승인하면 디스코드로 바로 가요")); c.appendChild(dl);
+  }
   const note = h("div", "note", H.mode === "live" ? `확인을 누르면 GitHub에 바로 적용돼요` : "데모라 실제 GitHub에는 남지 않아요");
   c.appendChild(note);
   const rb = h("div", "row-btns"); rb.style.display = "grid"; rb.style.gridTemplateColumns = "1fr 2fr"; const go = h("button", "btn primary lg", multi ? `승인하고 실행 (${proposal.steps.length})` : "승인하고 실행"); go.type = "button"; const no = h("button", "btn lg", "취소"); no.type = "button"; rb.appendChild(no); rb.appendChild(go); c.appendChild(rb);
@@ -1619,6 +1624,41 @@ function dtxt(iso) { if (!iso) return ""; const n = new Date(); n.setHours(0, 0,
 function projSub(p) { if (p.error) return "저장소를 읽지 못했어요"; return [p.notice || "연결된 공고 없음", p.due ? `제출 ${dtxt(p.due)}` : "", p.total ? `제출물 ${p.done}/${p.total}` : ""].filter(Boolean).join(" · "); }
 function draftSub(d) { const ex = d.extract || {}; return [d.applied ? "신청 완료" : "신청 준비", ex.apply_deadline_iso ? `신청 ${dtxt(ex.apply_deadline_iso)}` : "", ex.submit_deadline_iso ? `제출 ${dtxt(ex.submit_deadline_iso)}` : ""].filter(Boolean).join(" · "); }
 async function loadProjects() { const r = await api("/projects"); projects = r.projects; if (r.install_url) H.install_url = r.install_url; return projects; }
+let DISC = { connected: false, source: null };  // 이 팀의 디스코드 연결 (서버 기본 채널이거나 팀이 직접 연결한 것)
+async function loadDiscord() {
+  try { DISC = await api("/discord?repo=" + encodeURIComponent(curRepo())); } catch (e) { DISC = { connected: !!(H && H.discord), source: H && H.discord ? "server" : null }; }
+  return DISC;
+}
+function openDiscordConnect(onDone) {
+  // 팀원이 디스코드 웹훅 주소를 붙여 넣으면 그 팀 전체가 쓴다. 주소는 서버에서 암호화해 팀 저장소에 저장한다
+  const bg = h("div", "sheet-bg"); bg.style.zIndex = "300"; const sh = h("div", "sheet"); sh.setAttribute("role", "dialog"); sh.setAttribute("aria-modal", "true"); sh.setAttribute("aria-label", "디스코드 팀 채널 연결"); bg.appendChild(sh);
+  const esc = (e) => { if (e.key === "Escape") close(); };
+  const close = () => { bg.remove(); document.removeEventListener("keydown", esc); };
+  bg.onclick = (e) => { if (e.target === bg) close(); }; document.addEventListener("keydown", esc);
+  sh.appendChild(h("h2", null, "디스코드 팀 채널을 연결할까요?"));
+  const how = h("div", "note"); how.style.whiteSpace = "pre-line";
+  how.textContent = "연결하면 팀 메시지를 복사하지 않고 디스코드 채널로 바로 보내요. 보내기 전에는 늘 승인을 받아요.\n\n① 디스코드에서 채널 설정 → 연동 → 웹후크 → 새 웹후크\n② ‘웹후크 URL 복사’\n③ 아래에 붙여 넣기";
+  sh.appendChild(how);
+  const lb = h("label", "lab", "웹후크 주소"); const id = "dh" + Date.now(); lb.htmlFor = id;
+  const inp = h("input", "finput"); inp.id = id; inp.type = "password"; inp.autocomplete = "off"; inp.spellcheck = false; inp.placeholder = "https://discord.com/api/webhooks/…";
+  const err = h("div", "note"); err.style.color = "var(--crit)"; err.hidden = true;
+  sh.appendChild(lb); sh.appendChild(inp); sh.appendChild(err);
+  const safe = h("div", "note", "붙여 넣은 주소는 암호화해서 팀 저장소에 저장하고, 서버가 아니면 아무도 읽을 수 없어요. 이 저장소 팀원만 연결할 수 있어요.");
+  sh.appendChild(safe);
+  const rb = h("div", "row-btns"); rb.style.marginTop = "6px";
+  const no = h("button", "btn", "다음에"); no.type = "button"; no.onclick = close;
+  const ok = h("button", "btn primary", "연결하기"); ok.type = "button";
+  ok.onclick = async () => {
+    const url = inp.value.trim(); err.hidden = true;
+    if (!url) { err.textContent = "웹후크 주소를 붙여 넣어 주세요"; err.hidden = false; return inp.focus(); }
+    ok.disabled = inp.disabled = true; ok.textContent = "확인하는 중…";
+    try { await api("/discord/connect", { method: "POST", body: JSON.stringify({ repo: curRepo(), url }) }); } catch (e) { err.textContent = e.message || "연결하지 못했어요"; err.hidden = false; ok.disabled = inp.disabled = false; ok.textContent = "연결하기"; return inp.focus(); }
+    inp.value = ""; close(); await loadDiscord(); snack("디스코드를 연결했어요"); renderMe(); if (onDone) onDone();
+  };
+  inp.addEventListener("keydown", (e) => { if (e.key === "Enter") ok.click(); });
+  rb.appendChild(no); rb.appendChild(ok); sh.appendChild(rb);
+  document.querySelector(".phone").appendChild(bg); inp.focus();
+}
 function confirmSheet({ title, body, ok, cancel = "취소", danger = false, onOk }) {
   // 되돌리기 어렵거나 연결·로그아웃처럼 큰 일은 누르자마자 하지 않고 한 번 묻는다. 기본 포커스는 안전한 '취소'
   const bg = h("div", "sheet-bg"); bg.style.zIndex = "300"; const sh = h("div", "sheet"); sh.setAttribute("role", "alertdialog"); sh.setAttribute("aria-modal", "true"); sh.setAttribute("aria-label", title); bg.appendChild(sh);
@@ -2297,14 +2337,18 @@ function openRolesSheet() {
 }
 const ME_PAGES = {
   connect: ["연결된 서비스", (v) => {
+  if (!DISC.__fresh) { loadDiscord().then(() => { DISC.__fresh = true; if (mePage === "connect") renderMe(); }); }
   const c2 = h("div", "card"); c2.appendChild(h("b", null, "연결 상태"));
-  const rows = [["GitHub", H.mode === "live" ? `연결됨 · ${H.repo}` : "데모 저장소 사용 중 (GitHub App 미연결)", H.mode === "live"], ["Claude AI (공고 분석·자유 대화)", H.ai ? "연결됨" : "꺼져 있어요 · 정해진 말만 알아들어요 (서버를 운영하는 사람이 설정해요)", H.ai], ["디스코드 팀 채널", H.discord ? "연결됨" : "미연결 · 팀 메시지는 복사만 돼요 (서버를 운영하는 사람이 설정해요)", H.discord], ["팀 접근 코드", H.needs_code ? (store.get("code", "") ? "입력함" : "실행할 때 물어봐요") : "사용 안 함", H.needs_code]];
+  const rows = [["GitHub", H.mode === "live" ? `연결됨 · ${H.repo}` : "데모 저장소를 쓰고 있어요 · 실제 저장소는 대회 신청 뒤 연결 단계에서 연결해요", H.mode === "live"], ["Claude AI (공고 분석·자유 대화)", H.ai ? "연결됨" : "꺼져 있어요 · 정해진 말만 알아들어요 (서버를 운영하는 사람이 설정해요)", H.ai], ["디스코드 팀 채널", DISC.connected ? (DISC.source === "team" ? "연결됨 · 이 팀이 연결한 채널" : "연결됨 · 서버 기본 채널") : "미연결 · 팀 메시지는 복사만 돼요", DISC.connected], ["팀 접근 코드", H.needs_code ? (store.get("code", "") ? "입력함" : "실행할 때 물어봐요") : "사용 안 함", H.needs_code]];
   const connectAsk = (n) => {
-    if (n.startsWith("GitHub")) return { title: "GitHub 저장소를 연결할까요?", body: "Bento GitHub 앱을 팀 저장소에 설치하면 실제 이슈·PR을 읽고, 승인한 일만 GitHub에 남겨요. 설치 화면은 GitHub에서 열려요. 머지·푸시·코드 수정은 하지 않아요.", ok: "GitHub에서 연결하기", run: () => { if (H.install_url) window.open(H.install_url, "_blank", "noopener"); else snack("이 서버에는 GitHub 앱이 설정되어 있지 않아요"); } };
-    // Claude AI·디스코드는 서버 설정(환경 변수)이라 팀원이 화면에서 연결할 수 없다 → 누르는 줄로 만들지 않고 상태만 보여 준다
+    if (n.startsWith("디스코드")) {
+      if (!DISC.connected) return { open: () => openDiscordConnect() };
+      if (DISC.source === "team") return { tag: "관리 ›", open: () => confirmSheet({ title: "디스코드 연결을 끊을까요?", body: "끊으면 팀 메시지는 다시 복사만 돼요. 언제든 다시 연결할 수 있어요.", ok: "연결 끊기", danger: true, onOk: async () => { try { await api("/discord/disconnect", { method: "POST", body: JSON.stringify({ repo: curRepo() }) }); await loadDiscord(); snack("디스코드 연결을 끊었어요"); renderMe(); } catch (e) { snack(e.message || "끊지 못했어요"); } } }) };
+    }
+    // GitHub는 로그인 후 신청 → 저장소 연결 단계에서 연결하고, Claude AI는 서버 설정(환경 변수)이라 서버 운영자가 한다 → 이 둘은 상태만 보여 준다. 디스코드는 팀원이 직접 연결한다
     return null;
   };
-  rows.forEach(([n, s, on]) => { const ask = on ? null : connectAsk(n); const r = h(ask ? "button" : "div", ask ? "app tap" : "app"); if (ask) { r.type = "button"; r.onclick = () => confirmSheet({ title: ask.title, body: ask.body, ok: ask.ok, cancel: "다음에", onOk: ask.run }); } const ic = h("span", "ico", on ? "✓" : "·"); ic.style.background = on ? "var(--ok)" : "var(--surface-2)"; r.appendChild(ic); const tx = h("span"); tx.appendChild(h("b", null, n)); const sm = h("small", null, s); sm.style.display = "block"; sm.style.color = "var(--muted)"; sm.style.fontSize = "13px"; tx.appendChild(sm); r.appendChild(tx); r.appendChild(ask ? h("span", "conn", "연결 ›") : h("span")); c2.appendChild(r); });
+  rows.forEach(([n, s, on]) => { const ask = connectAsk(n); const r = h(ask ? "button" : "div", ask ? "app tap" : "app"); if (ask) { r.type = "button"; r.onclick = ask.open; } const ic = h("span", "ico", on ? "✓" : "·"); ic.style.background = on ? "var(--ok)" : "var(--surface-2)"; r.appendChild(ic); const tx = h("span"); tx.appendChild(h("b", null, n)); const sm = h("small", null, s); sm.style.display = "block"; sm.style.color = "var(--muted)"; sm.style.fontSize = "13px"; tx.appendChild(sm); r.appendChild(tx); r.appendChild(ask ? h("span", "conn", ask.tag || "연결 ›") : h("span")); c2.appendChild(r); });
   v.appendChild(c2);
   if (H.mode !== "live") {
     const c6 = h("div", "card"); c6.appendChild(h("b", null, "데모 저장소")); c6.appendChild(h("div", "note", "가짜 저장소라 실행해도 실제 GitHub에는 남지 않아요. 처음 상태로 되돌릴 수 있어요."));
@@ -2387,8 +2431,8 @@ function renderMe() {
   if (ME.logged_in) { const r0 = meRow("user", ME.login, ME.member === false ? "GitHub 로그인 · 이 저장소 팀원 아님" : "GitHub 로그인", () => openMe("who")); if (ME.avatar) { const im = h("img"); im.src = ME.avatar; im.alt = ""; im.width = 26; im.height = 26; im.style.borderRadius = "50%"; im.referrerPolicy = "no-referrer"; r0.firstChild.innerHTML = ""; r0.firstChild.appendChild(im); } g0.appendChild(r0); }
   else if (H.login) g0.appendChild(meRow("user", "GitHub로 로그인", "승인할 때 누구인지 GitHub가 확인해요", goLogin));
   else g0.appendChild(meRow("user", meUser() || "내 GitHub 아이디 고르기", meUser() ? "내 GitHub 아이디" : "승인하면 이름이 GitHub에 남아요", () => openMe("who")));
-  const conn = [H.mode === "live", H.ai, H.discord].filter(Boolean).length;
-  g0.appendChild(meRow("plug", `연결된 서비스 ${conn}개`, `GitHub ${H.mode === "live" ? "✓" : "데모"} · Claude ${H.ai ? "✓" : "–"} · 디스코드 ${H.discord ? "✓" : "–"}`, () => openMe("connect")));
+  const conn = [H.mode === "live", H.ai, DISC.connected].filter(Boolean).length;
+  g0.appendChild(meRow("plug", `연결된 서비스 ${conn}개`, `GitHub ${H.mode === "live" ? "✓" : "데모"} · Claude ${H.ai ? "✓" : "–"} · 디스코드 ${DISC.connected ? "✓" : "–"}`, () => openMe("connect")));
   v.appendChild(g0);
   // 팀플
   v.appendChild(h("div", "glabel", "팀플"));
@@ -2454,7 +2498,7 @@ $("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); 
     if (!cur || (cur.draft && !curDraft())) cur = { repo: curRepo() };
     if (!curDraft() && store.get("extract:" + projKey(), null) == null && store.get("extract", null)) store.set("extract:" + projKey(), store.get("extract", null));  // 예전 버전 기록 옮기기
     if (cur && cur.draft && !curDraft()) cur = { repo: curRepo() };
-    useProject(cur, true); resumeChat(); booted = true;
+    useProject(cur, true); resumeChat(); booted = true; loadDiscord().then(() => renderMe());
     loadProjects().then(() => { renderHome(); renderCal(); }).catch(() => {});  // 팀플 목록을 미리 받아 두면 고르기 화면이 바로 뜬다 (받은 뒤 지난 저장소 기록을 걸러 다시 그림)
     reminders();
     loadDiscover();  // 학과 게시판·해커톤 목록에서 대회를 먼저 찾아온다 (1시간 캐시)

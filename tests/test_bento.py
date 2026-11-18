@@ -1481,3 +1481,57 @@ def test_chat_knows_team_situation_but_only_allowed_values(monkeypatch):
     assert "[팀 상황]" not in fake2.sent["system"]
     r = client.post("/api/chat", json={"message": "안녕", "context": {"stage": "신청 전"}})
     assert r.status_code == 200
+
+
+# ---------- 팀 디스코드 연결 ----------
+from app import discord as dsc_mod  # noqa: E402
+from app.actions import TeamMessage as _TeamMessage  # noqa: E402
+
+_HOOK = "https://discord.com/api/webhooks/1234567890123456789/abcDEF_ghiJKL-mnoPQR0123456789abcDEF_ghiJKL-mnoPQR0123456789abcDEF"
+
+
+def test_discord_url_is_checked_and_sealed_per_team():
+    assert dsc_mod.parse(_HOOK)[0] == "1234567890123456789"
+    for bad in ["", "https://example.com/api/webhooks/1/2", "http://discord.com/api/webhooks/123456/abcdefghijklmnopqrstuv", "https://discord.com/api/webhooks/abc/xyz"]:
+        with pytest.raises(dsc_mod.DiscordError):
+            dsc_mod.parse(bad)
+    blob = dsc_mod.seal(_HOOK, "key-A", "team/one")
+    assert _HOOK.split("/")[-1] not in blob and "discord" not in blob  # 저장소에서는 주소가 보이지 않는다
+    assert dsc_mod.unseal(blob, "key-A", "team/one") == _HOOK
+    assert dsc_mod.unseal(blob, "key-B", "team/one") is None  # 서버 키가 다르면 못 연다
+    assert dsc_mod.unseal(blob, "key-A", "team/two") is None  # 다른 팀 저장소에서는 못 연다
+    assert len(blob) <= dsc_mod.CHUNK * 3  # 라벨 설명 3조각 안에 들어간다
+
+
+def test_discord_check_reads_webhook_info_without_posting():
+    import httpx
+    seen = []
+    def handler(req):
+        seen.append(req.method)
+        return httpx.Response(200, json={"name": "팀 알림", "channel_id": "99"})
+    with httpx.Client(transport=httpx.MockTransport(handler)) as c:
+        assert dsc_mod.check(_HOOK, c)["name"] == "팀 알림"
+    assert seen == ["GET"]
+    with httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(404))) as c:
+        with pytest.raises(dsc_mod.DiscordError):
+            dsc_mod.check(_HOOK, c)
+
+
+def test_discord_connect_stores_per_team_and_team_message_uses_it(monkeypatch):
+    main._demo.reset()
+    monkeypatch.setattr(dsc_mod, "check", lambda url, client=None: {"name": "팀 알림", "channel_id": "1"})
+    assert client.get("/api/discord").json() == {"connected": False, "source": None}  # 서버 기본 웹훅도 팀 연결도 없을 때
+    r = client.post("/api/discord/connect", json={"url": "https://nope.example/x"})
+    assert r.status_code == 400
+    r = client.post("/api/discord/connect", json={"url": _HOOK})
+    assert r.status_code == 200 and r.json()["source"] == "team"
+    labels = [lb for lb in main._demo.labels() if lb["name"].startswith(dsc_mod.PREFIX)]
+    assert labels and all(_HOOK.split("/")[-1] not in lb["description"] for lb in labels)  # 저장소에는 암호문만
+    assert client.get("/api/discord").json() == {"connected": True, "source": "team"}
+    sent = []
+    import httpx
+    monkeypatch.setattr(httpx, "post", lambda url, **kw: sent.append((url, kw["json"]["content"])) or SimpleNamespace(raise_for_status=lambda: None))
+    out = _execute([_TeamMessage(text="안녕하세요")], main._demo, main.settings)
+    assert out[0]["ok"] and sent == [(_HOOK, "안녕하세요")]
+    assert client.post("/api/discord/disconnect", json={}).status_code == 200
+    assert not [lb for lb in main._demo.labels() if lb["name"].startswith(dsc_mod.PREFIX)]
