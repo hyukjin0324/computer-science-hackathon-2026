@@ -744,6 +744,7 @@ def test_login_flow_sets_signed_session(monkeypatch):
     assert bad.status_code == 400  # 다른 곳에서 시작한 로그인은 받지 않는다
     ok = c.get(f"/auth/callback?code=x&state={state}", follow_redirects=False)
     assert ok.status_code == 302
+    assert ok.headers["location"] == "/#home" and "bento_just_login=1" in ok.headers["set-cookie"] + "".join(ok.headers.get_list("set-cookie"))  # 주소에는 표시를 남기지 않고 1분짜리 쿠키로만 알린다
     me = c.get("/api/me").json()
     assert me["logged_in"] and me["login"] == "seoyeon"
     assert c.post("/auth/logout").json()["ok"] and c.get("/api/me").json()["logged_in"] is False

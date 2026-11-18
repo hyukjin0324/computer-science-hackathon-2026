@@ -87,7 +87,8 @@ def callback(request: Request, code: str = "", state: str = ""):
         raise HTTPException(400, "로그인 요청이 맞지 않아요. 처음부터 다시 시도해 주세요")
     user = exchange_code(code, base_url(request) + "/auth/callback")
     tok = sign({"kind": "session", **user, "exp": int(time.time()) + SESSION_DAYS * 86400}, s.signing_key)
-    resp = RedirectResponse("/?login=ok#home", status_code=302)  # 방금 로그인했으니 첫 화면은 건너뛴다
+    resp = RedirectResponse("/#home", status_code=302)
+    resp.set_cookie("bento_just_login", "1", max_age=60, samesite="lax", secure=base_url(request).startswith("https"))  # 방금 로그인했으니 첫 화면은 건너뛴다 (주소에는 표시를 남기지 않는다)
     secure = base_url(request).startswith("https")
     resp.set_cookie(SESSION, tok, max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax", secure=secure)
     resp.delete_cookie(STATE)

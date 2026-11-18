@@ -115,8 +115,11 @@ details.history > .bub { margin-top: 8px; }
 .pick { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; text-align: left; padding: 12px 8px; border-radius: var(--r-box); min-height: 64px; }
 .pick:hover { background: var(--surface-2); }
 .linkbtn { background: none; border: 0; padding: 4px 2px; font: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.linkbtn:hover, .linkbtn:focus-visible { background: var(--surface-2); border-radius: var(--r-pill); }
 .task.folded > :not(.task-h) { display: none; }  /* 취소한 승인: 제목·'취소함'만 대화에 남긴다 */
-.dcard .dpick { align-self: flex-start; padding: 2px 0; font-size: var(--fs-small); font-weight: 700; }
+.dcard .dpick { align-self: flex-start; padding: 6px 10px; margin-left: -10px; border-radius: var(--r-pill); font-size: var(--fs-small); font-weight: 700; transition: background .15s; }
+.dcard .dpick:hover, .dcard .dpick:focus-visible { background: var(--surface-2); text-decoration: none; }
+.dcard .dpick:active { transform: scale(.98); }
 button.bigrow:disabled:not(.chosen) { opacity: .45; cursor: default; }  /* 이미 골라서 잠긴 줄은 흐리게 */
 button.bigrow.chosen { box-shadow: inset 0 0 0 1.5px var(--ink); }
 .askline { display: grid; grid-template-columns: 20px 1fr auto; gap: 12px; align-items: center; text-align: left; padding: 14px 16px; border-radius: var(--r-card); background: var(--surface); border: 1px solid var(--line); color: var(--ink); font: inherit; }
@@ -1291,7 +1294,7 @@ function homeBoard(v, me2, items) {
   // 역할이 비어 있으면 먼저 안내
   if (b && people.length > 1 && !Object.keys(roles).length) {
     const n = h("div", "card hint"); n.appendChild(h("b", null, "팀 역할을 아직 안 정했어요")); n.appendChild(h("div", "note", "역할을 정하면 할 일과 리뷰어를 역할에 맞게 나눠요."));
-    const bt = h("button", "btn", "팀 역할 정하기"); bt.type = "button"; bt.onclick = () => { showTab("me"); openMe("roles"); }; n.appendChild(bt); v.appendChild(n);
+    const bt = h("button", "btn", "팀 역할 정하기"); bt.type = "button"; bt.onclick = openRolesSheet; n.appendChild(bt); v.appendChild(n);
   }
   // 내 할 일 = 나에게 맡겨진 GitHub 할 일 + 내가 확인할 제안
   if (me2) {
@@ -1525,9 +1528,12 @@ async function discoverChat(said) {
 }
 
 /* ---------- 첫 방문 ---------- */
+function clearSplash() { const sp = document.querySelector(".onb.splash"); if (sp) sp.remove(); }
 function onboarding() {
-  // 앱을 열 때마다 첫 화면을 보여 준다. GitHub 로그인을 막 마치고 돌아온 직후만 건너뛴다.
-  if (new URLSearchParams(location.search).get("login") === "ok") { try { history.replaceState(history.state, "", location.pathname + location.hash); } catch (e) { /* 무시 */ } return; }
+  // 앱을 열 때마다 첫 화면을 보여 준다. GitHub 로그인을 막 마치고 돌아온 직후(서버가 1분짜리 쿠키를 줌)만 건너뛴다.
+  // 주소에 표시를 남기지 않아서, 북마크·방문 기록으로 들어와도 첫 화면이 뜬다.
+  if (/(?:^|;\s*)bento_just_login=1/.test(document.cookie)) { document.cookie = "bento_just_login=; Max-Age=0; path=/"; clearSplash(); document.body.classList.remove("onboarding"); return; }
+  clearSplash();
   const o = h("div", "onb"); o.setAttribute("role", "dialog"); o.setAttribute("aria-label", "Bento 시작하기");
   document.body.classList.add("onboarding");
   const top = h("div", "top"); top.innerHTML = MASCOT(26, false); top.appendChild(document.createTextNode("Bento")); o.appendChild(top);
@@ -2180,6 +2186,41 @@ function syncNav(tab) {  // 탭 첫 화면은 ☰, 안으로 들어간 화면은
   $("backBtn").hidden = !sub; $("menuBtn").hidden = sub;
 }
 function openMe(page) { mePage = page; setTimeout(() => syncNav("me")); try { history.pushState({ tab: "me", page }, "", "#me-" + page); } catch (e) { /* 무시 */ } renderMe(); $("v-me").scrollTop = 0; }
+function buildRoles(v, closeSheet) {
+  if (curDraft()) { v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 정할 수 있어요.")); return; }
+  const cr = h("div", "card"); cr.appendChild(h("b", null, "팀 역할"));
+  cr.appendChild(h("div", "note", "역할을 정해 두면 계획 단계와 할 일을 역할에 맞는 사람에게 맡기고, 리뷰어도 같은 역할 팀원을 먼저 추천해요. 한 사람이 3개까지 맡을 수 있어요. 바꾸는 것도 팀원 승인을 받아요."));
+  const body = h("div"); body.textContent = "역할표를 불러오고 있어요…"; cr.appendChild(body); v.appendChild(cr);
+  api("/roles").then((r) => {
+    body.textContent = ""; const pick = {}; const ex = (r.members || []);
+    if (!ex.length) { body.textContent = "저장소 팀원을 읽지 못했어요."; return; }
+    ex.forEach((m) => {
+      pick[m] = [...(r.roles[m] || [])];
+      const row = h("div", "rolerow"); row.appendChild(h("b", null, m + (m === meUser() ? " (나)" : "")));
+      const chips = h("div", "chips"); chips.setAttribute("role", "group"); chips.setAttribute("aria-label", `${m} 역할`);
+      Object.entries(r.choices).forEach(([code, name]) => {
+        const b = h("button", "chiptog", name); b.type = "button"; b.setAttribute("aria-pressed", String(pick[m].includes(code)));
+        b.onclick = () => { const on = pick[m].includes(code); if (!on && pick[m].length >= 3) return snack("3개까지 고를 수 있어요"); pick[m] = on ? pick[m].filter((x) => x !== code) : [...pick[m], code]; b.setAttribute("aria-pressed", String(!on)); };
+        chips.appendChild(b);
+      });
+      row.appendChild(chips); body.appendChild(row);
+    });
+    const sv = h("button", "btn primary", "팀원에게 승인받고 저장"); sv.type = "button"; sv.style.marginTop = "12px";
+    sv.onclick = async () => { sv.disabled = true; try { const p = await api("/roles", { method: "POST", body: JSON.stringify({ repo: curRepo(), roles: pick }) }); if (!p.proposal) { snack(p.message); sv.disabled = false; return; } if (closeSheet) closeSheet(); else showTab("chat"); bot("팀 역할을 이렇게 정할게요. 승인하면 GitHub에 저장돼서 팀원 모두 같은 역할표를 봐요."); approval(p.proposal, (ok) => { if (ok) { lastTriage = null; refreshHome(); bot("역할을 저장했어요. 이제 계획과 할 일을 역할대로 나눠요."); } }); } catch (e) { sv.disabled = false; fail(e); } };
+    body.appendChild(sv);
+  }).catch((e) => { body.textContent = e.message; });
+}
+function openRolesSheet() {
+  // 홈 화면 위에 시트로 열어 홈에 머문다
+  const bg = h("div", "sheet-bg"); const sh = h("div", "sheet"); sh.setAttribute("role", "dialog"); sh.setAttribute("aria-modal", "true"); sh.setAttribute("aria-label", "팀 역할 정하기"); bg.appendChild(sh);
+  const esc = (e) => { if (e.key === "Escape") close(); };
+  const close = () => { bg.remove(); document.removeEventListener("keydown", esc); };
+  bg.onclick = (e) => { if (e.target === bg) close(); }; document.addEventListener("keydown", esc);
+  const grip = h("div"); grip.setAttribute("aria-hidden", "true"); grip.style.cssText = "width:40px;height:5px;border-radius:var(--r-pill);background:var(--line);align-self:center"; sh.appendChild(grip);
+  const box = h("div"); sh.appendChild(box); buildRoles(box, close);
+  const cb = h("button", "btn", "닫기"); cb.type = "button"; cb.onclick = close; sh.appendChild(cb);
+  document.querySelector(".phone").appendChild(bg);
+}
 const ME_PAGES = {
   connect: ["연결된 서비스", (v) => {
   const c2 = h("div", "card"); c2.appendChild(h("b", null, "연결 상태"));
@@ -2209,30 +2250,7 @@ const ME_PAGES = {
   }
     if (curDraft() || !lastTriage) v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 고를 수 있어요."));
   }],
-  roles: ["팀 역할", (v) => {
-  if (curDraft()) { v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 정할 수 있어요.")); return; }
-  const cr = h("div", "card"); cr.appendChild(h("b", null, "팀 역할"));
-  cr.appendChild(h("div", "note", "역할을 정해 두면 계획 단계와 할 일을 역할에 맞는 사람에게 맡기고, 리뷰어도 같은 역할 팀원을 먼저 추천해요. 한 사람이 3개까지 맡을 수 있어요. 바꾸는 것도 팀원 승인을 받아요."));
-  const body = h("div"); body.textContent = "역할표를 불러오고 있어요…"; cr.appendChild(body); v.appendChild(cr);
-  api("/roles").then((r) => {
-    body.textContent = ""; const pick = {}; const ex = (r.members || []);
-    if (!ex.length) { body.textContent = "저장소 팀원을 읽지 못했어요."; return; }
-    ex.forEach((m) => {
-      pick[m] = [...(r.roles[m] || [])];
-      const row = h("div", "rolerow"); row.appendChild(h("b", null, m + (m === meUser() ? " (나)" : "")));
-      const chips = h("div", "chips"); chips.setAttribute("role", "group"); chips.setAttribute("aria-label", `${m} 역할`);
-      Object.entries(r.choices).forEach(([code, name]) => {
-        const b = h("button", "chiptog", name); b.type = "button"; b.setAttribute("aria-pressed", String(pick[m].includes(code)));
-        b.onclick = () => { const on = pick[m].includes(code); if (!on && pick[m].length >= 3) return snack("3개까지 고를 수 있어요"); pick[m] = on ? pick[m].filter((x) => x !== code) : [...pick[m], code]; b.setAttribute("aria-pressed", String(!on)); };
-        chips.appendChild(b);
-      });
-      row.appendChild(chips); body.appendChild(row);
-    });
-    const sv = h("button", "btn primary", "팀원에게 승인받고 저장"); sv.type = "button"; sv.style.marginTop = "12px";
-    sv.onclick = async () => { sv.disabled = true; try { const p = await api("/roles", { method: "POST", body: JSON.stringify({ repo: curRepo(), roles: pick }) }); if (!p.proposal) { snack(p.message); sv.disabled = false; return; } showTab("chat"); bot("팀 역할을 이렇게 정할게요. 승인하면 GitHub에 저장돼서 팀원 모두 같은 역할표를 봐요."); approval(p.proposal, (ok) => { if (ok) { lastTriage = null; refreshHome(); bot("역할을 저장했어요. 이제 계획과 할 일을 역할대로 나눠요."); } }); } catch (e) { sv.disabled = false; fail(e); } };
-    body.appendChild(sv);
-  }).catch((e) => { body.textContent = e.message; });
-  }],
+  roles: ["팀 역할", (v) => buildRoles(v, null)],
   rules: ["반대가 없으면 실행", (v) => {
   if (!curDraft() && lastTriage && lastTriage.members) {
     const rules = lastTriage.rules || { lazy: [], hours: 24 };
@@ -2339,6 +2357,10 @@ $("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); 
 
 (async () => {
   intro(); renderBox(); renderCal(); showTab("home");
+  // 서버에 로그인 여부를 묻는 동안(0.1~0.3초) 홈이 비치지 않게 먼저 막을 덮는다. 첫 화면이 뜨면 이 막이 대신 사라진다
+  const splash = h("div", "onb splash"); splash.setAttribute("aria-hidden", "true"); document.body.classList.add("onboarding");
+  const stop = h("div", "top"); stop.innerHTML = MASCOT(26, false); stop.appendChild(document.createTextNode("Bento")); splash.appendChild(stop);
+  document.querySelector(".phone").appendChild(splash);
   try {
     // 서버가 막 다시 켜지는 중이면 잠깐 기다렸다 다시 묻는다. 그냥 넘어가면 로그인 버튼이 사라진 것처럼 보인다.
     for (let i = 0; ; i++) { try { H = await api("/health"); break; } catch (e) { if (i >= 6) throw e; await new Promise((r) => setTimeout(r, 700)); } }
@@ -2384,7 +2406,7 @@ $("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); 
       if (!$("v-chat").hidden) $("toast").hidden = false;
       setTimeout(() => { toastText = ""; $("toast").hidden = true; }, 8000);
     }
-  } catch (e) { bot("Bento 서버에 연결하지 못했어요. 잠시 뒤에 새로고침해 주세요."); renderMe(); renderHome(); }
+  } catch (e) { clearSplash(); bot("Bento 서버에 연결하지 못했어요. 잠시 뒤에 새로고침해 주세요."); renderMe(); renderHome(); }
 })();
 </script>
 </body>
