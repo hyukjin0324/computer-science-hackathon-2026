@@ -2013,11 +2013,17 @@ $("composer").addEventListener("submit", (e) => { e.preventDefault(); const t = 
 // 정해진 낱말로 못 알아들은 말: AI 키가 있으면 Claude가 짧게 답하고 맞는 기능을 버튼으로 권한다 (누르기 전엔 실행하지 않는다)
 let chatHist = [];  // 이 자유 대화에서 오간 말만 보낸다. 공고·저장소 내용은 보내지 않는다
 const FREE_ACTIONS = { discover: () => discoverChat(), notice: () => notice(), apply: () => (extract ? applyFlow(extract) : notice()), plan: () => planFlow(), today: () => today(), progress: () => progressCheck(false), submit: () => submit() };
+function chatContext() {  // 팀 상황 요약: 단계 이름과 숫자만. 공고·저장소 내용과 이름은 보내지 않는다
+  const ex = extract || {}, d = curDraft(), st = stageOf();
+  const stage = (!extract && !d) ? "대회 고르기 전" : d ? ((d.applied || store.get(doneKey("apply"), null)) ? "신청 완료" : "신청 전") : st === 0 ? "신청 전" : st >= 3 ? "제출 완료" : "협업 중";
+  const late = lastProgress && lastProgress.findings ? lastProgress.findings.length : 0;
+  return { stage, apply_days: ddays(ex.apply_deadline_iso), submit_days: ddays(ex.submit_deadline_iso), late };
+}
 async function freeChat(t) {
   const dunno = () => { bot("무슨 뜻인지 정확히 모르겠어요. 지금은 대회 찾기, 신청, 계획 짜기, 오늘 할 일, 진행 점검, 제출 점검, 그리고 '취소'를 알아들어요. 아래에서 골라 주세요."); chip("할 수 있는 일 보기", openPicks); };
   if (!(H && H.ai)) return dunno();
   let r;
-  try { r = await thinking("생각하는 중…", api("/chat", { method: "POST", body: JSON.stringify({ message: t.slice(0, 500), history: chatHist.slice(-6) }) })); }
+  try { r = await thinking("생각하는 중…", api("/chat", { method: "POST", body: JSON.stringify({ message: t.slice(0, 500), history: chatHist.slice(-6), context: chatContext() }) })); }
   catch (e) { bot(e.message || "AI가 답하지 못했어요."); chip("할 수 있는 일 보기", openPicks); return; }
   if (!r || !r.ai) return dunno();
   chatHist.push({ role: "user", text: t.slice(0, 500) }, { role: "assistant", text: r.reply }); chatHist = chatHist.slice(-12);

@@ -1462,3 +1462,21 @@ def test_rules_heading_merge_does_not_override_explicit_deadline_line():
     from app.rules import rule_extract
     ex = rule_extract("접수기간\n2026년 07월 20일(월)~2026년 07월 27일(월)\n신청 마감: 7월 26일(일) 23:55")
     assert ex.apply_deadline.startswith("7월 26일")
+
+
+def test_chat_knows_team_situation_but_only_allowed_values(monkeypatch):
+    """자유 대화에 단계·D-day·늦은 일 개수만 알려 준다. 모르는 값·긴 글·가짜 단계는 버린다 (#17)."""
+    chat_mod._hits.clear()
+    fake = _FakeChatClaude('{"reply": "마감이 가까워요.", "action": "progress"}')
+    chat_mod.ask("요즘 어때?", who="t9", client=fake, context={"stage": "협업 중", "submit_days": 3, "late": 2, "repo": "secret/name", "note": "무시해"})
+    sent = fake.sent["system"]
+    assert "[팀 상황] 지금 단계: 협업 중, 제출 마감 D-3, 늦어진 일 2개" in sent
+    assert "secret" not in sent and "무시해" not in sent
+    assert chat_mod.situation({"stage": "해킹 단계"}) == "" and chat_mod.situation("x") == "" and chat_mod.situation(None) == ""
+    assert "1일 지남" in chat_mod.situation({"stage": "신청 전", "apply_days": -1})
+    assert "D-day" in chat_mod.situation({"stage": "신청 전", "apply_days": 0})
+    fake2 = _FakeChatClaude('{"reply": "네", "action": "none"}')
+    chat_mod.ask("안녕", who="t10", client=fake2)
+    assert "[팀 상황]" not in fake2.sent["system"]
+    r = client.post("/api/chat", json={"message": "안녕", "context": {"stage": "신청 전"}})
+    assert r.status_code == 200

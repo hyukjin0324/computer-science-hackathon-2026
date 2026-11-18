@@ -1,6 +1,6 @@
 """대화창 자유 대화: 정해진 낱말로 못 알아들은 말만 Claude에게 묻는다.
 
-- 보내는 것: 사용자가 대화창에 직접 쓴 말과, 이 자유 대화에서 AI가 했던 답만. 공고·저장소 내용은 보내지 않는다.
+- 보내는 것: 사용자가 대화창에 직접 쓴 말과, 이 자유 대화에서 AI가 했던 답, 그리고 팀플 상황 요약(지금 단계·마감까지 남은 날수·늦어진 일 개수)만. 공고·저장소 내용과 이름은 보내지 않는다.
 - 받는 것: 짧은 답 + Bento 기능 하나(없으면 none). 기능은 화면에서 버튼으로 보여 주고, 사용자가 눌러야 실행된다.
 - 키(ANTHROPIC_API_KEY)가 없으면 부르지 않는다. 비용이 새지 않게 사람별·하루 전체 횟수를 막는다.
 """
@@ -48,6 +48,11 @@ Bento가 할 수 있는 일:
 - Bento는 머지·푸시·코드 수정을 하지 않고, 모든 실행은 사람이 승인한다. 이걸 넘는 일을 해 주겠다고 말하지 않는다.
 - 대회 일정·상금 같은 사실을 지어내지 않는다. 모르면 공고를 붙여 넣거나 대회 찾기를 써 보라고 안내한다.
 - 비밀번호·API 키·개인정보를 달라고 하지 않는다."""
+
+STAGES = ("대회 고르기 전", "신청 전", "신청 완료", "협업 중", "제출 완료")
+CONTEXT_RULE = """
+- [팀 상황]이 주어지면 답에 자연스럽게 활용한다(예: 마감이 가까우면 서두르자고, 늦어진 일이 있으면 먼저 챙기자고). 상황에 없는 대회 이름·일정·팀원은 지어내지 않는다.
+- 상황을 그대로 읊지 말고, 사용자가 물은 것에 먼저 답한 뒤 필요할 때만 덧붙인다."""
 
 SCHEMA = {
     "type": "object",
@@ -112,6 +117,25 @@ def _allow(who: str, now: float) -> None:
         _day["n"] += 1
 
 
+def _days(v) -> int | None:
+    return v if isinstance(v, int) and not isinstance(v, bool) and -400 <= v <= 400 else None
+
+
+def situation(ctx) -> str:
+    """화면에서 보낸 팀 상황을 허용된 값만 골라 한 줄로 만든다. 모르는 값·문자열은 버린다."""
+    if not isinstance(ctx, dict) or ctx.get("stage") not in STAGES:
+        return ""
+    parts = [f"지금 단계: {ctx['stage']}"]
+    for key, label in (("apply_days", "신청 마감"), ("submit_days", "제출 마감")):
+        d = _days(ctx.get(key))
+        if d is not None:
+            parts.append(f"{label} {'D-' + str(d) if d > 0 else 'D-day' if d == 0 else str(-d) + '일 지남'}")
+    late = _days(ctx.get("late"))
+    if late:
+        parts.append(f"늦어진 일 {late}개")
+    return "[팀 상황] " + ", ".join(parts)
+
+
 def _history(hist) -> list[dict]:
     out = []
     for h in (hist or [])[-6:]:
@@ -129,7 +153,7 @@ def _history(hist) -> list[dict]:
     return out
 
 
-def ask(message: str, history=None, who: str = "anon", client=None) -> dict:
+def ask(message: str, history=None, who: str = "anon", client=None, context=None) -> dict:
     msg = (message or "").strip()
     if not msg:
         raise ChatError("할 말을 적어 주세요")
@@ -143,7 +167,7 @@ def ask(message: str, history=None, who: str = "anon", client=None) -> dict:
         resp = client.messages.create(
             model=MODEL,
             max_tokens=1024,
-            system=SYSTEM,
+            system=SYSTEM + (CONTEXT_RULE + "\n" + sit if (sit := situation(context)) else ""),
             thinking={"type": "disabled"},
             output_config={"effort": "low", "format": {"type": "json_schema", "schema": SCHEMA}},
             messages=_history(history) + [{"role": "user", "content": msg}],
