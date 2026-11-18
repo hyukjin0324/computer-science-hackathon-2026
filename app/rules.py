@@ -122,6 +122,8 @@ def rule_extract(text: str, now: datetime | None = None) -> NoticeExtract:
                         break
                     items.append(BULLET.sub("", nxt).strip(" .;"))
             delivs += [Deliverable(name=it, quote=it) for it in items if it]
+        if (m := re.search(r"\(\s*제출\s*(?:물|서류|자료|항목|파일)\s*\)\s*(.*)$", line)) and (c := re.search(r"[①-⑳]", m.group(1))):  # '○ (제출 파일) ...-①A ②B'
+            delivs += [Deliverable(name=re.sub(r"\s*(?:하여\s*)?제출[-\s]*$", "", it.replace("『", "").replace("』", " ")).strip(), quote=it) for it in _split_items(m.group(1)[c.start():])]
         if not lab and len(line) <= MAX_LINE and (m := re.match(r"^[※*▶●○\-•\s]*(.{3,120}?)\s*(?:을|를)?\s*(?:모두\s*)?제출\s*(?:하|해|합|\.|$)", line)) \
                 and not DATE.search(line) and "," in m.group(1):
             delivs += [Deliverable(name=it, quote=it) for it in _split_items(m.group(1))]

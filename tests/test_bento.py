@@ -1432,3 +1432,11 @@ def test_focus_detail_keeps_only_the_posting_of_aggregator_pages():
     assert focus_detail("본문만 있는 페이지\n상세내용") == "본문만 있는 페이지\n상세내용"
     ex = rule_extract("접수기간: 2026.09.16 ~ 2026.09.30\n다른 공고 모집 ~ 2026.12.24", None)
     assert ex.apply_deadline.startswith("9월 30일")
+
+
+def test_rules_read_parenthesized_deliverable_label_from_hwpx_notice():
+    """HWPX 공고의 '○ (제출 파일) ...①...②' 형식 (#13)."""
+    from app.rules import rule_extract
+    ex = rule_extract("○ (제출 파일) 하기 파일을 모두 필수로 제출-①참가서류 한글파일: 서명 후 pdf ②결과제출서류 엑셀 파일\n○ (참가자격) 개인 또는 팀 단위(5인 이내)")
+    assert [d.name for d in ex.deliverables] == ["참가서류 한글파일: 서명 후 pdf", "결과제출서류 엑셀 파일"]
+    assert ex.team_max == 5
