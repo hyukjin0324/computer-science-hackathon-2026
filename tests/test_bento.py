@@ -1645,3 +1645,15 @@ def test_milestone_step_shows_date_not_a_fake_0900_and_real_deadline_time():
     assert "11월 24일(화)" in step["sub"] and "실제 마감 12:00" in step["sub"] and "09:00" not in step["sub"]
     _, up = label(UpdateMilestone(title="계획", due_on="2026-11-30T00:00:00Z", reason="r"), False)
     assert "11월 30일" in _ and "09:00" not in _
+
+
+def test_everyone_tasks_get_no_single_person_suggestion_and_text_is_not_confusing():
+    main._demo.reset()
+    main._demo.create_issue("[테스트] 기기 · 화면 설정별로 보기 (전원)", "본문", [], None)
+    main._demo.create_issue("[발표] 발표 자료 만들기", "본문", [], None)
+    b = client.get("/api/board").json()
+    by = {t["title"]: t for t in b["unassigned"]}
+    all_hands = by["[테스트] 기기 · 화면 설정별로 보기 (전원)"]["suggest"]
+    assert all_hands["who"] is None and "전원" in all_hands["why"]
+    one = by["[발표] 발표 자료 만들기"]["suggest"]
+    assert one["who"] and "발표" in one["role"]  # role은 '이 일의 성격'

@@ -1319,7 +1319,8 @@ function taskRow(t, who) {
   const dd = t.due ? ddays(t.due) : null;
   a.appendChild(h("span", "ai " + (t.late ? "crit" : dd != null && dd <= 2 ? "warn" : "ok"), t.late ? "늦음" : dd == null ? "할 일" : dd === 0 ? "오늘" : `D-${dd}`));
   const tx = h("span"); tx.appendChild(h("b", null, t.title)); tx.appendChild(h("small", null, `#${t.number}` + (who ? ` · ${who}` : "")));
-  if (t.suggest && t.suggest.who) tx.appendChild(h("small", "suggest", `추천: ${t.suggest.role ? t.suggest.role + " · " : ""}${t.suggest.who}${t.suggest.why ? " · " + t.suggest.why : ""}`));
+  if (t.suggest && t.suggest.who) tx.appendChild(h("small", "suggest", `추천: ${t.suggest.who}${t.suggest.why ? " · " + t.suggest.why : ""}${t.suggest.role && !(t.suggest.why || "").includes(t.suggest.role) ? ` (이 일은 ${t.suggest.role} 일)` : ""}`));  // 누구 · 왜 · 이 일의 성격. 일의 성격(발표·디자인)이 사람의 역할로 읽히지 않게 따로 적는다
+  else if (t.suggest && t.suggest.why) tx.appendChild(h("small", "why", t.suggest.why));
   if (t.why) tx.appendChild(h("small", "why", t.why));
   a.appendChild(tx); a.appendChild(h("span", "chev", "↗"));
   return a;
