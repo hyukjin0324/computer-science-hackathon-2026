@@ -1419,3 +1419,16 @@ def test_rules_real_notice_regressions():
     assert ex.apply_deadline.startswith("7월 3일")
     assert ex.submit_deadline.startswith("8월 9일")
     assert [d.name for d in ex.deliverables] == ["참가신청서", "개인정보 수집·이용 동의서", "작품개요서"]
+
+
+def test_focus_detail_keeps_only_the_posting_of_aggregator_pages():
+    """링커리어처럼 추천 공고·후기가 섞인 페이지에서 접수기간·본문만 남긴다 (#13)."""
+    from app.fetch import focus_detail
+    from app.rules import rule_extract
+    page = "\n".join(["접수기간", "2026.09.16 ~ 2026.09.30", "상세내용", "추천 공고", "상세내용", "❍ 모집대상: 대학생",
+                      "다른 공고 서포터즈 모집(~3/24)", "최종합격후기", "후기 글 ... 3/24 까지 모집"])
+    out = focus_detail(page)
+    assert "후기 글" not in out and "접수기간: 2026.09.16 ~ 2026.09.30" in out
+    assert focus_detail("본문만 있는 페이지\n상세내용") == "본문만 있는 페이지\n상세내용"
+    ex = rule_extract("접수기간: 2026.09.16 ~ 2026.09.30\n다른 공고 모집 ~ 2026.12.24", None)
+    assert ex.apply_deadline.startswith("9월 30일")

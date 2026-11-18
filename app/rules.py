@@ -135,7 +135,8 @@ def rule_extract(text: str, now: datetime | None = None) -> NoticeExtract:
                 nxt = next((x.strip() for x in lines[i + 1:i + 4] if x.strip()), "")
                 if nxt and not _heading(nxt):
                     facts.append(Fact(label=name, value=BULLET.sub("", nxt).strip()[:120], quote=nxt[:120]))
-    apply = max(apply_hits, default=None)
+    official = [h for h in apply_hits if re.match(r"^접수기간\s*:", h[1])]  # 사이트 정보 칸의 접수기간이 있으면 본문 속 날짜보다 우선
+    apply = max(official or apply_hits, default=None)
     submit = max(submit_hits, default=None)
     if apply:
         facts.insert(1 if facts else 0, Fact(label="신청 마감", value=human(apply[0]), quote=apply[1][:120]))
