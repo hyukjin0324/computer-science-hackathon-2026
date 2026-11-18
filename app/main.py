@@ -21,6 +21,7 @@ from . import progress as prog
 from . import coord
 from . import discover as disc
 from . import ownership as own
+from . import discord as discord_mod
 from datetime import datetime, timedelta, timezone
 from .actions import SetRoles, SetTeamRules
 from .config import load_settings
@@ -107,8 +108,16 @@ async def _remember_asker(request: Request, call_next):
         _ASKER.reset(tok)
 
 
-def _steps(actions: list) -> list[dict]:
-    disc = bool(settings.discord_webhook)
+def _discord_hook(repo: str | None) -> str | None:
+    """이 팀이 쓸 디스코드 웹훅(팀이 연결한 것 → 서버 기본값). 읽지 못하면 서버 기본값."""
+    try:
+        return discord_mod.webhook_for(gh_for(repo), settings)
+    except Exception:  # noqa: BLE001 - 저장소를 못 읽어도 승인 화면은 떠야 한다
+        return settings.discord_webhook
+
+
+def _steps(actions: list, repo: str | None = None) -> list[dict]:
+    disc = bool(_discord_hook(repo)) if any(a.type == "team_message" for a in actions) else bool(settings.discord_webhook)
     return [{"label": label(a, disc)[0], "sub": label(a, disc)[1], "edit": EDITABLE.get(a.type), "text": getattr(a, EDITABLE.get(a.type, "_"), None)} for a in actions]
 
 
@@ -116,13 +125,66 @@ def _proposal(repo: str, summary: str, actions: list, item_id: str | None = None
     by = _ASKER.get()
     token = sign({"repo": repo, "summary": summary, "item": item_id, "by": by, "actions": [a.model_dump() for a in actions]}, settings.signing_key)
     team = any(a.type in TEAM_WIDE for a in actions)
-    return {"summary": summary, "steps": _steps(actions), "token": token, "by": by, "team_wide": team}
+    return {"summary": summary, "steps": _steps(actions, repo), "token": token, "by": by, "team_wide": team}
 
 
 @app.get("/api/health")
 def health():
     return {"ok": True, "mode": "live" if settings.live else "demo", "repo": settings.default_repo,
             "ai": settings.anthropic_ready, "discord": bool(settings.discord_webhook), "needs_code": bool(settings.access_code) and not settings.login_enabled, "login": settings.login_enabled, "install_url": _install_url()}
+
+
+class DiscordIn(BaseModel):
+    repo: str | None = None
+    url: str = ""
+
+
+def _discord_actor(request: Request, st) -> str | None:
+    """디스코드 연결을 바꿀 수 있는 사람: 로그인했다면 그 저장소 팀원."""
+    if not settings.login_enabled:
+        return None
+    u = current_user(request)
+    if not u:
+        raise HTTPException(401, {"message": "GitHub로 로그인해 주세요", "login": True})
+    if u["login"] not in st.members:
+        raise HTTPException(403, "이 저장소 팀원만 디스코드를 연결할 수 있어요")
+    return u["login"]
+
+
+@app.get("/api/discord")
+def discord_status(repo: str | None = None):
+    """이 팀이 디스코드에 연결돼 있는지. 주소는 알려 주지 않는다."""
+    gh = gh_for(repo)
+    team = discord_mod.read(gh, settings.signing_key) is not None
+    return {"connected": team or bool(settings.discord_webhook), "source": "team" if team else ("server" if settings.discord_webhook else None)}
+
+
+@app.post("/api/discord/connect")
+def discord_connect(body: DiscordIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    """웹훅 주소를 확인하고 이 팀에 연결한다. 메시지는 보내지 않는다. 주소는 암호화해서 팀 저장소 라벨에 저장."""
+    _check_code(x_bento_code, request)
+    gh, st = state_for(body.repo)
+    actor = _discord_actor(request, st)
+    try:
+        info = discord_mod.check(body.url)
+        discord_mod.write(gh, body.url, settings.signing_key)
+    except discord_mod.DiscordError as e:
+        raise HTTPException(e.status, str(e)) from e
+    except GitHubError as e:
+        raise HTTPException(502, f"GitHub에 저장하지 못했어요: {e}") from e
+    return {"connected": True, "source": "team", "name": info["name"], "by": actor}
+
+
+@app.post("/api/discord/disconnect")
+def discord_disconnect(body: DiscordIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    _check_code(x_bento_code, request)
+    gh, st = state_for(body.repo)
+    _discord_actor(request, st)
+    try:
+        discord_mod.clear(gh)
+    except GitHubError as e:
+        raise HTTPException(502, f"GitHub에서 지우지 못했어요: {e}") from e
+    return {"connected": bool(settings.discord_webhook), "source": "server" if settings.discord_webhook else None}
 
 
 @app.get("/api/me")
@@ -637,11 +699,12 @@ def agent_run(authorization: str | None = Header(default=None)):
         ex = notice_mod.from_descriptions([m.description for m in st.milestones])
         r = prog.check(st, [], ex.submit_deadline_iso if ex else None)
         sent = False
+        hook = discord_mod.webhook_for(gh, settings)
         key = hashlib.sha256(r["summary"].encode()).hexdigest()[:12]
-        if r["findings"] and settings.discord_webhook and os.getenv("BENTO_AUTO_NOTIFY") == "1" and _LAST_ALERT.get(repo) != key:
+        if r["findings"] and hook and os.getenv("BENTO_AUTO_NOTIFY") == "1" and _LAST_ALERT.get(repo) != key:
             import httpx
             app_url = os.getenv("BENTO_APP_URL", "")
-            httpx.post(settings.discord_webhook, json={"content": f"[{repo}]\n{r['summary']}" + (f"\n앱에서 확인하고 승인하기: {app_url}" if app_url else ""),
+            httpx.post(hook, json={"content": f"[{repo}]\n{r['summary']}" + (f"\n앱에서 확인하고 승인하기: {app_url}" if app_url else ""),
                                                        "allowed_mentions": {"parse": []}}, timeout=10)
             _LAST_ALERT[repo] = key
             sent = True
@@ -654,9 +717,9 @@ def agent_run(authorization: str | None = Header(default=None)):
             if lv and _LAST_ALERT.get(k) != "sent":
                 _LAST_ALERT[k] = "sent"
                 lines.append(f"· {owner}님 차례 · {it['title']} ({int(age)}시간째)" if lv == 1 else f"· {it['title']} · {int(age)}시간째 승인이 없어서 이제 누구나 승인할 수 있어요")
-        if lines and settings.discord_webhook and os.getenv("BENTO_AUTO_NOTIFY") == "1":
+        if lines and hook and os.getenv("BENTO_AUTO_NOTIFY") == "1":
             import httpx
-            httpx.post(settings.discord_webhook, json={"content": f"[{repo}] 승인을 기다리는 일\n" + "\n".join(lines), "allowed_mentions": {"parse": []}}, timeout=10)
+            httpx.post(hook, json={"content": f"[{repo}] 승인을 기다리는 일\n" + "\n".join(lines), "allowed_mentions": {"parse": []}}, timeout=10)
         tick = lazy_tick(repo)
         # 새로 올라온 대회 알리기 (마감 2주 안, 처음 본 것만)
         try:
@@ -666,9 +729,9 @@ def agent_run(authorization: str | None = Header(default=None)):
             fresh = []
         for x in fresh:
             _LAST_ALERT["disc:" + x["id"]] = "sent"
-        if fresh and settings.discord_webhook and os.getenv("BENTO_AUTO_NOTIFY") == "1":
+        if fresh and hook and os.getenv("BENTO_AUTO_NOTIFY") == "1":
             import httpx
-            httpx.post(settings.discord_webhook, json={"content": "Bento가 찾아온 대회\n" + "\n".join(f"· {x['title']} · 마감 {x['deadline_text']} ({x['source_name']})" for x in fresh),
+            httpx.post(hook, json={"content": "Bento가 찾아온 대회\n" + "\n".join(f"· {x['title']} · 마감 {x['deadline_text']} ({x['source_name']})" for x in fresh),
                                                        "allowed_mentions": {"parse": []}}, timeout=10)
         report.append({"repo": repo, "findings": len(r["findings"]), "notified": sent, "escalations": len(lines), "lazy": tick})
     return {"ok": True, "report": report}
@@ -820,7 +883,7 @@ def approval_request(body: RequestIn, request: Request, x_bento_code: str | None
         if i.title.startswith(APPROVE_PREFIX) and f"bento-approve:{key}" in (i.body or ""):
             return {"issue": i.number, "url": i.url, "already": True}
     by = data.get("by") or "팀원"
-    lines = "\n".join(f"- {s['label']}" + (f" · {s['sub']}" if s["sub"] else "") for s in _steps(actions))
+    lines = "\n".join(f"- {s['label']}" + (f" · {s['sub']}" if s["sub"] else "") for s in _steps(actions, gh.repo))
     ask = " ".join(f"@{m}" for m in st.leads if m != data.get("by")) or "다른 팀원"
     text = (f"**{by}** 님이 제안했어요. {ask} 님(또는 다른 팀원)이 Bento에서 확인하고 승인해 주세요.\n\n{lines}\n\n"
             "팀 전체에 영향을 주는 변경이라, 제안한 사람이 아닌 팀원이나 팀장이 승인해야 실행돼요.\n"
@@ -847,7 +910,7 @@ def _approval_items(gh, st) -> list[dict]:
         out.append({"id": f"approve-{i.number}", "sev": "주의", "title": f"승인 요청 · {data.get('summary', '')}",
                     "why": f"{data.get('by') or '팀원'} 님이 제안했어요 · 제안한 사람이 아닌 팀원이나 팀장이 승인해요",
                     "evidence": [{"label": f"#{i.number} 승인 요청", "url": i.url}], "options": [],
-                    "proposal": {"summary": data.get("summary", ""), "steps": _steps(actions), "token": m.group(1), "by": data.get("by"), "team_wide": True},
+                    "proposal": {"summary": data.get("summary", ""), "steps": _steps(actions, gh.repo), "token": m.group(1), "by": data.get("by"), "team_wide": True},
                     "proposed_by": data.get("by")})
     return out
 
