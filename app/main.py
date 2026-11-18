@@ -364,6 +364,7 @@ class NoticeIn(BaseModel):
     repo: str | None = None
     new_project: bool = False  # 아직 저장소가 없는 새 팀플. 저장소를 읽지 않고 공고만 분석한다.
     no_ai: bool = False  # 출처가 AI 크롤러를 막아 둔 글: AI에 보내지 않고 규칙으로만 읽는다
+    submit_deadline_iso: str | None = None  # 공고에서 못 찾은 제출 마감을 사용자가 직접 적은 것 (있으면 읽은 값 대신 쓴다)
 
 
 @app.post("/api/notice")
@@ -378,6 +379,13 @@ def analyze_notice(body: NoticeIn):
         ex, dropped, source, usage = notice_mod.extract(body.text, [m.description for m in st.milestones] if st else None, allow_ai=not body.no_ai)
     except notice_mod.NoticeError as e:
         raise HTTPException(422, str(e)) from e
+    if body.submit_deadline_iso:
+        try:
+            iso = notice_mod.aware_iso(body.submit_deadline_iso)
+            from .rules import human as _human
+            ex = ex.model_copy(update={"submit_deadline_iso": iso, "submit_deadline": _human(datetime.fromisoformat(iso))})
+        except (ValueError, TypeError) as e:
+            raise HTTPException(422, "날짜 형식이 맞지 않아요") from e
     team = len(st.members) if st else None
     team_ok = None if team is None or (ex.team_min is None and ex.team_max is None) else (
         (ex.team_min is None or team >= ex.team_min) and (ex.team_max is None or team <= ex.team_max))
