@@ -1404,3 +1404,48 @@ def test_bulk_assign_skips_named_and_drops_comment_spam():
     assert not any(a.type == "assign_issue" and a.issue == 1 for a in acts)  # '담당: B'는 빼고
     assert not any(a.type == "comment" for a in acts)  # 여러 개면 댓글은 안 단다
     assert "직접 정해 주세요" in it["options"][0]["sub"]
+
+
+def test_rules_real_notice_regressions():
+    """실제 공고(#13)에서 틀렸던 것: 규모를 팀 인원으로 읽음, 시상식을 제출 마감으로 읽음, 파일 크기를 날짜로 읽음, 긴 후기 문장을 일정으로 읽음."""
+    from datetime import datetime, timedelta, timezone
+    from app.rules import rule_extract
+    now = datetime(2026, 6, 1, tzinfo=timezone(timedelta(hours=9)))
+    t = ("제1회 해커톤 참가자 모집\n참가 규모 : 약 100팀 (300~400명)\n참가 신청 및 팀 빌딩 : 2026.06.22 ~ 2026.07.03\n"
+         "최종 결과물 제출 : 2026.08.09\n최종 발표 및 시상식 : 2026.08.22 (오프라인)\n00_제출-양식.zip (105.7 KB)\n"
+         "※ 참가신청서, 개인정보 수집·이용 동의서, 작품개요서 제출\n" + "후기 " * 80 + "공모전 모집 3/24 마감 " + "후기 " * 20)
+    ex = rule_extract(t, now)
+    assert (ex.team_min, ex.team_max) == (None, None)
+    assert ex.apply_deadline.startswith("7월 3일")
+    assert ex.submit_deadline.startswith("8월 9일")
+    assert [d.name for d in ex.deliverables] == ["참가신청서", "개인정보 수집·이용 동의서", "작품개요서"]
+
+
+def test_focus_detail_keeps_only_the_posting_of_aggregator_pages():
+    """링커리어처럼 추천 공고·후기가 섞인 페이지에서 접수기간·본문만 남긴다 (#13)."""
+    from app.fetch import focus_detail
+    from app.rules import rule_extract
+    page = "\n".join(["접수기간", "2026.09.16 ~ 2026.09.30", "상세내용", "추천 공고", "상세내용", "❍ 모집대상: 대학생",
+                      "다른 공고 서포터즈 모집(~3/24)", "최종합격후기", "후기 글 ... 3/24 까지 모집"])
+    out = focus_detail(page)
+    assert "후기 글" not in out and "접수기간: 2026.09.16 ~ 2026.09.30" in out
+    assert focus_detail("본문만 있는 페이지\n상세내용") == "본문만 있는 페이지\n상세내용"
+    ex = rule_extract("접수기간: 2026.09.16 ~ 2026.09.30\n다른 공고 모집 ~ 2026.12.24", None)
+    assert ex.apply_deadline.startswith("9월 30일")
+
+
+def test_rules_read_parenthesized_deliverable_label_from_hwpx_notice():
+    """HWPX 공고의 '○ (제출 파일) ...①...②' 형식 (#13)."""
+    from app.rules import rule_extract
+    ex = rule_extract("○ (제출 파일) 하기 파일을 모두 필수로 제출-①참가서류 한글파일: 서명 후 pdf ②결과제출서류 엑셀 파일\n○ (참가자격) 개인 또는 팀 단위(5인 이내)")
+    assert [d.name for d in ex.deliverables] == ["참가서류 한글파일: 서명 후 pdf", "결과제출서류 엑셀 파일"]
+    assert ex.team_max == 5
+
+
+def test_rules_read_poster_style_heading_then_date_and_individual_only():
+    """포스터(JTI·하나증권)에서 틀렸던 것: 제목 줄 아래 날짜, '개인(2인 이상 팀 불가)' (#13)."""
+    from app.rules import rule_extract
+    ex = rule_extract("모집기간\n~ 11월 20일 (금)\n지원방법\n인스타그램 DM")
+    assert ex.apply_deadline.startswith("11월 20일")
+    ex = rule_extract("접 수\n2026.11.02(월)~11.30(월)\n참가형태 개인(2인 이상 팀 단위 참여 불가)")
+    assert ex.apply_deadline.startswith("11월 30일") and (ex.team_min, ex.team_max) == (1, 1)

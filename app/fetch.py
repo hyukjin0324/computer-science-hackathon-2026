@@ -155,6 +155,22 @@ def _main_part(raw: str) -> tuple[str | None, str]:
     return title, raw
 
 
+def focus_detail(text: str) -> str:
+    """공모전 모음 사이트(링커리어 등)를 브라우저로 읽으면 추천 공고·후기·댓글이 한데 섞인다.
+    '상세내용' 탭이 여러 번 나오면 맨 위 정보 칸(접수기간·참여대상)과 마지막 '상세내용' 이후 본문만 남긴다."""
+    lines = text.splitlines()
+    marks = [i for i, l in enumerate(lines) if l.strip() == "상세내용"]
+    if len(marks) < 2:
+        return text
+    head: list[str] = []
+    for i, l in enumerate(lines[:marks[0]]):
+        if l.strip() in ("접수기간", "참여대상", "시상규모") and i + 1 < len(lines) and lines[i + 1].strip():
+            head.append(f"{l.strip()}: {lines[i + 1].strip()}")
+    body = lines[marks[-1] + 1:]
+    stop = next((i for i, l in enumerate(body) if re.match(r"^(합격\s?스펙|최종합격후기|합격 ?후기|합격자료|담당자 Q&A|댓글|이 친구와)", l.strip()) and i > 0), len(body))
+    return "\n".join(head + body[:stop])
+
+
 def fetch_notice(url: str, client: httpx.Client | None = None) -> dict:
     url, ctype, raw = fetch_page(url, client)
     if "text/plain" in ctype:
@@ -171,6 +187,7 @@ def fetch_notice(url: str, client: httpx.Client | None = None) -> dict:
             try:
                 rt, rtext = render.render_text(url)
                 if len(rtext) > len(text):
+                    rtext = focus_detail(rtext)
                     title, text, rendered, imgs = (title or rt), rtext, True, 0
             except Exception:  # noqa: BLE001 - 못 열면 처음 읽은 글로 계속한다
                 pass
