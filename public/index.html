@@ -119,6 +119,8 @@ details.history > .bub { margin-top: 8px; }
 .dcard .dpick { align-self: flex-start; padding: 2px 0; font-size: var(--fs-small); font-weight: 700; }
 button.bigrow:disabled:not(.chosen) { opacity: .45; cursor: default; }  /* 이미 골라서 잠긴 줄은 흐리게 */
 button.bigrow.chosen { box-shadow: inset 0 0 0 1.5px var(--ink); }
+.askline { display: grid; grid-template-columns: 20px 1fr auto; gap: 12px; align-items: center; text-align: left; padding: 14px 16px; border-radius: var(--r-card); background: var(--surface); border: 1px solid var(--line); color: var(--ink); font: inherit; }
+.askline b { display: block; font-size: var(--fs-body); } .askline small { color: var(--muted); font-size: var(--fs-small); }
 .btn.upfile { display: inline-flex; align-items: center; justify-content: center; gap: 8px; align-self: flex-start; }
 .pick .em { width: 40px; height: 40px; border-radius: var(--r-badge); background: var(--surface); border: 1px solid var(--line); color: var(--ink); display: grid; place-items: center; }
 .pick b { display: block; font-size: var(--fs-body); } .pick small { color: var(--muted); font-size: var(--fs-small); }
@@ -1313,7 +1315,15 @@ function homeBoard(v, me2, items) {
     if (unassigned.length) {
       const c = h("div", "card"); c.style.display = "flex"; c.style.flexDirection = "column"; c.style.gap = "8px";
       c.appendChild(h("b", null, `담당 없는 할 일 ${unassigned.length}개`));
-      unassigned.forEach((t) => c.appendChild(taskRow(t)));
+      const FIRST_N = 3;  // 홈이 길어지지 않게 3개만 먼저
+      unassigned.slice(0, FIRST_N).forEach((t) => c.appendChild(taskRow(t)));
+      if (unassigned.length > FIRST_N) {
+        const rest = h("div"); rest.style.display = "flex"; rest.style.flexDirection = "column"; rest.style.gap = "8px"; rest.hidden = true;
+        unassigned.slice(FIRST_N).forEach((t) => rest.appendChild(taskRow(t)));
+        const mb = h("button", "linkbtn", `${unassigned.length - FIRST_N}개 더 보기`); mb.type = "button"; mb.style.alignSelf = "flex-start";
+        mb.onclick = () => { rest.hidden = !rest.hidden; mb.textContent = rest.hidden ? `${unassigned.length - FIRST_N}개 더 보기` : "접기"; };
+        c.append(rest, mb);
+      }
       const assignItem = items.find((i) => i.id === "assign");
       if (assignItem) { const bt = h("button", "btn primary", Object.keys(roles).length ? "추천대로 나눠 주기" : "맡은 일이 적은 사람에게 나눠 주기"); bt.type = "button"; bt.onclick = () => { showTab("chat"); openItem(assignItem); }; c.appendChild(bt); }
       v.appendChild(c);
@@ -1457,47 +1467,11 @@ function renderHome() {
   }
   v.appendChild(card);
   if (!d) homeBoard(v, me2, items);
-  const contestBlock = () => {
-  // Bento가 찾아온 대회
-    const finds2 = freshFinds().filter((x) => x.id !== heroId);  // 맨 위 카드에 나온 대회는 목록에서 빼기
-    if (finds2.length) {
-      const fh = h("div", "sech"); fh.appendChild(h("h2", null, "다른 대회")); const more = h("button", "link", `${freshFinds().length}개 모두 보기`); more.type = "button"; more.onclick = () => { showTab("chat"); discoverChat(); }; fh.appendChild(more); v.appendChild(fh);
-      finds2.slice(0, 3).forEach((x) => v.appendChild(foundRow(x)));
-    }
-  };
-  // 아직 대회를 안 골랐으면 맨 위 노란 카드('대회 고르기')가 대회 찾기로 이어 주니 목록은 겹쳐서 빼고,
-  // 대회를 고른 뒤에만 '다른 대회'로 보여 준다
-  if (extract) contestBlock();
-  // 내 대회: 대회마다 대화방이 따로라서, 다른 대회의 급한 일도 홈에서 한눈에 본다
-  const others = allProjects().filter((p) => p.key !== projKey() && p.extract);
-  if (others.length) {
-    const oh = h("div", "sech"); oh.appendChild(h("h2", null, "다른 대회")); oh.appendChild(h("span", null, `${others.length}개`)); v.appendChild(oh);
-    others.map((p) => {
-      const ex = p.extract || {}; const applied = store.get(doneKey("apply", p.key), null) || (p.draft && (drafts.find((x) => x.id === p.draft) || {}).applied);
-      const sent = store.get(doneKey("submit", p.key), null);
-      const stage = sent ? "제출 완료" : p.draft ? (applied || !needsApply(ex) ? "저장소 준비" : "신청 전") : applied ? "협업 중" : "신청 전";
-      const due = !applied && ex.apply_deadline_iso ? ["신청", ex.apply_deadline_iso] : !sent && ex.submit_deadline_iso ? ["제출", ex.submit_deadline_iso] : null;
-      const dd = due ? ddays(due[1]) : null;
-      return { p, stage: due && dd != null && dd >= 0 ? `${stage} · ${due[0]} 마감` : stage, dd, label: due && dd != null && dd >= 0 ? `D-${dd}` : "" };
-    }).sort((a2, b2) => (a2.dd ?? 999) - (b2.dd ?? 999)).forEach(({ p, stage, dd, label }) => {
-      const b = h("button", "arow frow2"); b.type = "button";
-      b.appendChild(h("span", "dchip" + (!label ? " none" : dd <= 3 ? " crit" : ""), label || "—"));  // 칩에는 D-n만, 신청/제출은 아래 줄에
-      const tx = h("span"); tx.appendChild(h("b", null, p.name)); tx.appendChild(h("small", null, stage)); b.appendChild(tx);
-      b.onclick = () => useProject(p.draft ? { draft: p.draft } : { repo: p.repo }); v.appendChild(b);
-    });
-  }
-  // 바로 맡기기: 지금 단계에 맞는 1~2개만 (나머지는 대화창 ＋ 메뉴에 다 있어요)
-  const stq = stageOf(); const subDq = extract ? ddays(extract.submit_deadline_iso) : null;
-  const qa = !extract ? [["공고 링크로 시작", "찾아온 목록에 없는 대회", () => notice(true)]]
-    : stq === 0 ? [["신청 준비", "참가 자격·신청 항목 확인", () => { me("신청할래"); applyFlow(extract); }], ["마감까지 계획", "신청 전에 미리 나눠 보기", planFlow]]
-    : stq >= 3 ? [["새 대회 고르기", "다음 대회 찾기", () => discoverChat("새 대회 준비할래")]]
-    : subDq != null && subDq <= 3 ? [["제출 전 점검", "제출물·저장소·공개 여부", submit], ["진행 점검", "남은 시간에 맞게 다시 짜기", () => progressCheck(false)]]
-    : [["오늘 할 일", "급한 순서대로", today], ["진행 점검", "늦은 단계 다시 짜기", () => progressCheck(false)]];
-  const qh = h("div", "sech"); qh.appendChild(h("h2", null, "바로 맡기기")); qh.appendChild(h("span", null, !extract ? "대회 고르기 전" : stq >= 3 ? "제출 완료" : stq === 0 ? "신청 단계" : subDq != null && subDq <= 3 ? "제출 단계" : "협업 단계")); v.appendChild(qh);
-  const q = h("div", "quick" + (qa.length === 1 ? " one" : ""));
-  qa.forEach(([a, b2, fn]) => { const x = h("button"); x.type = "button"; x.appendChild(h("b", null, a)); x.appendChild(h("small", null, b2)); x.onclick = () => { showTab("chat"); fn(); }; q.appendChild(x); });
-  v.appendChild(q);
-  const qn = h("div", "note", "다른 일은 대화창 ＋에서 언제든 맡길 수 있어요"); qn.style.margin = "2px 2px 0"; v.appendChild(qn);
+  // 다른 대회는 ☰ 메뉴에, 다른 기능은 대화에 다 있다. 홈에는 대화로 가는 한 줄만 둔다 (홈이 길어지지 않게)
+  const ask = h("button", "askline"); ask.type = "button";
+  ask.innerHTML = `${lineIcon("send")}<span><b>대화에서 뭐든 맡길 수 있어요</b><small>대회 찾기 · 공고 파일 · 계획 · 제출 점검 · 그냥 물어보기</small></span><span class="chev">›</span>`;
+  ask.onclick = () => { showTab("chat"); $("msg") && $("msg").focus(); };
+  v.appendChild(ask);
   // 'Bento가 한 일' 기록은 보관함에 있다. 홈에는 Bento가 지켜보고 있다는 한 줄만 남긴다.
   if (lastChecked) { const lc = h("div", "note", `${fmtTime(lastChecked)} 확인${tasks.length ? ` · 실행한 일 ${tasks.length}개는 보관함에` : ""}`); lc.style.textAlign = "center"; lc.style.margin = "6px 0 0"; v.appendChild(lc); }
 }
