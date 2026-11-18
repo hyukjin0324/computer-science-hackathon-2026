@@ -398,6 +398,7 @@ def notice_file(body: FileIn, request: Request, x_bento_code: str | None = Heade
 class ChatIn(BaseModel):
     message: str
     history: list[dict] | None = None  # 이 자유 대화에서 오간 말만 [{role, text}]
+    context: dict | None = None  # 팀 상황 요약 {stage, apply_days, submit_days, late} — 허용된 값만 쓴다
 
 
 @app.post("/api/chat")
@@ -408,7 +409,7 @@ def chat_free(body: ChatIn, request: Request, x_bento_code: str | None = Header(
     u = current_user(request) if settings.login_enabled else None
     who = (u or {}).get("login") or (request.client.host if request.client else "anon")
     try:
-        return chat_mod.ask(body.message, body.history, who=who)
+        return chat_mod.ask(body.message, body.history, who=who, context=body.context)
     except chat_mod.ChatError as e:
         raise HTTPException(e.status, str(e)) from e
 
