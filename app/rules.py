@@ -11,14 +11,17 @@ from .notice import Deliverable, Fact, NoticeExtract
 KST = timezone(timedelta(hours=9))
 WD = "월화수목금토일"
 DATE = re.compile(
-    r"(?<![\d.])(?:(20\d{2}|\d{2})\s*[.\-/년]\s*)?(\d{1,2})\s*[.\-/월]\s*(\d{1,2})\s*일?\.?"
+    r"(?<![\d.])(?<![Vv])(?<!(?i:python)\s)(?<!(?i:ver)\s)(?<!(?i:version)\s)"  # 'Python 3.11', 'v1.2'는 버전이지 날짜가 아니다 (그 밖의 영문 뒤 'Deadline 11.24'는 날짜)
+    r"(?:(20\d{2}|\d{2})\s*[.\-/년]\s*)?(\d{1,2})\s*[.\-/월]\s*(\d{1,2})\s*일?\.?"
     r"(?:\s*\(\s*[월화수목금토일]\s*\))?"
     r"(?:\s*(오전|오후)?\s*(\d{1,2})\s*(?::\s*(\d{2})|시(?:\s*(\d{1,2})\s*분)?))?"
-    r"(?!\d|\s*(?:[KMG]B|%|명|팀))"
+    r"(?!\d|\s*(?:[KMG]B|%|명|팀)|\s*(?:억|만\s*원)|\s*(?:원|배|점|세)(?![가-힣]))"  # '1.5억', '2.5배', '4.5점'은 날짜가 아니다
 )
+# 연도·월·일·요일·시각 없이 '1.5'처럼 점 하나로만 이은 숫자: 같은 줄에 확실한 날짜가 있으면 날짜로 보지 않는다
+_STRONG = re.compile(r"년|월|일|\(|:|시")
 APPLY = re.compile(r"신청|접수|모집|참가\s*등록|등록\s*마감")
 SUBMIT = re.compile(r"제출|마감")
-NOT_SUBMIT = re.compile(r"발표|시상|심사|결과\s*(?:안내|통보)|오리엔|교육|오픈")
+NOT_SUBMIT = re.compile(r"발표(?!\s*(?:자료|영상|파일|ppt|PPT))|시상|심사|결과\s*(?:안내|통보)|오리엔|교육|오픈")  # '발표 자료 제출'은 제출이다
 MAX_LINE = 200  # 후기·본문 속 긴 문장은 일정 줄이 아니다
 DELIV_LABEL = re.compile(r"제출\s*(물|서류|자료|항목)")
 BULLET = re.compile(r"^\s*(?:[-•·*▪◦]|\d+[.)]|[①-⑳])\s*")
@@ -43,7 +46,11 @@ def _label(line: str) -> tuple[str, str]:
 
 def _dates(line: str, now: datetime) -> list[datetime]:
     out = []
-    for m in DATE.finditer(line):
+    found = list(DATE.finditer(line))
+    strong = [m for m in found if m.group(1) or _STRONG.search(m.group(0))]
+    for m in found:
+        if strong and m not in strong:  # '11월 30일 18:00 … 상금 1.5억' → 1.5는 날짜가 아니다
+            continue
         y, mo, d, ampm, hh, mm, mm2 = m.groups()
         mo, d = int(mo), int(d)
         if not (1 <= mo <= 12 and 1 <= d <= 31):
@@ -52,6 +59,8 @@ def _dates(line: str, now: datetime) -> list[datetime]:
         h, mi = (int(hh), int(mm or mm2 or 0)) if hh else (23, 59)
         if ampm == "오후" and h < 12:
             h += 12
+        elif ampm == "오전" and h == 12:  # 오전 12시 = 자정(0시)
+            h = 0
         if h > 23 or mi > 59:
             h, mi = 23, 59
         try:
@@ -138,7 +147,7 @@ def rule_extract(text: str, now: datetime | None = None) -> NoticeExtract:
                 apply_hits.append((max(ds), line))
                 if (m := re.search(r"\(([^()]{2,60})\)", re.sub(r"\(\s*[월화수목금토일]\s*\)", "", line))) and "," in m.group(1):
                     fields = [f.strip() for f in m.group(1).split(",") if 0 < len(f.strip()) <= 15]
-            elif SUBMIT.search(key) and not re.search(r"기간", lab) and not NOT_SUBMIT.search(key):
+            elif SUBMIT.search(key) and not (re.search(r"기간", lab) and not re.search(r"제출\s*기간", lab)) and not NOT_SUBMIT.search(key):  # '제출 기간: A ~ B'의 B는 제출 마감
                 submit_hits.append((max(ds), line))
         if DELIV_LABEL.search(lab):
             items = _split_items(body) if body else []

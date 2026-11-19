@@ -1757,3 +1757,90 @@ def test_everyone_tasks_get_no_single_person_suggestion_and_text_is_not_confusin
     assert all_hands["who"] is None and "전원" in all_hands["why"]
     one = by["[발표] 발표 자료 만들기"]["suggest"]
     assert one["who"] and "발표" in one["role"]  # role은 '이 일의 성격'
+
+
+# ---------- 공고 날짜·자격을 잘못 읽던 것 ----------
+_NOW_KST = datetime(2026, 11, 19, 14, 0, tzinfo=KST)
+
+
+def _submit_of(line):
+    ex = rule_extract("2026 해커톤\n" + line, now=_NOW_KST)
+    d = datetime.fromisoformat(ex.submit_deadline_iso) if ex.submit_deadline_iso else None
+    return d and (d.year, d.month, d.day, d.hour, d.minute)
+
+
+@pytest.mark.parametrize("line,expect", [
+    ("제출 마감: 11월 30일 18:00 (총 상금 1.5억 원)", (2026, 11, 30, 18, 0)),   # 1.5를 1월 5일로 읽어 마감이 내년으로 밀리던 것
+    ("제출 마감: 11월 30일 18:00 · Python 3.11 이상", (2026, 11, 30, 18, 0)),  # 3.11을 3월 11일로
+    ("제출 마감: 11.24 원서 제출", (2026, 11, 24, 23, 59)),  # '원서'의 원을 금액 단위로 보고 날짜를 버리던 것
+    ("제출 마감: 11.24 세미나 참석", (2026, 11, 24, 23, 59)),
+    ("제출 마감: Deadline 11.24 18:00", (2026, 11, 24, 18, 0)),  # 영문 바로 뒤 날짜를 버전으로 보고 버리던 것
+    ("제출 마감: 11월 30일 18:00 (총 상금 1.5억원)", (2026, 11, 30, 18, 0)),
+    ("제출 마감: 11.30(월) · 상금 2.5배 지급", (2026, 11, 30, 23, 59)),
+    ("제출 마감: 12월 10일 오전 12시", (2026, 12, 10, 0, 0)),                # 오전 12시 = 자정 (낮 12시로 읽어 12시간 늦던 것)
+    ("제출 마감: 12월 10일 오후 12시 30분", (2026, 12, 10, 12, 30)),
+    # 원래 잘 읽던 것은 그대로
+    ("제출 마감: ~11.30(월)", (2026, 11, 30, 23, 59)),
+    ("제출 마감: 11.30 18:00", (2026, 11, 30, 18, 0)),
+    ("제출 마감: 11.20 ~ 11.30", (2026, 11, 30, 23, 59)),
+    ("제출 마감: 2026.12.10", (2026, 12, 10, 23, 59)),
+    ("제출 마감: 26.12.10 17시", (2026, 12, 10, 17, 0)),
+])
+def test_rules_do_not_read_money_or_versions_as_dates(line, expect):
+    assert _submit_of(line) == expect
+
+
+def test_age_range_is_not_read_as_solo_allowed():
+    from app.eligibility import judge, rules
+    from app.notice import Fact
+    q = "만 21~29세 대학생, 3~5인 팀"
+    ex = NoticeExtract(title="t", facts=[Fact(label="참가 자격", value=q, quote=q)], team_min=3, team_max=5)
+    assert rules(ex)["team"]["min"] == 3 and not rules(ex)["team"]["solo"]  # '21~'의 '1~'을 '1명부터'로 읽던 것
+    assert any(r["status"] == "fail" for r in judge(ex, {"team": 1}))  # 혼자 신청하면 '충족'이 아니라 '미충족'
+    solo = "1~4인 팀 또는 개인"
+    ex2 = NoticeExtract(title="t", facts=[Fact(label="참가 자격", value=solo, quote=solo)], team_min=1, team_max=4)
+    assert all(r["status"] != "fail" for r in judge(ex2, {"team": 1}))  # 진짜 '1~4인'은 혼자도 된다
+
+
+@pytest.mark.parametrize("line,expect", [
+    ("제출 기간: 12월 1일 ~ 12월 10일", (2026, 12, 10, 23, 59)),                       # '제출 기간'을 통째로 빼서 못 찾던 것
+    ("최종 결과물 제출기간 : 2026.12.01 ~ 2026.12.10 18:00", (2026, 12, 10, 18, 0)),
+    ("발표 자료 제출 마감: 12월 8일 18:00", (2026, 12, 8, 18, 0)),                      # '발표'가 있다고 빼던 것
+    ("발표자료 제출: ~12/8(화) 18시", (2026, 12, 8, 18, 0)),
+])
+def test_rules_read_submit_period_and_slides_deadline(line, expect):
+    assert _submit_of(line) == expect
+
+
+def test_rules_still_skip_result_announcement_and_event_period():
+    assert _submit_of("결과 발표: 12월 20일") is None
+    assert _submit_of("대회 기간: 11월 20일 ~ 11월 22일 (마감 후 심사)") is None
+
+
+def _elig(q):
+    from app.eligibility import rules
+    from app.notice import Fact
+    return rules(NoticeExtract(title="t", facts=[Fact(label="참가 자격", value=q, quote=q)]))
+
+
+@pytest.mark.parametrize("q,grade", [
+    ("3·4학년 재학생", (3, 4)), ("3, 4학년 재학생", (3, 4)), ("3학년, 4학년 재학생", (3, 4)), ("2/3/4학년", (2, 4)),
+    ("2~4학년 재학생", (2, 4)), ("3학년 이상", (3, None)),  # 원래 읽던 것도 그대로
+])
+def test_eligibility_reads_grade_lists(q, grade):
+    g = _elig(q)["grade"]
+    assert (g["min"], g["max"]) == grade
+
+
+@pytest.mark.parametrize("q,leave,grad_soon,grad", [
+    ("재학생 및 휴학생", True, False, False),            # '및'으로 이은 휴학생을 빼던 것
+    ("재학생·휴학생·졸업예정자", True, True, False),
+    ("재학생(휴학생 포함)", True, False, False),
+    ("재학생 및 휴학생 (졸업생 제외)", True, False, False),
+    ("재학생 (휴학생 제외)", False, False, False),
+    ("재학생, 졸업예정자 및 졸업생 불가", False, False, False),
+    ("재학생 또는 졸업 예정자", False, True, False),
+])
+def test_eligibility_reads_status_lists(q, leave, grad_soon, grad):
+    allow = _elig(q)["status"]["allow"]
+    assert ("휴학" in allow, "졸업예정" in allow, "졸업" in allow) == (leave, grad_soon, grad), allow

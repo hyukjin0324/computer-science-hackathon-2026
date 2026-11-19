@@ -27,6 +27,19 @@ def _find(quotes: list[str], pat: str) -> str:
     return next((q for q in quotes if re.search(pat, q)), quotes[0] if quotes else "")
 
 
+_AND = r"(?:및|또는|혹은|과|와|·|,|/)"
+
+
+def _allowed(word: str, t: str) -> bool:
+    """'휴학생도 가능', '휴학생 포함', '재학생 및 휴학생'이면 허용. '휴학생 제외', '졸업예정자 및 졸업생 불가'면 허용하지 않는다."""
+    if re.search(rf"{word}\S*\s*(?:은|는|도)?\s*(?:제외|불가|불포함|참여\s*불가)", t) or \
+            re.search(rf"{word}\S*\s*{_AND}\s*\S+\s*(?:은|는)?\s*(?:제외|불가|불포함)", t):
+        return False
+    return bool(re.search(rf"{word}\s*(?:도|포함|가능|참여\s*가능)", t) or
+                re.search(rf"재학생?\s*{_AND}\s*(?:\S+\s*{_AND}\s*)?{word}", t) or
+                re.search(rf"{word}\S*\s*{_AND}\s*재학", t))
+
+
 def rules(ex: NoticeExtract) -> dict:
     """공고에서 읽은 조건. 질문을 만들고 판정할 때 같이 쓴다."""
     t, q = _text(ex), _quotes(ex)
@@ -37,18 +50,22 @@ def rules(ex: NoticeExtract) -> dict:
         r["grade"] = {"min": int(m.group(1)), "max": None, "quote": _find(q, r"학년")}
     elif m := re.search(r"([1-4])\s*학년\s*이하", t):
         r["grade"] = {"min": None, "max": int(m.group(1)), "quote": _find(q, r"학년")}
+    elif m := re.search(r"([1-4])(?:\s*학년)?(?:\s*[·,/]\s*[1-4](?:\s*학년)?)+\s*학년", t):  # '3·4학년', '3, 4학년', '3학년, 4학년'
+        nums = [int(x) for x in re.findall(r"[1-4]", m.group(0))]
+        r["grade"] = {"min": min(nums), "max": max(nums), "quote": _find(q, r"학년")}
     if "재학" in t:
         allow = {"재학"}
-        if re.search(r"휴학생?\s*(?:도|포함|가능|참여\s*가능)", t):
+        if _allowed(r"휴학생?", t):
             allow.add("휴학")
-        if re.search(r"졸업\s*예정자?\s*(?:도|포함|가능)", t):
+        if _allowed(r"졸업\s*예정자?", t):
             allow.add("졸업예정")
-        if re.search(r"졸업생\s*(?:도|포함|가능)", t):
+        if _allowed(r"졸업생", t):
             allow.add("졸업")
         r["status"] = {"allow": sorted(allow), "quote": _find(q, r"재학")}
     if m := re.search(r"([가-힣]+(?:학부|학과|대학))\s*(?:재학생|학생|소속|학부생)", t):
         r["dept"] = {"name": m.group(1), "quote": _find(q, m.group(1))}
-    solo_ok = bool(re.search(r"개인\s*(?:또는|혹은|및|/|·|,)|개인\s*참가|1인\s*(?:또는|이상)|1\s*[~∼\-]", t))
+    # '1~4인'은 혼자도 된다. '만 21~29세'의 '1~'처럼 다른 숫자에 붙은 1이나 인원이 아닌 범위는 아니다
+    solo_ok = bool(re.search(r"개인\s*(?:또는|혹은|및|/|·|,)|개인\s*참가|(?<!\d)1\s*인\s*(?:또는|이상)|(?<!\d)1\s*(?:인|명)?\s*[~∼\-]\s*\d+\s*(?:인|명)", t))
     lo, hi = ex.team_min, ex.team_max
     if lo is None and hi is None:  # 붙여넣은 문장에서도 팀 인원을 읽는다
         if m := re.search(r"(\d+)\s*[~∼\-]\s*(\d+)\s*(?:인|명)", t):
