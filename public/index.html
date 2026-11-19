@@ -2173,12 +2173,14 @@ function proofStage(box, kind, issue) {
 }
 function reminders() {
   const now = Date.now();
-  allProjects().forEach((p) => {
+  // 마감 알림은 지금 보는 팀플과, 서버가 아는 팀플·준비 중인 대회만. 이 기기에 남은 예전 데모 기록(knu-matzip 등)으로는 알리지 않는다
+  const known = Array.isArray(projects) && projects.length ? new Set(projects.map((p) => p.repo)) : null;
+  allProjects().filter((p) => p.draft || p.key === projKey() || (known && known.has(p.repo))).forEach((p) => {
     const ex = p.extract; if (!ex) return;
     [["apply", ex.apply_deadline_iso, "신청"], ["submit", ex.submit_deadline_iso, "제출"]].forEach(([k, iso, nm]) => {
       if (!iso || store.get(doneKey(k, p.key), null)) return;
       const left = (new Date(iso) - now) / 36e5; if (!(left > 0 && left <= 24)) return;
-      bot(`⏰ ${p.name} ${nm} 마감까지 ${Math.max(1, Math.round(left))}시간 남았어요. 아직 ${nm} 완료 기록이 없어요.`);
+      bot(`⏰ ${p.key === projKey() ? projName() : p.name} ${nm} 마감까지 ${Math.max(1, Math.round(left))}시간 남았어요. 아직 ${nm} 완료 기록이 없어요.`);
       chip(`${nm} 확인 시작`, inProject(p, k === "apply" ? () => { me("신청 확인할래"); applyFlow(p.extract); } : submit));
     });
   });
@@ -2661,8 +2663,7 @@ $("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); 
     if (!curDraft() && store.get("extract:" + projKey(), null) == null && store.get("extract", null)) store.set("extract:" + projKey(), store.get("extract", null));  // 예전 버전 기록 옮기기
     if (cur && cur.draft && !curDraft()) cur = { repo: curRepo() };
     useProject(cur, true); resumeChat(); booted = true; loadDiscord().then(() => renderMe());
-    loadProjects().then(() => { renderHome(); renderCal(); }).catch(() => {});  // 팀플 목록을 미리 받아 두면 고르기 화면이 바로 뜬다 (받은 뒤 지난 저장소 기록을 걸러 다시 그림)
-    reminders();
+    loadProjects().then(() => { renderHome(); renderCal(); }).catch(() => {}).finally(() => reminders());  // 팀플 목록을 미리 받아 두면 고르기 화면이 바로 뜬다 (받은 뒤 지난 저장소 기록을 걸러 다시 그림)
     loadDiscover();  // 학과 게시판·해커톤 목록에서 대회를 먼저 찾아온다 (1시간 캐시)
     if (!curDraft()) setTimeout(() => progressCheck(true), 400);  // 열 때마다 Bento가 먼저 점검한다
     setTimeout(() => noticeWatch(false), 1500);  // 공고가 바뀌었는지 (하루 한 번)
