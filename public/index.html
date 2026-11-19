@@ -1099,7 +1099,8 @@ function showExtract(r) {
   offerPlan(r);
 }
 let lastNoticeBody = null;  // 마지막으로 분석한 공고 (날짜를 직접 적은 뒤 다시 분석할 때 쓴다)
-function noticeApi(body) { lastNoticeBody = body; return api("/notice", { method: "POST", body: JSON.stringify(body) }); }
+function noticeApi(body) { const u = noticeUrl(); if (u && !body.url) body = { ...body, url: u }; lastNoticeBody = body; return api("/notice", { method: "POST", body: JSON.stringify(body) }); }  // 공고 주소를 같이 보내면 일정 만들 때 마일스톤에 적어 두고, 서버가 마감이 바뀌는지 지켜본다
+function repoNoticeSrc() { for (const m of (calState && calState.milestones) || []) { const x = /<!-- bento-src:(https:\/\/[^\s>]+) -->/.exec(m.description || ""); if (x) return x[1]; } return null; }  // 다른 기기에서도 저장소에 적힌 공고 주소로 지켜본다
 function askNoticeDeadline(r, next) {
   // 공고에서 제출 마감을 못 찾았으면, 사용자가 직접 적을 수 있게 먼저 묻는다 (모르면 날짜 없이 만들 수도 있어요)
   bot("공고에서 제출 마감을 찾지 못했어요. 아는 날짜가 있으면 적어 주세요. 몰라도 날짜 없이 일정을 만들 수 있어요.");
@@ -1295,7 +1296,7 @@ async function planToGithub(steps, quiet) {
 
 /* ---------- 공고 변경 감지: 하루 한 번 공고를 다시 읽고(규칙만 · AI 0), 마감이 바뀌면 알린다 ---------- */
 async function noticeWatch(force) {
-  const key = projKey(); const url = noticeUrl(); if (!url || !extract) return;
+  const key = projKey(); const url = noticeUrl() || repoNoticeSrc(); if (!url || !extract) return;
   const w = store.get("noticeWatch:" + key, null);
   if (!force && w && Date.now() - w.at < 20 * 36e5) return;
   let r; try { r = await api("/notice/recheck", { method: "POST", body: JSON.stringify({ url, base: w && w.base }) }); } catch (e) { return; }

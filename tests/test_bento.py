@@ -2026,3 +2026,60 @@ def test_work_plan_keeps_the_morning_of_the_deadline_for_the_final_check():
     assert steps["시연 시나리오 정하기"] < steps["핵심 기능 완성 (MVP)"]  # 시나리오는 MVP 마감보다 앞
     assert day("발표 자료 초안 공유") <= day("핵심 기능 완성 (MVP)")
     assert steps["발표 자료 초안 공유"] < steps["발표 자료 완성"] and steps["시연 시나리오 정하기"] < steps["시연 영상 촬영"]  # 순서는 그대로
+
+
+# ---------- 공고가 바뀌면 서버가 먼저 알린다 ----------
+NOTICE_V1 = "2026 컴퓨터학부 해커톤\n참가 신청: 2026.11.03 ~ 2026.11.14\n최종 결과물 제출 마감: 2026.11.24(화) 12:00\n제출물: GitHub 레포지토리 링크(Public)\n" + "공고 본문 " * 30
+NOTICE_V2 = NOTICE_V1.replace("2026.11.24(화) 12:00", "2026.11.25(수) 18:00")
+NOTICE_V3 = NOTICE_V2 + "\n조회수 1203 댓글 4"
+
+
+def _watch_setup(monkeypatch, with_src=True):
+    import httpx
+    from app import discord as dm
+    monkeypatch.setenv("CRON_SECRET", "s3")
+    monkeypatch.delenv("BENTO_AUTO_NOTIFY", raising=False)
+    main._LAST_ALERT.clear()
+    sent = []
+    monkeypatch.setattr(httpx, "post", lambda url, **kw: sent.append(kw["json"]["content"]))
+    dm.write(main._demo, HOOK, main.settings.signing_key)
+    desc = "공고 마일스톤" + (" <!-- bento-src:https://example.com/notice/1 -->" if with_src else "")
+    main._demo.d["milestones"].append({"number": 9, "title": "해커톤 제출", "due_on": "2026-11-24T12:00:00Z", "description": desc, "html_url": "x"})
+    page = {"text": NOTICE_V1}
+    monkeypatch.setattr(main, "fetch_notice", lambda url: {"url": url, "title": "", "text": page["text"], "note": None, "rendered": False, "truncated": False})
+    run = lambda: client.get("/api/agent/run", headers={"Authorization": "Bearer s3"}).json()["report"][0]["notice"]
+    return sent, page, run
+
+
+def test_server_tells_the_team_when_the_notice_deadline_changes(monkeypatch):
+    sent, page, run = _watch_setup(monkeypatch)
+    assert run() == "first" and not any("공고가 바뀌었어요" in m for m in sent)  # 처음엔 기준만 저장
+    assert run() == "same"
+    page["text"] = NOTICE_V2
+    assert run() == "changed"
+    msg = next(m for m in sent if "공고가 바뀌었어요" in m)
+    assert "제출 마감" in msg and "11월 24일(화) 12:00" in msg and "11월 25일(수) 18:00" in msg and "example.com/notice/1" in msg
+    assert run() == "same"  # 같은 변경은 두 번 알리지 않는다
+    assert sum("공고가 바뀌었어요" in m for m in sent) == 1
+
+
+def test_notice_watch_ignores_changes_that_do_not_touch_the_deadlines(monkeypatch):
+    sent, page, run = _watch_setup(monkeypatch)
+    run()
+    page["text"] = NOTICE_V1 + "\n조회수 1203 댓글 4"  # 마감은 그대로
+    assert run() == "text-only"
+    assert not any("공고가 바뀌었어요" in m for m in sent)
+
+
+def test_notice_watch_does_nothing_without_a_saved_source_address(monkeypatch):
+    sent, page, run = _watch_setup(monkeypatch, with_src=False)
+    assert run() == "no-source" and not any("공고가 바뀌었어요" in m for m in sent)
+
+
+def test_notice_source_address_is_saved_in_the_milestone_only_when_safe():
+    from app.notice import plan, safe_src, source_url, SAMPLE_EXTRACT
+    assert safe_src("https://example.com/n?id=1") and not safe_src("http://example.com") and not safe_src("https://a.com/x y") and not safe_src("javascript:alert(1)")
+    actions, _ = plan(SAMPLE_EXTRACT, None, h="0123456789abcdef", src="https://example.com/n?id=1")
+    assert source_url([actions[0].description]) == "https://example.com/n?id=1"
+    actions, _ = plan(SAMPLE_EXTRACT, None, h="0123456789abcdef", src="http://insecure.example.com")
+    assert source_url([actions[0].description]) is None

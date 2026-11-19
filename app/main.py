@@ -395,6 +395,7 @@ class NoticeIn(BaseModel):
     new_project: bool = False  # 아직 저장소가 없는 새 팀플. 저장소를 읽지 않고 공고만 분석한다.
     no_ai: bool = False  # 출처가 AI 크롤러를 막아 둔 글: AI에 보내지 않고 규칙으로만 읽는다
     submit_deadline_iso: str | None = None  # 공고에서 못 찾은 제출 마감을 사용자가 직접 적은 것 (있으면 읽은 값 대신 쓴다)
+    url: str | None = None  # 공고를 읽어 온 주소(있으면 마일스톤에 적어 둬서 서버가 마감 변경을 지켜본다)
 
 
 @app.post("/api/notice")
@@ -429,7 +430,7 @@ def analyze_notice(body: NoticeIn, request: Request, x_bento_code: str | None = 
         (ex.team_min is None or team >= ex.team_min) and (ex.team_max is None or team <= ex.team_max))
     out = {"extract": ex.model_dump(), "dropped": dropped, "source": source, "usage": usage, "team_size": team, "team_ok": team_ok, "repo": gh.repo if gh else None}
     if gh and st:
-        actions, linked = notice_mod.plan(ex, st, h=notice_mod.notice_hash(notice_mod.clean_text(body.text)))
+        actions, linked = notice_mod.plan(ex, st, h=notice_mod.notice_hash(notice_mod.clean_text(body.text)), src=body.url)
         if not st.milestone("해커톤 제출"):
             out["plan"] = _proposal(gh.repo, "대회 일정을 GitHub에 적어 두기", actions, "notice")
             out["linked"] = linked
@@ -792,6 +793,68 @@ def lazy_tick_api(body: TickIn):
 _LAST_ALERT: dict[str, str] = {}
 
 
+NOTICE_BASE = "bento-notice-base"  # 지난번에 본 공고 {해시|신청 마감|제출 마감}를 팀 저장소 라벨 설명에 둔다 (서버가 다시 켜져도 이어서 비교)
+
+
+def _read_notice_base(gh) -> list[str] | None:
+    for lb in gh.labels():
+        if lb.get("name") == NOTICE_BASE:
+            parts = (lb.get("description") or "").split("|")
+            return parts if len(parts) == 3 else None
+    return None
+
+
+def _write_notice_base(gh, h: str, a: str | None, s: str | None) -> None:
+    desc = f"{h}|{a or ''}|{s or ''}"
+    try:
+        gh.update_label(NOTICE_BASE, desc)
+    except GitHubError:
+        gh.create_label(NOTICE_BASE, "C5DEF5", desc)
+
+
+def _kst_text(iso: str) -> str:
+    d = datetime.fromisoformat(iso).astimezone(timezone(timedelta(hours=9)))
+    return f"{d.month}월 {d.day}일({'월화수목금토일'[d.weekday()]}) {d.hour:02d}:{d.minute:02d}"
+
+
+def notice_watch(gh, st, hook: str) -> str:
+    """공고가 바뀌었는지 하루 한 번 서버가 다시 읽는다 (규칙으로만, AI 없음). 마감이 바뀌었을 때만 팀 디스코드로 알린다.
+
+    처음 한 번은 기준만 저장하고, 본문이 바뀌어도 마감이 그대로면 기준만 고친다 (조회수·댓글 같은 변화는 알리지 않는다).
+    """
+    src = notice_mod.source_url([m.description for m in st.milestones])
+    if not src:
+        return "no-source"
+    try:
+        page = fetch_notice(src)
+    except FetchError:
+        return "unreadable"
+    text = notice_mod.clean_text(page["text"])
+    h = notice_mod.notice_hash(text)
+    from .rules import rule_extract
+    try:
+        ex = rule_extract(text)
+        a, s_iso = ex.apply_deadline_iso, ex.submit_deadline_iso
+    except Exception:  # noqa: BLE001 - 날짜를 못 읽으면 비교하지 않는다
+        return "unreadable"
+    base = _read_notice_base(gh)
+    if not base:
+        _write_notice_base(gh, h, a, s_iso)
+        return "first"
+    if base[0] == h:
+        return "same"
+    diffs = [(label, old, new) for label, old, new in (("신청 마감", base[1], a), ("제출 마감", base[2], s_iso)) if old and new and old != new]
+    if diffs:
+        import httpx
+        app_url = os.getenv("BENTO_APP_URL", "")
+        lines = [f"[{gh.repo}] 공고가 바뀌었어요"] + [f"· {label}: {_kst_text(old)} → {_kst_text(new)}" for label, old, new in diffs]
+        lines.append("→ 앱을 열면 '바뀐 날짜로 고치기'가 나와요. 공고에서 직접 확인한 뒤 계획 날짜를 고쳐 주세요." + (f"\n{app_url}" if app_url else ""))
+        lines.append(f"공고 다시 보기: {src}")
+        httpx.post(hook, json={"content": "\n".join(lines), "allowed_mentions": {"parse": []}}, timeout=10)
+    _write_notice_base(gh, h, a, s_iso)
+    return "changed" if diffs else "text-only"
+
+
 @app.get("/api/agent/run")
 def agent_run(authorization: str | None = Header(default=None)):
     """매일 정해진 시간에 혼자 도는 점검 (Vercel Cron 등). 저장소는 읽기만 하고, 발견한 게 있으면 팀 채널에 알린다.
@@ -848,6 +911,12 @@ def agent_run(authorization: str | None = Header(default=None)):
             httpx.post(hook, json={"content": f"[{repo}] 처리를 기다리는 일\n" + "\n".join(lines)
                                    + "\n→ Bento가 해결 방법을 제안해 뒀어요. 앱 홈에서 제안을 확인하고 '승인하고 실행'을 누르면 바로 처리돼요."
                                    + (f"\n{app_url}" if app_url else ""), "allowed_mentions": {"parse": []}}, timeout=10)
+        notice_result = None
+        if hook and notify:
+            try:
+                notice_result = notice_watch(gh, st, hook)
+            except Exception:  # noqa: BLE001 - 공고 사이트가 잠깐 안 열려도 다른 점검은 계속한다
+                notice_result = "error"
         tick = lazy_tick(repo)
         # 새로 올라온 대회 알리기 (마감 2주 안, 처음 본 것만)
         try:
@@ -861,7 +930,7 @@ def agent_run(authorization: str | None = Header(default=None)):
             import httpx
             httpx.post(hook, json={"content": "Bento가 찾아온 대회\n" + "\n".join(f"· {x['title']} · 마감 {x['deadline_text']} ({x['source_name']})" for x in fresh),
                                                        "allowed_mentions": {"parse": []}}, timeout=10)
-        report.append({"repo": repo, "findings": len(r["findings"]), "notified": sent, "escalations": len(lines), "lazy": tick})
+        report.append({"repo": repo, "findings": len(r["findings"]), "notified": sent, "escalations": len(lines), "lazy": tick, "notice": notice_result})
     return {"ok": True, "report": report}
 
 
