@@ -594,7 +594,7 @@ def schedule_to_github(body: ScheduleGitHubIn):
             if owner:
                 load[owner] += 1
                 who.append(owner)
-            actions.append(CreateIssue(title=issue_title, body=(s.note or "") + f"\n\n마감: {s.due[:16].replace('T', ' ')}",
+            actions.append(CreateIssue(title=issue_title, body=(s.note or "") + f"\n\n마감: {s.due[:16].replace('T', ' ')}\n\n끝나면 이 이슈를 닫아 주세요. 마감까지 안 닫히면 Bento가 계획을 다시 짜자고 알려요.",
                                        assignees=[owner] if owner else [], milestone_title=title))
     if not actions:
         return {"proposal": None, "message": "계획 단계와 할 일이 이미 모두 저장소에 있어요"}
@@ -791,10 +791,12 @@ def agent_run(authorization: str | None = Header(default=None)):
         ex = notice_mod.from_descriptions([m.description for m in st.milestones])
         r = prog.check(st, [], ex.submit_deadline_iso if ex else None)
         sent = False
-        hook = discord_mod.webhook_for(gh, settings)
+        team_hook = discord_mod.read(gh, settings.signing_key)
+        hook = team_hook or settings.discord_webhook
+        notify = bool(team_hook) or os.getenv("BENTO_AUTO_NOTIFY") == "1"  # 팀이 디스코드를 직접 연결했으면 알림을 받겠다는 뜻이다
         key = hashlib.sha256(r["summary"].encode()).hexdigest()[:12]
         rules_now = getattr(st, "rules", {}) or {}
-        if rules_now.get("seed") and hook and os.getenv("BENTO_AUTO_NOTIFY") == "1":  # 당번 순서를 정해 둔 팀만: 새 당번이 시작하는 날 알린다
+        if rules_now.get("seed") and hook and notify:  # 당번 순서를 정해 둔 팀만: 새 당번이 시작하는 날 알린다
             sched = own.duty_schedule(st.members, rules_now, datetime.now(timezone.utc), 2)
             today_kst = datetime.now(own.KST).date().isoformat()
             if len(sched) == 2 and sched[0]["from"] == today_kst and _LAST_ALERT.get("duty:" + repo) != today_kst:
@@ -803,7 +805,7 @@ def agent_run(authorization: str | None = Header(default=None)):
                 httpx.post(hook, json={"content": f"[{repo}] 오늘부터 {days}일 동안 당번은 {sched[0]['who']}님이에요 (~{sched[0]['to'][5:].replace('-', '/')}). 다음 당번은 {sched[1]['who']}님, {sched[1]['from'][5:].replace('-', '/')}부터예요.",
                                            "allowed_mentions": {"parse": []}}, timeout=10)
                 _LAST_ALERT["duty:" + repo] = today_kst
-        if r["findings"] and hook and os.getenv("BENTO_AUTO_NOTIFY") == "1" and _LAST_ALERT.get(repo) != key:
+        if r["findings"] and hook and notify and _LAST_ALERT.get(repo) != key:
             import httpx
             app_url = os.getenv("BENTO_APP_URL", "")
             httpx.post(hook, json={"content": f"[{repo}]\n{r['summary']}" + (f"\n앱에서 확인하고 승인하기: {app_url}" if app_url else ""),
@@ -819,7 +821,7 @@ def agent_run(authorization: str | None = Header(default=None)):
             if lv and _LAST_ALERT.get(k) != "sent":
                 _LAST_ALERT[k] = "sent"
                 lines.append(f"· {owner}님 차례 · {it['title']} ({int(age)}시간째)" if lv == 1 else f"· {it['title']} · {int(age)}시간째 승인이 없어서 이제 누구나 승인할 수 있어요")
-        if lines and hook and os.getenv("BENTO_AUTO_NOTIFY") == "1":
+        if lines and hook and notify:
             import httpx
             httpx.post(hook, json={"content": f"[{repo}] 승인을 기다리는 일\n" + "\n".join(lines), "allowed_mentions": {"parse": []}}, timeout=10)
         tick = lazy_tick(repo)
