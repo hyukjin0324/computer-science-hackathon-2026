@@ -17,6 +17,10 @@ DELIV_STEPS = [
 ]
 
 
+EARLY_FOR_MVP = {"시연 시나리오 정하기": timedelta(days=1), "발표 자료 초안 공유": timedelta(0)}  # MVP 마감에서 이만큼 앞
+BEFORE_DEADLINE_DAY = {"README·배포 정리", "기획서·보고서 완성", "발표 자료 완성", "시연 영상 촬영"}  # 마감 당일 아침에는 최종 점검만
+
+
 def _evening(dt: datetime, limit: datetime) -> datetime:
     """그날 밤 11시로 맞춘다. 마감보다 늦어지면 마감 3시간 전으로."""
     t = dt.astimezone(KST).replace(hour=23, minute=0, second=0, microsecond=0)
@@ -41,9 +45,16 @@ def work_plan(ex: NoticeExtract, now: datetime | None = None) -> list[dict]:
         raw += [("아이디어·역할 확정", _evening(now + span * 0.12, due), "step", "누가 무엇을 맡을지 이슈 담당자로 정해요"),
                 ("핵심 기능 완성 (MVP)", _evening(now + span * 0.5, due), "step", "시연에 꼭 필요한 흐름 하나가 끝까지 돌아가게"),
                 ("기능 마무리·버그 수정", _evening(now + span * 0.72, due), "step", "새 기능은 멈추고 다듬기")]
+    mvp = next((at for title, at, _k, _n in raw if title == "핵심 기능 완성 (MVP)"), None)
+    prev_night = (due.replace(hour=23, minute=0, second=0, microsecond=0) - timedelta(days=1)) if due.hour < 20 else None  # 마감이 낮이면 전날 밤
     for keys, title, frac, note in DELIV_STEPS:
         if any(k in names for k in keys) and (frac < 0.2 or span > timedelta(days=2)):  # 시간이 짧으면 중간 마감은 뺀다
-            raw.append((title, _evening(due - span * frac, due), "step", note))
+            at = _evening(due - span * frac, due)
+            if title in EARLY_FOR_MVP and mvp:  # 중간 마감은 개발이 한창일 때 미리 정해 둔다: 시나리오는 MVP 하루 전, 초안 공유는 MVP 마감과 같은 날
+                at = min(at, _evening(mvp - EARLY_FOR_MVP[title], due))
+            elif title in BEFORE_DEADLINE_DAY and prev_night and at > prev_night:  # 영상·발표 완성은 마감 당일 아침으로 밀리지 않게 전날 밤까지. 당일 오전은 최종 점검만
+                at = prev_night
+            raw.append((title, at, "step", note))
     raw.append(("최종 점검", due - max(timedelta(hours=3), span * 0.03), "step", "제출물 링크·README·권한(공개 여부) 확인"))
     raw.append(("제출 마감", due, "due", ex.submit_deadline or ""))
     seen, out = set(), []
