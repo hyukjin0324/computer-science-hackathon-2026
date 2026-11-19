@@ -459,16 +459,16 @@ details.teamall summary { gap: 8px; } details.teamall summary .gsub { color: var
 .avatar { --sz: 28px; width: var(--sz); height: var(--sz); border-radius: 50%; flex: none; display: inline-grid; place-items: center; overflow: hidden; background: var(--surface-2); color: var(--ink); font-size: calc(var(--sz) * .42); font-weight: 700; border: 1px solid var(--line); vertical-align: middle; }
 .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .nm { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
-/* 노트북처럼 넓은 화면에서는 휴대폰 틀 안에 넣어 보여 준다 (좁은 화면에서는 그대로 전체 화면) */
+/* 휴대폰 틀: 발표·촬영용. 노트북(마우스가 있는 큰 화면)에서 마이페이지의 스위치를 켠 때만 보인다. 기본은 꺼짐, 휴대폰·태블릿은 항상 전체 화면 */
 @media (min-width: 900px) and (min-height: 640px) and (hover: hover) and (pointer: fine) {
-  :root:not([data-frame="off"]) { background: #E9EAEE; }
-  :root:not([data-frame="off"]) body { background: transparent; padding-block: 20px; }
-  :root:not([data-frame="off"]) body .sheet-bg, :root:not([data-frame="off"]) body .drawer-bg { margin: 0; }  /* 틀 안에서는 틀 자체가 화면 가장자리라, 좁은 화면용 바깥으로 내미는 여백이 안쪽 16px를 잘라 먹는다 */
-  :root:not([data-frame="off"]) body .drawer { padding-top: 26px; }  /* 둥근 모서리에 로고가 걸리지 않게 */
-  :root:not([data-frame="off"]) .phone { width: 393px; max-width: none; height: 852px; zoom: var(--phone-k, 1); background: var(--bg); border-radius: 40px; padding: 0 16px; overflow: hidden; box-shadow: 0 0 0 10px #17181C, 0 28px 70px rgb(23 24 28 / .28); }
+  :root[data-frame="on"] { background: #E9EAEE; }
+  :root[data-frame="on"] body { background: transparent; padding-block: 30px; display: flex; align-items: center; justify-content: center; }  /* 틀 바깥 테두리(10px)를 빼고 위아래 20px씩, 창이 크면 세로 가운데 */
+  :root[data-frame="on"] body .sheet-bg, :root[data-frame="on"] body .drawer-bg { margin: 0; }  /* 틀 안에서는 틀 자체가 화면 가장자리라, 좁은 화면용 바깥으로 내미는 여백이 안쪽 16px를 잘라 먹는다 */
+  :root[data-frame="on"] body .drawer { padding-top: 26px; }  /* 둥근 모서리에 로고가 걸리지 않게 */
+  :root[data-frame="on"] .phone { width: 393px; max-width: none; height: 852px; zoom: var(--phone-k, 1); background: var(--bg); border-radius: 40px; padding: 0 16px; overflow: hidden; box-shadow: 0 0 0 10px #17181C, 0 28px 70px rgb(23 24 28 / .28); }
 }
-@media (min-width: 900px) and (min-height: 640px) and (hover: hover) and (pointer: fine) and (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-frame="off"]) { background: #111113; } }
-@media (min-width: 900px) and (min-height: 640px) and (hover: hover) and (pointer: fine) { :root[data-theme="dark"]:not([data-frame="off"]) { background: #111113; } }
+@media (min-width: 900px) and (min-height: 640px) and (hover: hover) and (pointer: fine) and (prefers-color-scheme: dark) { :root:not([data-theme="light"])[data-frame="on"] { background: #111113; } }
+@media (min-width: 900px) and (min-height: 640px) and (hover: hover) and (pointer: fine) { :root[data-theme="dark"][data-frame="on"] { background: #111113; } }
 details.teamall { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-box); padding: 4px 14px; }
 details.teamall[open] { padding-bottom: 12px; } details.teamall summary { list-style: none; } details.teamall summary::-webkit-details-marker { display: none; }
 details.teamall summary::after { content: '›'; margin-left: auto; color: var(--muted); transition: transform .15s; } details.teamall[open] summary::after { transform: rotate(90deg); } details.teamall summary { cursor: pointer; font-size: var(--fs-body); font-weight: 700; min-height: 40px; display: flex; align-items: center; } details.teamall > a { margin-top: 8px; }
@@ -635,7 +635,7 @@ body.onboarding .dock { display: none; }  /* 첫 화면 뒤로 아래 막대가 
 </div>
 
 <script>
-try { if (JSON.parse(localStorage.getItem("bento:frame") || "null") === "off") document.documentElement.dataset.frame = "off"; } catch (e) { /* 저장된 틀 설정 없음 */ }
+try { if (JSON.parse(localStorage.getItem("bento:frame") || "null") === "on") document.documentElement.dataset.frame = "on"; } catch (e) { /* 저장된 틀 설정 없음 */ }
 try { const t = JSON.parse(localStorage.getItem("bento:theme") || "null"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) { /* 저장된 화면 모드 없음 */ }
 const $ = (id) => document.getElementById(id);
 const chat = $("v-chat");
@@ -2591,10 +2591,10 @@ function renderMe() {
   const toggle = () => { const next = dm.getAttribute("aria-checked") !== "true"; document.documentElement.dataset.theme = next ? "dark" : "light"; store.set("theme", next ? "dark" : "light"); dm.setAttribute("aria-checked", String(next)); knob.setAttribute("aria-checked", String(next)); };
   dm = meRow("moon", "다크 모드", null, toggle, knob); dm.setAttribute("role", "switch"); dm.setAttribute("aria-checked", String(isDark)); g2.appendChild(dm);
   if (matchMedia("(min-width: 900px) and " + MOUSE).matches) {  // 노트북처럼 마우스가 있는 큰 화면에서만: 휴대폰 틀을 끄고 넓게 쓰기
-    const frameOn = document.documentElement.dataset.frame !== "off";
+    const frameOn = document.documentElement.dataset.frame === "on";
     const fk = h("span", "switch"); fk.setAttribute("aria-hidden", "true"); fk.setAttribute("aria-checked", String(frameOn)); fk.style.width = "auto"; fk.appendChild(h("span", "knob"));
-    let fr; const flip = () => { const next = fr.getAttribute("aria-checked") !== "true"; if (next) delete document.documentElement.dataset.frame; else document.documentElement.dataset.frame = "off"; store.set("frame", next ? "on" : "off"); fr.setAttribute("aria-checked", String(next)); fk.setAttribute("aria-checked", String(next)); fitPhone(); };
-    fr = meRow("phone", "휴대폰 틀로 보기", "노트북에서 휴대폰 화면처럼 보여 줘요. 끄면 틀 없이 넓게 써요", flip, fk); fr.setAttribute("role", "switch"); fr.setAttribute("aria-checked", String(frameOn)); g2.appendChild(fr);
+    let fr; const flip = () => { const next = fr.getAttribute("aria-checked") !== "true"; if (next) document.documentElement.dataset.frame = "on"; else delete document.documentElement.dataset.frame; store.set("frame", next ? "on" : "off"); fr.setAttribute("aria-checked", String(next)); fk.setAttribute("aria-checked", String(next)); fitPhone(); };
+    fr = meRow("phone", "휴대폰 틀로 보기", "발표·촬영용: 노트북에서 휴대폰 화면처럼 보여 줘요. 기본은 꺼짐", flip, fk); fr.setAttribute("role", "switch"); fr.setAttribute("aria-checked", String(frameOn)); g2.appendChild(fr);
   }
   g2.appendChild(meRow("trash", "이 기기 기록", "맡긴 일·초안·계획 지우기", () => openMe("data")));
   v.appendChild(g2);
@@ -2682,7 +2682,7 @@ $("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); 
 })();
 // 노트북 화면의 휴대폰 틀은 아이폰(393×852) 비율을 지키고, 창 높이가 모자라면 같은 비율로 줄여 맞춘다
 const MOUSE = "(hover: hover) and (pointer: fine)";
-function fitPhone() { const on = innerWidth >= 900 && innerHeight >= 640 && matchMedia(MOUSE).matches && document.documentElement.dataset.frame !== "off"; document.documentElement.style.setProperty("--phone-k", on ? String(Math.min(1, (innerHeight - 60) / 852)) : "1"); }
+function fitPhone() { const on = innerWidth >= 900 && innerHeight >= 640 && matchMedia(MOUSE).matches && document.documentElement.dataset.frame === "on"; document.documentElement.style.setProperty("--phone-k", on ? String(Math.min(1, (innerHeight - 60) / 852)) : "1"); }
 addEventListener("resize", fitPhone); fitPhone();
 </script>
 </body>
