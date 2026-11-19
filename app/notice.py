@@ -8,6 +8,8 @@ import hashlib
 import json
 import os
 import re
+import threading
+import time
 from datetime import datetime
 
 import anthropic
@@ -128,6 +130,35 @@ class NoticeError(Exception):
     pass
 
 
+class NoticeLimit(NoticeError):
+    """AI로 공고를 읽는 횟수를 넘었다 (429)."""
+
+
+# AI로 공고 읽기 횟수 제한. 캐시·저장소·규칙으로 읽을 때는 세지 않는다.
+AI_PER_HOUR = 10  # 한 사람이 1시간에
+AI_PER_DAY_ALL = 100  # 서버 전체가 하루에 (서버리스에서는 인스턴스마다 따로 센다)
+_ai_lock = threading.Lock()
+_ai_hits: dict[str, list[float]] = {}
+_ai_day = {"key": "", "n": 0}
+
+
+def allow_ai(who: str, now: float | None = None) -> None:
+    """한도 안이면 한 번 센다. 넘으면 NoticeLimit."""
+    now = time.time() if now is None else now
+    day = time.strftime("%Y-%m-%d", time.gmtime(now))
+    with _ai_lock:
+        if _ai_day["key"] != day:
+            _ai_day.update(key=day, n=0)
+        if _ai_day["n"] >= AI_PER_DAY_ALL:
+            raise NoticeLimit("오늘 AI로 읽을 수 있는 공고를 다 썼어요. 내일 다시 하거나 규칙으로 읽어 주세요")
+        recent = [t for t in _ai_hits.get(who, []) if now - t < 3600]
+        if len(recent) >= AI_PER_HOUR:
+            raise NoticeLimit("AI로 공고를 너무 자주 읽었어요. 조금 뒤에 다시 해 주세요")
+        recent.append(now)
+        _ai_hits[who] = recent
+        _ai_day["n"] += 1
+
+
 # ---------- 토큰 절약: 같은 공고는 다시 분석하지 않는다 ----------
 # 1) 서버 메모리 캐시: 같은 서버를 쓰는 팀원끼리 공유
 # 2) 저장소 캐시: 일정 만들기를 승인하면 분석 결과가 마일스톤 설명에 숨겨져 저장돼서, 팀원 누구나 다시 꺼내 쓴다
@@ -218,11 +249,12 @@ def clean_text(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 
-def extract(text: str, repo_descriptions: list[str] | None = None, allow_ai: bool = True) -> tuple[NoticeExtract, int, str, dict | None]:
+def extract(text: str, repo_descriptions: list[str] | None = None, allow_ai: bool = True, guard=None) -> tuple[NoticeExtract, int, str, dict | None]:
     """공고를 분석한다. (결과, 버린 항목 수, 출처, AI 사용량)
 
     출처: 'cache'(서버에 저장된 결과) · 'repo'(저장소 마일스톤에 저장된 결과) · 'sample' · 'claude'
     캐시를 쓰면 AI를 부르지 않으므로 사용량은 None이다.
+    guard: AI를 실제로 부르기 직전에만 부르는 확인 함수 (로그인·횟수 제한). 막으려면 예외를 던진다.
     """
     text = clean_text(text)
     if not text:
@@ -243,6 +275,8 @@ def extract(text: str, repo_descriptions: list[str] | None = None, allow_ai: boo
         from .rules import rule_extract
         clean, dropped = verify_quotes(rule_extract(text), text)
         return fix_weekdays(clean), dropped, "rules", None
+    if guard:
+        guard()
     client = anthropic.Anthropic()
     try:
         resp = client.messages.create(

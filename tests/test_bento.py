@@ -218,7 +218,36 @@ def fake_ai(monkeypatch):
     nm._CACHE.clear()
     for k in nm.USAGE:
         nm.USAGE[k] = 0
+    nm._ai_hits.clear()  # 공고 AI 횟수 제한도 테스트마다 새로
+    nm._ai_day.update(key="", n=0)
     yield
+
+
+def test_notice_ai_needs_login_or_code_but_rules_and_cache_do_not(fake_ai, monkeypatch):
+    monkeypatch.setattr(main, "settings", main.settings.__class__(**{**main.settings.__dict__, "access_code": "c0de"}))
+    r = client.post("/api/notice", json={"text": REAL_NOTICE})
+    assert r.status_code == 401 and _FakeClaude.calls == 0  # 코드 없이 AI는 못 부른다
+    assert client.post("/api/notice", json={"text": REAL_NOTICE, "no_ai": True}).json()["source"] == "rules"  # 규칙으로 읽기는 그대로
+    assert client.post("/api/notice", json={"text": SAMPLE_NOTICE}).json()["source"] == "sample"  # 체험용 예시도 그대로
+    assert client.post("/api/notice", json={"text": REAL_NOTICE}, headers={"X-Bento-Code": "c0de"}).json()["source"] == "claude"
+    assert client.post("/api/notice", json={"text": REAL_NOTICE}).json()["source"] == "cache"  # 이미 읽은 공고는 코드 없이도 (AI를 안 부르니까)
+    assert _FakeClaude.calls == 1
+
+
+def test_notice_ai_is_rate_limited_per_person(fake_ai, monkeypatch):
+    monkeypatch.setattr(nm, "AI_PER_HOUR", 2)
+    for i in range(2):
+        assert client.post("/api/notice", json={"text": REAL_NOTICE + f"\n버전 {i}"}).json()["source"] == "claude"
+    r = client.post("/api/notice", json={"text": REAL_NOTICE + "\n버전 9"})
+    assert r.status_code == 429 and "자주" in r.json()["detail"] and _FakeClaude.calls == 2
+    assert client.post("/api/notice", json={"text": REAL_NOTICE + "\n버전 0"}).json()["source"] == "cache"  # 캐시는 한도와 상관없다
+
+
+def test_notice_ai_daily_cap_for_whole_server(fake_ai, monkeypatch):
+    monkeypatch.setattr(nm, "AI_PER_DAY_ALL", 1)
+    assert client.post("/api/notice", json={"text": REAL_NOTICE + "\nA"}).status_code == 200
+    r = client.post("/api/notice", json={"text": REAL_NOTICE + "\nB"})
+    assert r.status_code == 429 and "오늘" in r.json()["detail"]
 
 
 def test_same_notice_is_analyzed_once_and_usage_recorded(fake_ai):
@@ -633,6 +662,13 @@ def test_discover_picks_open_contests_from_board_and_dev_event():
     assert top["title"] == "Notion AI Hackathon Seoul" and "해커톤" in top["why"] and top["deadline_text"].startswith("11월 18일")
     knu = next(x for x in r["items"] if "하나증권" in x["title"])
     assert knu["ai_ok"] is False and "우리 학과 공지" in knu["why"]  # AI 크롤러를 막은 사이트 글은 AI에 보내지 않는다
+
+
+def test_discover_force_needs_login_or_code(monkeypatch):
+    monkeypatch.setattr(main, "settings", main.settings.__class__(**{**main.settings.__dict__, "access_code": "c0de"}))
+    assert client.get("/api/discover?interests=AI").status_code == 200  # 목록 보기는 누구나
+    assert client.get("/api/discover?force=true").status_code == 401  # 다시 읽기(출처 사이트에 감)는 막는다
+    assert client.get("/api/discover?force=true", headers={"X-Bento-Code": "c0de"}).status_code == 200
 
 
 def test_discover_is_polite_and_cached():
