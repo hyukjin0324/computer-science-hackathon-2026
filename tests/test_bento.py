@@ -1907,7 +1907,7 @@ def test_late_step_alert_goes_out_when_team_connected_discord(monkeypatch):
     dm.write(main._demo, HOOK, main.settings.signing_key)  # 팀이 직접 연결 = 알림을 받겠다는 뜻 (BENTO_AUTO_NOTIFY 없이도)
     r = client.get("/api/agent/run", headers={"Authorization": "Bearer s3"}).json()
     assert r["report"][0]["notified"] is True
-    assert any("'핵심 기능' 단계가" in m and "늦었어요" in m for m in sent)
+    assert any("'핵심 기능' 단계" in m and "늦었어요" in m and "이슈를 닫아 주세요" in m for m in sent)
     client.get("/api/agent/run", headers={"Authorization": "Bearer s3"})
     assert sum("늦었어요" in m for m in sent) == 1  # 같은 내용은 되풀이해서 보내지 않는다
 
@@ -1922,3 +1922,8 @@ def test_plan_issue_tells_where_it_lives_and_to_close_it():
     steps = [{"title": "핵심 기능", "due": (datetime.now(timezone.utc) + timedelta(days=2)).isoformat(), "note": "MVP"}]
     p = client.post("/api/schedule/github", json={"steps": steps}).json()["proposal"]
     assert any("닫아 주세요" in (s.get("text") or "") for s in p["steps"])
+
+
+def test_alert_time_spans_are_easy_to_read():
+    from app.progress import span
+    assert span(0) == "1시간 안" and span(4) == "4시간" and span(47) == "47시간" and span(74) == "3일"
