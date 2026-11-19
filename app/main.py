@@ -74,10 +74,27 @@ def gh_for(repo: str | None):
     return _clients[repo]
 
 
+_STATE_CACHE: dict[str, tuple[float, object]] = {}
+_STATE_LOCKS: dict[str, threading.Lock] = {}
+STATE_TTL = 15  # 초: 홈이 열릴 때 한꺼번에 오는 여러 요청이 저장소를 매번 다시 읽지 않게
+
+
+def _state_lock(key: str) -> threading.Lock:
+    return _STATE_LOCKS.setdefault(key, threading.Lock())
+
+
 def state_for(repo: str | None):
     gh = gh_for(repo)
     try:
-        return gh, build_state(gh)
+        if not settings.live:  # 데모는 메모리라 바로 읽고, 테스트에서 상태를 바꿔 가며 본다
+            return gh, build_state(gh)
+        import copy
+        with _state_lock(gh.repo):  # 같은 저장소를 동시에 읽는 요청은 한 번만 읽고 나눠 쓴다
+            hit = _STATE_CACHE.get(gh.repo)
+            if not hit or time.time() - hit[0] > STATE_TTL:
+                hit = (time.time(), build_state(gh))
+                _STATE_CACHE[gh.repo] = hit
+        return gh, copy.deepcopy(hit[1])  # 판단 함수가 상태를 고쳐 쓰므로 복사본을 준다
     except GitHubError as e:
         if e.status == 404:
             raise HTTPException(404, f"{gh.repo}에 Bento 앱이 설치되지 않았거나 저장소가 없어요") from e
@@ -105,7 +122,10 @@ async def _remember_asker(request: Request, call_next):
         who = None
     tok = _ASKER.set(who)
     try:
-        return await call_next(request)
+        resp = await call_next(request)
+        if request.method != "GET":  # 무언가를 바꾸는 요청 뒤에는 저장된 저장소 상태를 버려서 다음에 바로 새로 읽는다
+            _STATE_CACHE.clear()
+        return resp
     finally:
         _ASKER.reset(tok)
 

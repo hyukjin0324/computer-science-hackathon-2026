@@ -1940,3 +1940,31 @@ def test_milestone_date_survives_github_converting_to_pacific_time():
 def test_alert_time_spans_are_easy_to_read():
     from app.progress import span
     assert span(0) == "1시간 안" and span(4) == "4시간" and span(47) == "47시간" and span(74) == "3일"
+
+
+# ---------- 홈이 열릴 때 저장소를 매번 다시 읽지 않게 ----------
+def test_state_is_cached_briefly_when_live_and_dropped_after_a_write(monkeypatch):
+    calls = []
+    real = main.build_state
+    monkeypatch.setattr(main, "build_state", lambda gh: calls.append(1) or real(gh))
+    monkeypatch.setattr(main, "settings", main.settings.__class__(**{**main.settings.__dict__, "app_id": "1", "private_key": "k"}))
+    monkeypatch.setattr(main, "gh_for", lambda repo: main._demo)  # 실제 GitHub에는 가지 않고, 저장된 상태만 시험한다
+    main._STATE_CACHE.clear()
+    a = main.state_for(None)[1]
+    b = main.state_for(None)[1]
+    assert len(calls) == 1  # 두 번째는 저장된 것을 쓴다
+    a.issues.clear()  # 판단 함수가 상태를 고쳐 써도 다음 요청에 새어 나가지 않는다
+    assert main.state_for(None)[1].issues == b.issues and b.issues
+    client.post("/api/roles", json={"roles": {}})  # 바꾸는 요청 뒤에는 새로 읽는다
+    main.state_for(None)
+    assert len(calls) == 2
+    main._STATE_CACHE.clear()
+
+
+def test_state_is_not_cached_in_demo_mode(monkeypatch):
+    calls = []
+    real = main.build_state
+    monkeypatch.setattr(main, "build_state", lambda gh: calls.append(1) or real(gh))
+    main.state_for(None)
+    main.state_for(None)
+    assert len(calls) == 2

@@ -1,8 +1,18 @@
 """GitHub 응답을 Bento가 판단에 쓰는 저장소 상태로 바꾼다. 판단 함수는 모두 순수 함수라 테스트하기 쉽다."""
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+
+
+def par(fns: list, workers: int = 8) -> list:
+    """서로 기다릴 필요 없는 GitHub 읽기를 동시에 한다. 결과는 넣은 순서대로, 예외는 그 순서에서 다시 던진다."""
+    if len(fns) <= 1:
+        return [f() for f in fns]
+    with ThreadPoolExecutor(max_workers=min(workers, len(fns))) as ex:
+        futs = [ex.submit(f) for f in fns]
+        return [f.result() for f in futs]
 
 
 def parse_ts(s: str | None) -> datetime | None:
@@ -157,31 +167,57 @@ _NAMES: dict[str, str] = {}
 
 def build_state(gh, now: datetime | None = None) -> RepoState:
     now = now or datetime.now(timezone.utc)
-    members = gh.members()
+    from .ownership import read_roles, read_rules
+
+    def _leads():
+        try:
+            return gh.leads() if hasattr(gh, "leads") else []
+        except Exception:  # noqa: BLE001 - 못 읽으면 팀장 없이
+            return []
+
+    def _rules():
+        try:
+            return read_rules(gh)
+        except Exception:  # noqa: BLE001 - 규칙을 못 읽어도 기본(하루씩 아이디 순)으로
+            return {}
+
+    # 1단계: 서로 상관없는 읽기를 한꺼번에
+    members, open_prs, merged_list, open_issues, ms_raw, roles_raw, leads_raw, rules = par(
+        [gh.members, gh.open_prs, gh.merged_prs, gh.open_issues, gh.milestones, lambda: read_roles(gh), _leads, _rules])
+
+    # 2단계: PR마다 필요한 읽기를 PR끼리도, PR 안에서도 동시에
+    def _pr_parts(p):
+        n = p["number"]
+        return par([lambda: gh.pr_reviews(n), lambda: gh.check_runs(p["head"]["sha"]), lambda: gh.pr_files(n), lambda: gh.timeline(n), lambda: gh.pr_detail(n)])
+
     prs: list[PR] = []
     authors: dict[str, list[str]] = {}
-    for p in gh.open_prs()[:15]:
+    shown = open_prs[:15]
+    parts = par([lambda p=p: _pr_parts(p) for p in shown])
+    for p, (reviews, runs, files, timeline, detail) in zip(shown, parts):
         n = p["number"]
-        reviews = gh.pr_reviews(n)
         ch_at, ch_by = changes_requested(reviews)
-        ci, fail_h = ci_status(gh.check_runs(p["head"]["sha"]), now)
-        files = gh.pr_files(n)
+        ci, fail_h = ci_status(runs, now)
         prs.append(PR(
             number=n, title=p["title"], author=p["user"]["login"], branch=p["head"]["ref"], url=p["html_url"],
             reviewers=[u["login"] for u in p.get("requested_reviewers", [])],
             approvals=approvals(reviews),
-            review_wait_hours=review_wait_hours(gh.timeline(n), reviews, now),
+            review_wait_hours=review_wait_hours(timeline, reviews, now),
             ci=ci, ci_fail_hours=fail_h,
-            mergeable=gh.pr_detail(n).get("mergeable_state"),
+            mergeable=detail.get("mergeable_state"),
             files=files, body=(p.get("body") or "")[:2000], draft=bool(p.get("draft")),
             changes_at=ch_at, changes_by=ch_by,
         ))
-        for f in files[:3]:
-            if f not in authors:
-                authors[f] = gh.file_authors(f)
+    need = []
+    for pr in prs:
+        for f in pr.files[:3]:
+            if f not in need:
+                need.append(f)
+    for f, who in zip(need, par([lambda f=f: gh.file_authors(f) for f in need])):
+        authors[f] = who
     merged_refs: dict[int, int] = {}
     merged_numbers: set[int] = set()
-    for mp in gh.merged_prs():
+    for mp in merged_list:
         merged_numbers.add(mp["number"])
         for ref in closing_refs(f"{mp['title']}\n{mp.get('body') or ''}"):
             merged_refs.setdefault(ref, mp["number"])
@@ -190,15 +226,11 @@ def build_state(gh, now: datetime | None = None) -> RepoState:
               assignees=[a["login"] for a in i.get("assignees", [])],
               milestone=(i.get("milestone") or {}).get("title"), body=(i.get("body") or "")[:2000], url=i["html_url"],
               created_at=i.get("created_at"), updated_at=i.get("updated_at"))
-        for i in gh.open_issues()
+        for i in open_issues
     ]
-    milestones = [Milestone(m["number"], m["title"], m.get("due_on"), m.get("open_issues", 0), m.get("closed_issues", 0), m.get("description") or "") for m in gh.milestones()]
-    from .ownership import read_roles
-    roles = {m: r for m, r in read_roles(gh).items() if m in members}
-    try:
-        leads = [m for m in gh.leads() if m in members] if hasattr(gh, "leads") else []
-    except Exception:  # noqa: BLE001 - 못 읽으면 팀장 없이
-        leads = []
+    milestones = [Milestone(m["number"], m["title"], m.get("due_on"), m.get("open_issues", 0), m.get("closed_issues", 0), m.get("description") or "") for m in ms_raw]
+    roles = {m: r for m, r in roles_raw.items() if m in members}
+    leads = [m for m in leads_raw if m in members]
     from .signals import collect
     try:
         sig = collect(gh, prs, now)
@@ -206,17 +238,18 @@ def build_state(gh, now: datetime | None = None) -> RepoState:
         sig = {}
     st = RepoState(gh.repo, now, members, prs, issues, milestones, merged_refs, authors, roles, leads, sig)
     st.merged_numbers = merged_numbers
-    try:
-        from .ownership import read_rules
-        st.rules = read_rules(gh)
-    except Exception:  # noqa: BLE001 - 규칙을 못 읽어도 기본(하루씩 아이디 순)으로
-        st.rules = {}
-    for m in members[:12]:  # 프로필 이름은 하루에 거의 안 바뀌어서 한 번만 읽는다
-        if m not in _NAMES:
-            try:
-                _NAMES[m] = gh.user_name(m) or ""
-            except Exception:  # noqa: BLE001 — 이름은 없어도 된다
-                _NAMES[m] = ""
-        if _NAMES[m]:
+    st.rules = rules
+    unknown = [m for m in members[:12] if m not in _NAMES]  # 프로필 이름은 하루에 거의 안 바뀌어서 한 번만 읽는다
+
+    def _name(m):
+        try:
+            return gh.user_name(m) or ""
+        except Exception:  # noqa: BLE001 — 이름은 없어도 된다
+            return ""
+
+    for m, nm in zip(unknown, par([lambda m=m: _name(m) for m in unknown])):
+        _NAMES[m] = nm
+    for m in members[:12]:
+        if _NAMES.get(m):
             st.names[m] = _NAMES[m]
     return st
