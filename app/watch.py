@@ -155,14 +155,17 @@ def watch(state: RepoState) -> list[dict]:
     if team and mu:
         from .triage import _load
         load = _load(state)
+        due = deadline_of(state)
+        # 제출 마감이 24시간 안이면 급해서 바로 머지하는 게 당연하다: 알림은 '정리'(맨 아래)로 낮추고 말투도 부드럽게
+        near = due is not None and timedelta(0) <= due - now <= timedelta(hours=24)
         for m in mu[:3]:
             others = sorted((x for x in state.members if x != m["author"]), key=lambda x: load[x])
             if not others:
                 continue
             load[others[0]] += 1  # 같은 사람에게 몰리지 않게: 방금 맡긴 일을 센 다음 PR은 다른 사람에게
-            items.append({"id": f"selfmerge-{m['number']}", "sev": "확인", "who": others[0], "who_why": "맡은 일이 가장 적은 팀원이라서 (같으면 아이디 순)", "age": 0,
+            items.append({"id": f"selfmerge-{m['number']}", "sev": "정리" if near else "확인", "who": others[0], "who_why": "맡은 일이 가장 적은 팀원이라서 (같으면 아이디 순)", "age": 0,
                           "title": f"PR #{m['number']}이 리뷰 승인 없이 머지됐어요",
-                          "why": f"{m['title']} · {m['author']} 님. 급해서 그랬을 수 있어요. 머지된 뒤라도 한 사람이 훑어보면 실수를 일찍 찾아요",
+                          "why": f"{m['title']} · {m['author']} 님. " + ("마감이 가까워 바로 합친 것으로 보여요. 제출 전에 한 사람이 훑어보면 안전해요" if near else "급해서 그랬을 수 있어요. 머지된 뒤라도 한 사람이 훑어보면 실수를 일찍 찾아요"),
                           "evidence": [{"label": f"PR #{m['number']}", "url": m["url"]}],
                           "options": [{"label": "팀원에게 머지 뒤 리뷰 부탁하기", "recommended": True, "sub": f"PR 댓글 · 추천 {others[0]} (댓글에서 바꿀 수 있어요)", "actions": [
                               Comment(number=m["number"], body=f"@{others[0]} 님, 이 PR이 리뷰 없이 머지됐어요. 시간 될 때 한 번 훑어봐 주실 수 있을까요?")]}]})

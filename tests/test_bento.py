@@ -1968,3 +1968,22 @@ def test_state_is_not_cached_in_demo_mode(monkeypatch):
     main.state_for(None)
     main.state_for(None)
     assert len(calls) == 2
+
+
+def _selfmerge_items(hours_to_deadline):
+    from app import watch
+    main._demo.reset()
+    if hours_to_deadline is not None:
+        _plan_milestone(9, "해커톤 제출", hours_to_deadline)
+    gh, st = main.state_for(None)
+    st.signals = {**(st.signals or {}), "merged_unreviewed": [{"number": 101, "author": st.members[0], "title": "t101", "url": "https://github.com/x/y/pull/101"}]}
+    return [i for i in watch.watch(st) if str(i.get("id", "")).startswith("selfmerge-")]
+
+
+def test_unreviewed_merge_is_quieter_in_the_last_24_hours_before_the_deadline():
+    far = _selfmerge_items(72)[0]
+    near = _selfmerge_items(10)[0]
+    none = _selfmerge_items(None)[0]  # 제출 마감을 모르면 예전처럼
+    assert far["sev"] == "확인" and none["sev"] == "확인"
+    assert near["sev"] == "정리" and "마감이 가까워" in near["why"]  # 급하면 바로 머지하는 게 당연하니 맨 아래로
+    assert [o["label"] for o in near["options"]] == [o["label"] for o in far["options"]]  # 제안 자체는 그대로 남는다
