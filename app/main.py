@@ -23,7 +23,7 @@ from . import discover as disc
 from . import ownership as own
 from . import discord as discord_mod
 from datetime import datetime, timedelta, timezone
-from .actions import SetRoles, SetTeamRules
+from .actions import SetRoles, SetTeamRules, is_suspicious
 from .config import load_settings
 from .demo import DemoGitHub
 from .fetch import FetchError, fetch_notice
@@ -671,6 +671,53 @@ def roles_set(body: RolesIn, request: Request, x_bento_code: str | None = Header
         raise HTTPException(502, f"GitHub에 저장하지 못했어요: {e}") from e
     merged = {**st.roles, **changed}
     return {"saved": True, "roles": {m: c for m, c in merged.items() if c}, "changed": sorted(changed), "by": actor}
+
+
+FOOT_UNDO = "\n\n<sub>— 캘린더에서 누른 것을 Bento가 대신 남겼어요</sub>"
+
+
+class StepDoneIn(BaseModel):
+    repo: str | None = None
+    milestone: str  # 끝낸 단계의 마일스톤 이름 ('계획 · …' 또는 '해커톤 제출')
+    reopen: list[int] = []  # 되돌리기: 방금 이 요청으로 닫았던 이슈 번호
+
+
+@app.post("/api/plan/done")
+def plan_done(body: StepDoneIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    """캘린더에서 '끝났어요': 그 단계(마일스톤)의 열린 이슈를 닫는다. 누른 것이 확인이라 승인은 받지 않고,
+    누가 닫았는지 이슈마다 댓글로 남긴다. 되돌리기는 방금 닫은 이슈만 다시 연다."""
+    _check_code(x_bento_code, request)
+    gh, st = state_for(body.repo)
+    actor = _member_actor(request, st, "단계를 끝낼") or _ASKER.get() or "팀원"
+    if body.reopen:  # 되돌리기
+        done = []
+        for n in dict.fromkeys(body.reopen):
+            try:
+                issue = gh.issue(n)
+                if issue.get("state") != "closed" or (issue.get("milestone") or {}).get("title") != body.milestone or issue.get("pull_request"):
+                    continue
+                gh.update_issue(n, state="open")
+                gh.comment(n, f"{actor}님이 캘린더에서 되돌려서 다시 열었어요.{FOOT_UNDO}")
+                done.append(n)
+            except GitHubError as e:
+                if e.status == 404:  # 없는 번호는 건너뛴다
+                    continue
+                raise HTTPException(502, f"GitHub에서 다시 열지 못했어요: {e}") from e
+        return {"reopened": done, "milestone": body.milestone}
+    if not st.milestone(body.milestone):
+        return {"closed": [], "skipped": [], "milestone": body.milestone, "message": "저장소에 이 단계의 마일스톤이 없어서 이 기기에서만 완료로 표시했어요"}
+    closed, skipped = [], []
+    for i in [x for x in st.issues if x.milestone == body.milestone]:
+        if is_suspicious(i.body):
+            skipped.append({"number": i.number, "why": "의심스러운 지시가 있어 건드리지 않았어요"})
+            continue
+        try:
+            gh.comment(i.number, f"{actor}님이 캘린더에서 '{body.milestone}' 단계를 끝냈다고 표시해서 닫았어요. 잘못 눌렀다면 이 이슈를 다시 열어 주세요.{FOOT_UNDO}")
+            gh.update_issue(i.number, state="closed", state_reason="completed")
+            closed.append(i.number)
+        except GitHubError as e:
+            skipped.append({"number": i.number, "why": f"GitHub 오류: {e}"})
+    return {"closed": closed, "skipped": skipped, "milestone": body.milestone, "by": actor}
 
 
 @app.post("/api/team-rules")
