@@ -16,6 +16,12 @@ def _h(td: timedelta) -> int:
     return int(td.total_seconds() // 3600)
 
 
+def span(hours: float) -> str:
+    """사람이 읽기 쉬운 시간: 1시간 미만은 '1시간 안', 48시간부터는 'N일'."""
+    h = int(hours)
+    return "1시간 안" if h < 1 else f"{h}시간" if h < 48 else f"{h // 24}일"
+
+
 def least_loaded(state: RepoState, exclude: set[str] = frozenset()) -> str | None:
     """열린 이슈를 가장 적게 맡은 팀원."""
     load = {m: 0 for m in state.members if m not in exclude}
@@ -73,12 +79,12 @@ def check(state: RepoState, plan: list[dict] | None, deadline_iso: str | None, n
         ratio = m.closed / total if total else 0
         if due < now and m.open:
             late.append(t)
-            findings.append({"id": f"late:{t}", "sev": "긴급", "title": f"'{t}' 단계가 {_h(now - due)}시간 늦었어요",
+            findings.append({"id": f"late:{t}", "sev": "긴급", "title": f"'{t}' 단계 마감이 {span(_h(now - due))} 지났는데 아직 안 끝났어요 (늦었어요)",
                              "why": f"열린 이슈 {m.open}개 · 닫힌 이슈 {m.closed}개" + (f" · 담당자 없음 {len(unassigned)}개" if unassigned else ""),
                              "milestone": m.title})
         elif due - now < timedelta(hours=36) and m.open and ratio < 0.5:
             late.append(t)
-            findings.append({"id": f"risk:{t}", "sev": "주의", "title": f"'{t}' 마감이 {_h(due - now)}시간 남았는데 {int(ratio * 100)}%예요",
+            findings.append({"id": f"risk:{t}", "sev": "주의", "title": f"'{t}' 단계 마감까지 {span(_h(due - now))} 남았는데 끝낸 일이 {int(ratio * 100)}%뿐이에요",
                              "why": f"열린 이슈 {m.open}개" + (f" · 담당자 없음 {len(unassigned)}개" if unassigned else ""), "milestone": m.title})
     for s in steps:
         if s.get("local") and s["title"] not in done and datetime.fromisoformat(s["due"]) < now:
@@ -136,9 +142,10 @@ def state_issue_load(state: RepoState, issue, who: str) -> None:
 def summary(findings, moves, assign) -> str:
     if not findings:
         return ""
-    lines = ["Bento가 진행을 점검했어요."] + [f"· {f['title']}" for f in findings[:5]]
+    lines = ["팀플 점검: 챙길 일이 있어요"] + [f"· {f['title']}" for f in findings[:5]]
+    lines.append("→ 끝난 일은 GitHub 이슈를 닫아 주세요. 시간이 모자라면 Bento가 남은 일정을 다시 짜 줘요.")
     if moves:
-        lines.append(f"→ 남은 단계 {len(moves)}개의 날짜를 다시 잡는 걸 제안해요")
+        lines.append(f"→ 남은 단계 {len(moves)}개의 날짜를 남은 시간에 맞게 다시 잡는 것을 추천해요 (앱에서 확인하고 승인하면 바뀌어요)")
     if assign:
-        lines.append(f"→ 담당자 없는 이슈 {len(assign)}개를 일이 적은 팀원에게 나누는 걸 제안해요")
+        lines.append(f"→ 담당자 없는 이슈 {len(assign)}개는 일이 적은 팀원에게 나누는 것을 추천해요")
     return "\n".join(lines)
