@@ -1994,3 +1994,16 @@ def test_deliverables_are_not_split_by_commas_inside_parentheses():
     items = _split_items("GitHub 레포지토리 링크(Public), 발표 자료(PDF 또는 PPTX, 10MB 이하), 배포·데모 링크(선택)")
     assert items == ["GitHub 레포지토리 링크(Public)", "발표 자료(PDF 또는 PPTX, 10MB 이하)", "배포·데모 링크(선택)"]
     assert _split_items("참가신청서 및 기획서, 동의서") == ["참가신청서", "기획서", "동의서"]  # 괄호 밖은 예전처럼 나눈다
+
+
+def test_app_install_files_are_served_and_linked():
+    """휴대폰 홈 화면에 추가했을 때 주소창 없이 열리게 하는 설치 설정과 아이콘."""
+    m = client.get("/manifest.webmanifest")
+    assert m.status_code == 200 and m.json()["display"] == "standalone" and m.json()["name"] == "Bento"
+    for ic in m.json()["icons"]:
+        r = client.get(ic["src"])
+        assert r.status_code == 200 and r.content[:8] == b"\x89PNG\r\n\x1a\n"
+    assert client.get("/icons/apple-touch-icon.png").status_code == 200
+    html = client.get("/").text
+    assert 'rel="manifest"' in html and "apple-touch-icon" in html and "apple-mobile-web-app-capable" in html
+    assert client.get("/icons/../app/main.py").status_code in (404, 422)  # 폴더 밖은 열지 않는다
