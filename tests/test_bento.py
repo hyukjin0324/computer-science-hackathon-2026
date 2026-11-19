@@ -1987,3 +1987,10 @@ def test_unreviewed_merge_is_quieter_in_the_last_24_hours_before_the_deadline():
     assert far["sev"] == "확인" and none["sev"] == "확인"
     assert near["sev"] == "정리" and "마감이 가까워" in near["why"]  # 급하면 바로 머지하는 게 당연하니 맨 아래로
     assert [o["label"] for o in near["options"]] == [o["label"] for o in far["options"]]  # 제안 자체는 그대로 남는다
+
+
+def test_deliverables_are_not_split_by_commas_inside_parentheses():
+    from app.rules import _split_items
+    items = _split_items("GitHub 레포지토리 링크(Public), 발표 자료(PDF 또는 PPTX, 10MB 이하), 배포·데모 링크(선택)")
+    assert items == ["GitHub 레포지토리 링크(Public)", "발표 자료(PDF 또는 PPTX, 10MB 이하)", "배포·데모 링크(선택)"]
+    assert _split_items("참가신청서 및 기획서, 동의서") == ["참가신청서", "기획서", "동의서"]  # 괄호 밖은 예전처럼 나눈다
