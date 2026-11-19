@@ -99,10 +99,32 @@ def _team(lines: list[str]) -> tuple[int | None, int | None]:
     return None, None
 
 
+_SEP = re.compile(r"\s*,\s*|\s+·\s+|\s+및\s+")
+
+
+def _split_top(s: str) -> list[str]:
+    """쉼표·'및'·'·'로 나누되 괄호 안은 나누지 않는다. '발표 자료(PDF 또는 PPTX, 10MB 이하)'가 둘로 갈라지지 않게."""
+    parts, buf, depth, i = [], [], 0, 0
+    while i < len(s):
+        ch = s[i]
+        if ch in "([（":
+            depth += 1
+        elif ch in ")]）":
+            depth = max(0, depth - 1)
+        if depth == 0 and (m := _SEP.match(s, i)) and m.end() > i:
+            parts.append("".join(buf))
+            buf, i = [], m.end()
+            continue
+        buf.append(ch)
+        i += 1
+    parts.append("".join(buf))
+    return parts
+
+
 def _split_items(s: str) -> list[str]:
     parts = [p for p in re.split(r"\s*[①-⑳]\s*", s) if p.strip()]
     if len(parts) <= 1:
-        parts = re.split(r"\s*,\s*|\s+·\s+|\s+및\s+", s)
+        parts = _split_top(s)
     return [p.strip(" .;") for p in parts if 1 < len(p.strip(" .;")) <= 60]
 
 
