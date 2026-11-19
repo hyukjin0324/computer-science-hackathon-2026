@@ -1173,7 +1173,7 @@ def test_watch_deadline_soon_and_commits_after_deadline():
     # 마일스톤 마감은 날짜만 남아서 그날 23:59로 본다. 3시간 뒤가 다음 날로 넘어가면 '곧 마감'이 아닐 수 있다
     from app.watch import deadline_of
     left = deadline_of(st) - st.now
-    assert ("deadline-soon" in w) == (left <= timedelta(hours=6))
+    assert ("deadline-soon" in w) == (timedelta(0) < left <= timedelta(hours=6))  # 자정 직후처럼 날짜가 이미 지났으면(left < 0) 곧 마감이 아니다
 
     def passed(d):
         d["milestones"].append({"number": 1, "title": "해커톤 제출", "due_on": (datetime.now(timezone.utc) - timedelta(days=2)).strftime("%Y-%m-%dT00:00:00Z"), "description": ""})
