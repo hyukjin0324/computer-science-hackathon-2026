@@ -23,6 +23,9 @@ MODEL = "claude-haiku-5-5"
 PRICE = (0.10, 0.50)  # USD / 100만 토큰
 MAX_BYTES = 3_000_000  # 배포 서버가 한 번에 받는 크기(약 4.5MB)를 base64로 넘지 않게
 MAX_CHARS = 20_000
+MAX_UNPACKED = 20_000_000  # 한글 파일 압축을 풀었을 때 모두 합쳐 이 크기까지만 (압축 폭탄으로 서버 메모리가 터지지 않게)
+TOO_BIG = "압축을 풀면 너무 큰 파일이에요. 공고 부분만 남겨서 다시 올리거나 글을 붙여넣어 주세요"
+BROKEN = "파일을 읽지 못했어요. 깨졌거나 지원하지 않는 형식이에요. PDF로 저장해서 올리거나 공고 글을 붙여넣어 주세요"
 PER_HOUR = 10
 PER_DAY_ALL = 200
 
@@ -102,6 +105,15 @@ def hwp_records_text(data: bytes) -> list[str]:
     return paras
 
 
+def _inflate(data: bytes, budget: int) -> bytes:
+    """HWP 본문(raw deflate)을 푼다. budget보다 커지면 더 풀지 않고 멈춘다."""
+    d = zlib.decompressobj(-15)
+    out = d.decompress(data, budget + 1)
+    if len(out) > budget or d.unconsumed_tail:
+        raise AttachError(TOO_BIG, 413)
+    return out
+
+
 def hwp_text(raw: bytes) -> str:
     import olefile
     try:
@@ -119,10 +131,14 @@ def hwp_text(raw: bytes) -> str:
         sections = sorted((e for e in f.listdir() if len(e) == 2 and e[0] == "BodyText" and e[1].startswith("Section")),
                           key=lambda e: int(e[1][7:] or 0))
         paras: list[str] = []
+        budget = MAX_UNPACKED
         for e in sections:
             data = f.openstream(e).read()
             if flags & 1:
-                data = zlib.decompress(data, -15)
+                data = _inflate(data, budget)
+            budget -= len(data)
+            if budget < 0:
+                raise AttachError(TOO_BIG, 413)
             paras += hwp_records_text(data)
     return "\n".join(paras)
 
@@ -135,8 +151,14 @@ def hwpx_text(raw: bytes) -> str:
         raise AttachError("HWPX 파일을 열 수 없어요") from e
     names = sorted((n for n in z.namelist() if re.match(r"Contents/section\d+\.xml$", n)), key=lambda n: int(re.findall(r"\d+", n)[-1]))
     paras: list[str] = []
+    budget = MAX_UNPACKED
     for n in names:
-        root = ElementTree.fromstring(z.read(n))
+        with z.open(n) as fp:  # 압축 파일에 적힌 크기는 속일 수 있어서, 실제로 풀면서 센다
+            data = fp.read(budget + 1)
+        budget -= len(data)
+        if budget < 0:
+            raise AttachError(TOO_BIG, 413)
+        root = ElementTree.fromstring(data)
         for el in root.iter():
             if el.tag.endswith("}p"):
                 # 이 문단 바로 아래 글자만 (표 안 문단은 따로 나온다)
@@ -191,10 +213,14 @@ def read_file(name: str, mime: str | None, raw: bytes, who: str = "anon", ai_rea
         raise AttachError("파일이 너무 커요(3MB까지). 사진은 화면 캡처로, 문서는 공고 부분만 올려 주세요", 413)
     kind = kind_of(name, mime)
     note = ""
-    if kind == "hwp":
-        text = hwp_text(raw)
-    elif kind == "hwpx":
-        text = hwpx_text(raw)
+    if kind in ("hwp", "hwpx"):
+        try:
+            text = hwp_text(raw) if kind == "hwp" else hwpx_text(raw)
+        except AttachError:
+            raise
+        except (struct.error, zlib.error, ElementTree.ParseError, zipfile.BadZipFile, zipfile.LargeZipFile,
+                KeyError, ValueError, IndexError, OSError, EOFError, RuntimeError, NotImplementedError) as e:
+            raise AttachError(BROKEN) from e  # 깨진 파일은 '서버 오류(500)' 대신 무엇을 하면 되는지 알려 준다
     else:
         if not ai_ready and client is None:
             raise AttachError("사진·PDF는 AI로 읽는데, 지금은 AI가 꺼져 있어요. 공고 글을 붙여넣어 주세요", 503)
