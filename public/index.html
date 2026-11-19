@@ -2320,6 +2320,7 @@ function renderCal() {
   const body = $("calBody"); if (!body) return; body.innerHTML = "";
   const projs = allProjects().filter((p) => p.extract || (p.plan && p.plan.length));
   const hide = new Set(store.get("calHide", []));
+  const multi = projs.filter((p) => !hide.has(p.key)).length > 1;  // 팀플이 하나만 보이면 이름은 맨 위 칩에 한 번만 (카드·일정마다 되풀이하지 않는다)
   if (projs.length) {
     const f = h("div", "pfilter"); f.setAttribute("aria-label", "보여 줄 팀플");
     projs.forEach((p) => { const b = h("button"); b.type = "button"; b.style.setProperty("--c", `var(${colorOf(p.key)})`); b.appendChild(h("span", null, (p.draft ? "준비 중 · " : "") + p.name)); b.setAttribute("aria-pressed", String(!hide.has(p.key)));
@@ -2336,7 +2337,7 @@ function renderCal() {
   }
   const now = new Date(); now.setHours(0, 0, 0, 0);
   const sub = ev.find((e) => e.title === "제출 마감" && e.d >= now);  // 완료한 제출은 D-day에서 뺀다
-  if (sub) { const dd = Math.ceil((new Date(sub.d).setHours(0, 0, 0, 0) - now) / 864e5); const card = h("div", "dday"); const top = h("div", "dday-top"); const big = h("span", "big-d", `D-${dd}`); top.appendChild(big); top.appendChild(h("span", null, `가장 가까운 제출 마감 · ${sub.sub}`)); card.appendChild(top); card.appendChild(h("div", "note", sub.p.name)); body.appendChild(card); }
+  if (sub) { const dd = Math.ceil((new Date(sub.d).setHours(0, 0, 0, 0) - now) / 864e5); const card = h("div", "dday"); const top = h("div", "dday-top"); const big = h("span", "big-d", `D-${dd}`); top.appendChild(big); top.appendChild(h("span", null, `가장 가까운 제출 마감 · ${sub.sub}`)); card.appendChild(top); if (multi) card.appendChild(h("div", "note", sub.p.name)); body.appendChild(card); }
   if (extract && !hasPlan() && extract.submit_deadline_iso) {
     const t = h("button", "bigrow"); t.type = "button"; t.style.gridTemplateColumns = "1fr auto"; const tx = h("span"); tx.appendChild(h("b", null, `${projName()} 계획 짜기`)); tx.appendChild(h("small", null, "마감에서 거꾸로 할 일을 날짜별로 나눠 드려요")); t.appendChild(tx); t.appendChild(h("span", "chev", "›")); t.onclick = () => { showTab("chat"); planFlow(); }; body.appendChild(t);
   }
@@ -2363,12 +2364,12 @@ function renderCal() {
     const box = h("div", "evt"); box.style.setProperty("--c", `var(${e.c})`);
     const b = h("button"); b.type = "button"; const w = h("span", "when"); w.appendChild(h("b", null, `${e.d.getMonth() + 1}/${e.d.getDate()}`)); w.appendChild(document.createTextNode(`${String(e.d.getHours()).padStart(2, "0")}:${String(e.d.getMinutes()).padStart(2, "0")}`)); b.appendChild(w);
     b.appendChild(h("span", "bar2")); const what = h("span", "what"); const tt = h("b", null, e.title); if (e.kind === "due") { const tg = h("span", "sev crit", "마감"); tg.style.marginLeft = "6px"; tt.appendChild(tg); } what.appendChild(tt);
-    const sm = h("small", null, `${e.p.draft ? "준비 중 · " : ""}${e.p.name}${e.sub ? " · " + e.sub : ""}`); sm.style.whiteSpace = "pre-line"; what.appendChild(sm); b.appendChild(what); b.appendChild(h("span", "chev", "›"));
+    const sm = h("small", null, [multi ? (e.p.draft ? "준비 중 · " : "") + e.p.name : "", e.sub].filter(Boolean).join(" · ")); sm.style.whiteSpace = "pre-line"; what.appendChild(sm); b.appendChild(what); b.appendChild(h("span", "chev", "›"));
     const acts = h("div", "acts2");
     const act = (label, s2, fn) => { const t = h("button", "bigrow"); t.type = "button"; const tx = h("span"); tx.appendChild(h("b", null, label)); tx.appendChild(h("small", null, s2)); t.appendChild(tx); t.appendChild(h("span", "chev", "›")); t.onclick = inProject(e.p, fn); acts.appendChild(t); };
     if (e.act === "submit") act("제출 전 점검하기", "제출물과 저장소를 대조해요", submit);
     if (e.act === "apply") act("신청 확인 시작", "참가 자격 확인 · 신청 페이지 열기", () => { me("신청 확인할래"); applyFlow(e.p.extract); });
-    act("오늘 할 일 보기", `${e.p.name}에서 급한 순서대로 정리해요`, today);
+    act("오늘 할 일 보기", multi ? `${e.p.name}에서 급한 순서대로 정리해요` : "급한 순서대로 정리해요", today);
     if (e.kind === "step") {
       const msT = e.ms && typeof e.ms === "object" ? e.ms.title : e.ms; const open = msT && calState ? (calState.milestones.find((m) => m.title === msT) || {}).open || 0 : 0;
       if (!e.done) act("끝났어요", msT && e.p.key === projKey() ? `이 단계의 열린 이슈 ${open}개를 닫고, 누가 닫았는지 댓글로 남겨요` : "이 기기 계획에서 끝난 것으로 표시해요", () => finishStep(e, false));
