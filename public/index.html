@@ -460,15 +460,15 @@ details.teamall summary { gap: 8px; } details.teamall summary .gsub { color: var
 .avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .nm { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 /* 노트북처럼 넓은 화면에서는 휴대폰 틀 안에 넣어 보여 준다 (좁은 화면에서는 그대로 전체 화면) */
-@media (min-width: 900px) and (min-height: 640px) {
-  html { background: #E9EAEE; }
-  body { background: transparent; padding-block: 20px; }
-  body .sheet-bg, body .drawer-bg { margin: 0; }  /* 틀 안에서는 틀 자체가 화면 가장자리라, 좁은 화면용 바깥으로 내미는 여백이 안쪽 16px를 잘라 먹는다 */
-  body .drawer { padding-top: 26px; }  /* 둥근 모서리에 로고가 걸리지 않게 */
-  .phone { width: 393px; max-width: none; height: 852px; zoom: var(--phone-k, 1); background: var(--bg); border-radius: 40px; padding: 0 16px; overflow: hidden; box-shadow: 0 0 0 10px #17181C, 0 28px 70px rgb(23 24 28 / .28); }
+@media (min-width: 900px) and (min-height: 640px) and (hover: hover) and (pointer: fine) {
+  :root:not([data-frame="off"]) { background: #E9EAEE; }
+  :root:not([data-frame="off"]) body { background: transparent; padding-block: 20px; }
+  :root:not([data-frame="off"]) body .sheet-bg, :root:not([data-frame="off"]) body .drawer-bg { margin: 0; }  /* 틀 안에서는 틀 자체가 화면 가장자리라, 좁은 화면용 바깥으로 내미는 여백이 안쪽 16px를 잘라 먹는다 */
+  :root:not([data-frame="off"]) body .drawer { padding-top: 26px; }  /* 둥근 모서리에 로고가 걸리지 않게 */
+  :root:not([data-frame="off"]) .phone { width: 393px; max-width: none; height: 852px; zoom: var(--phone-k, 1); background: var(--bg); border-radius: 40px; padding: 0 16px; overflow: hidden; box-shadow: 0 0 0 10px #17181C, 0 28px 70px rgb(23 24 28 / .28); }
 }
-@media (min-width: 900px) and (min-height: 640px) and (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { background: #111113; } }
-@media (min-width: 900px) and (min-height: 640px) { :root[data-theme="dark"] { background: #111113; } }
+@media (min-width: 900px) and (min-height: 640px) and (hover: hover) and (pointer: fine) and (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-frame="off"]) { background: #111113; } }
+@media (min-width: 900px) and (min-height: 640px) and (hover: hover) and (pointer: fine) { :root[data-theme="dark"]:not([data-frame="off"]) { background: #111113; } }
 details.teamall { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-box); padding: 4px 14px; }
 details.teamall[open] { padding-bottom: 12px; } details.teamall summary { list-style: none; } details.teamall summary::-webkit-details-marker { display: none; }
 details.teamall summary::after { content: '›'; margin-left: auto; color: var(--muted); transition: transform .15s; } details.teamall[open] summary::after { transform: rotate(90deg); } details.teamall summary { cursor: pointer; font-size: var(--fs-body); font-weight: 700; min-height: 40px; display: flex; align-items: center; } details.teamall > a { margin-top: 8px; }
@@ -635,6 +635,7 @@ body.onboarding .dock { display: none; }  /* 첫 화면 뒤로 아래 막대가 
 </div>
 
 <script>
+try { if (JSON.parse(localStorage.getItem("bento:frame") || "null") === "off") document.documentElement.dataset.frame = "off"; } catch (e) { /* 저장된 틀 설정 없음 */ }
 try { const t = JSON.parse(localStorage.getItem("bento:theme") || "null"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) { /* 저장된 화면 모드 없음 */ }
 const $ = (id) => document.getElementById(id);
 const chat = $("v-chat");
@@ -2387,6 +2388,7 @@ function renderBox() {
 let mePage = null;
 const ICO = {
   shield: '<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6z"/>',
+  phone: '<rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>',
   plug: '<path d="M9 7V3M15 7V3M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/>',
   list: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
@@ -2588,6 +2590,12 @@ function renderMe() {
   let dm;
   const toggle = () => { const next = dm.getAttribute("aria-checked") !== "true"; document.documentElement.dataset.theme = next ? "dark" : "light"; store.set("theme", next ? "dark" : "light"); dm.setAttribute("aria-checked", String(next)); knob.setAttribute("aria-checked", String(next)); };
   dm = meRow("moon", "다크 모드", null, toggle, knob); dm.setAttribute("role", "switch"); dm.setAttribute("aria-checked", String(isDark)); g2.appendChild(dm);
+  if (matchMedia("(min-width: 900px) and " + MOUSE).matches) {  // 노트북처럼 마우스가 있는 큰 화면에서만: 휴대폰 틀을 끄고 넓게 쓰기
+    const frameOn = document.documentElement.dataset.frame !== "off";
+    const fk = h("span", "switch"); fk.setAttribute("aria-hidden", "true"); fk.setAttribute("aria-checked", String(frameOn)); fk.style.width = "auto"; fk.appendChild(h("span", "knob"));
+    let fr; const flip = () => { const next = fr.getAttribute("aria-checked") !== "true"; if (next) delete document.documentElement.dataset.frame; else document.documentElement.dataset.frame = "off"; store.set("frame", next ? "on" : "off"); fr.setAttribute("aria-checked", String(next)); fk.setAttribute("aria-checked", String(next)); fitPhone(); };
+    fr = meRow("phone", "휴대폰 틀로 보기", "노트북에서 휴대폰 화면처럼 보여 줘요. 끄면 틀 없이 넓게 써요", flip, fk); fr.setAttribute("role", "switch"); fr.setAttribute("aria-checked", String(frameOn)); g2.appendChild(fr);
+  }
   g2.appendChild(meRow("trash", "이 기기 기록", "맡긴 일·초안·계획 지우기", () => openMe("data")));
   v.appendChild(g2);
   // 도움
@@ -2673,7 +2681,8 @@ $("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); 
   } catch (e) { clearSplash(); bot("Bento 서버에 연결하지 못했어요. 잠시 뒤에 새로고침해 주세요."); renderMe(); renderHome(); }
 })();
 // 노트북 화면의 휴대폰 틀은 아이폰(393×852) 비율을 지키고, 창 높이가 모자라면 같은 비율로 줄여 맞춘다
-function fitPhone() { const wide = innerWidth >= 900 && innerHeight >= 640; document.documentElement.style.setProperty("--phone-k", wide ? String(Math.min(1, (innerHeight - 60) / 852)) : "1"); }
+const MOUSE = "(hover: hover) and (pointer: fine)";
+function fitPhone() { const on = innerWidth >= 900 && innerHeight >= 640 && matchMedia(MOUSE).matches && document.documentElement.dataset.frame !== "off"; document.documentElement.style.setProperty("--phone-k", on ? String(Math.min(1, (innerHeight - 60) / 852)) : "1"); }
 addEventListener("resize", fitPhone); fitPhone();
 </script>
 </body>
