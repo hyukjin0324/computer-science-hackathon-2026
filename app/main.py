@@ -820,10 +820,14 @@ def agent_run(authorization: str | None = Header(default=None)):
             k = f"{repo}:{it['id']}:{lv}"
             if lv and _LAST_ALERT.get(k) != "sent":
                 _LAST_ALERT[k] = "sent"
-                lines.append(f"· {owner}님 차례 · {it['title']} ({int(age)}시간째)" if lv == 1 else f"· {it['title']} · {int(age)}시간째 승인이 없어서 이제 누구나 승인할 수 있어요")
+                lines.append(f"· {owner}님이 처리할 차례예요: {it['title']} ({prog.span(age)}째 그대로)" if lv == 1
+                             else f"· {it['title']} ({prog.span(age)}째 그대로) · 이제 팀원 누구나 처리할 수 있어요")
         if lines and hook and notify:
             import httpx
-            httpx.post(hook, json={"content": f"[{repo}] 승인을 기다리는 일\n" + "\n".join(lines), "allowed_mentions": {"parse": []}}, timeout=10)
+            app_url = os.getenv("BENTO_APP_URL", "")
+            httpx.post(hook, json={"content": f"[{repo}] 처리를 기다리는 일\n" + "\n".join(lines)
+                                   + "\n→ Bento가 해결 방법을 제안해 뒀어요. 앱 홈에서 제안을 확인하고 '승인하고 실행'을 누르면 바로 처리돼요."
+                                   + (f"\n{app_url}" if app_url else ""), "allowed_mentions": {"parse": []}}, timeout=10)
         tick = lazy_tick(repo)
         # 새로 올라온 대회 알리기 (마감 2주 안, 처음 본 것만)
         try:
