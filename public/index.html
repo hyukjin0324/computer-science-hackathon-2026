@@ -463,6 +463,8 @@ details.teamall summary { gap: 8px; } details.teamall summary .gsub { color: var
 @media (min-width: 900px) and (min-height: 700px) {
   html { background: #E9EAEE; }
   body { background: transparent; padding-block: 20px; }
+  body .sheet-bg, body .drawer-bg { margin: 0; }  /* 틀 안에서는 틀 자체가 화면 가장자리라, 좁은 화면용 바깥으로 내미는 여백이 안쪽 16px를 잘라 먹는다 */
+  body .drawer { padding-top: 26px; }  /* 둥근 모서리에 로고가 걸리지 않게 */
   .phone { height: calc(100% - 0px); max-height: 880px; background: var(--bg); border-radius: 40px; padding: 0 16px; overflow: hidden; box-shadow: 0 0 0 10px #17181C, 0 28px 70px rgb(23 24 28 / .28); }
 }
 @media (min-width: 900px) and (min-height: 700px) and (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { background: #111113; } }
