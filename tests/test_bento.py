@@ -1970,19 +1970,22 @@ def test_state_is_not_cached_in_demo_mode(monkeypatch):
     assert len(calls) == 2
 
 
-def _selfmerge_items(hours_to_deadline):
+def _selfmerge_items(days_to_deadline):
+    """마일스톤 마감은 날짜만 남고 그날 한국 시간 23:59로 읽으므로, 오늘 날짜면 24시간 안, 3일 뒤 날짜면 멀다 (시각에 흔들리지 않게)."""
     from app import watch
+    from app.rules import KST
     main._demo.reset()
-    if hours_to_deadline is not None:
-        _plan_milestone(9, "해커톤 제출", hours_to_deadline)
+    if days_to_deadline is not None:
+        day = (datetime.now(KST) + timedelta(days=days_to_deadline)).strftime("%Y-%m-%dT12:00:00Z")
+        main._demo.d["milestones"].append({"number": 9, "title": "해커톤 제출", "due_on": day, "description": "", "html_url": "https://github.com/x/y/milestone/9"})
     gh, st = main.state_for(None)
     st.signals = {**(st.signals or {}), "merged_unreviewed": [{"number": 101, "author": st.members[0], "title": "t101", "url": "https://github.com/x/y/pull/101"}]}
     return [i for i in watch.watch(st) if str(i.get("id", "")).startswith("selfmerge-")]
 
 
 def test_unreviewed_merge_is_quieter_in_the_last_24_hours_before_the_deadline():
-    far = _selfmerge_items(72)[0]
-    near = _selfmerge_items(10)[0]
+    far = _selfmerge_items(3)[0]
+    near = _selfmerge_items(0)[0]
     none = _selfmerge_items(None)[0]  # 제출 마감을 모르면 예전처럼
     assert far["sev"] == "확인" and none["sev"] == "확인"
     assert near["sev"] == "정리" and "마감이 가까워" in near["why"]  # 급하면 바로 머지하는 게 당연하니 맨 아래로
@@ -2007,3 +2010,19 @@ def test_app_install_files_are_served_and_linked():
     html = client.get("/").text
     assert 'rel="manifest"' in html and "apple-touch-icon" in html and "apple-mobile-web-app-capable" in html
     assert client.get("/icons/../app/main.py").status_code in (404, 422)  # 폴더 밖은 열지 않는다
+
+
+def test_work_plan_keeps_the_morning_of_the_deadline_for_the_final_check():
+    """마감이 낮 12시여도 영상·발표 완성이 마감 당일 새벽으로 밀리지 않고, 시연 시나리오는 MVP 마감보다 앞서 정해진다."""
+    from app.notice import SAMPLE_EXTRACT
+    from app.rules import KST
+    ex = SAMPLE_EXTRACT.model_copy(update={"apply_deadline_iso": None})  # 제출물: 저장소·README·발표 자료·시연 영상, 마감 11/24 12:00
+    steps = {s["title"]: datetime.fromisoformat(s["due"]) for s in work_plan(ex, datetime(2026, 11, 19, 19, 0, tzinfo=KST))}
+    day = lambda t: steps[t].astimezone(KST).date().isoformat()
+    last_night = datetime(2026, 11, 23, 23, 0, tzinfo=KST)
+    for t in ("시연 영상 촬영", "발표 자료 완성", "README·배포 정리"):
+        assert steps[t] <= last_night, (t, steps[t])  # 마감 전날 밤까지
+    assert day("최종 점검") == "2026-11-24" and steps["최종 점검"] > last_night  # 마감 당일 오전은 최종 점검
+    assert steps["시연 시나리오 정하기"] < steps["핵심 기능 완성 (MVP)"]  # 시나리오는 MVP 마감보다 앞
+    assert day("발표 자료 초안 공유") <= day("핵심 기능 완성 (MVP)")
+    assert steps["발표 자료 초안 공유"] < steps["발표 자료 완성"] and steps["시연 시나리오 정하기"] < steps["시연 영상 촬영"]  # 순서는 그대로
