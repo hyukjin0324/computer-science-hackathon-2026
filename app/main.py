@@ -1222,6 +1222,21 @@ def index():
     return FileResponse("public/index.html", headers={"Cache-Control": "no-cache"})  # 고친 화면이 바로 보이게
 
 
+@app.get("/manifest.webmanifest")
+def manifest():
+    """로컬 실행용. Vercel에서는 public/manifest.webmanifest를 바로 내보낸다."""
+    return FileResponse("public/manifest.webmanifest", media_type="application/manifest+json", headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/icons/{name}")
+def app_icon(name: str):
+    """로컬 실행용. Vercel에서는 public/icons/를 바로 내보낸다."""
+    path = os.path.join("public", "icons", os.path.basename(name))
+    if not name.endswith(".png") or not os.path.isfile(path):
+        raise HTTPException(404, "없는 아이콘이에요")
+    return FileResponse(path, headers={"Cache-Control": "public, max-age=86400"})
+
+
 @app.get("/design/")
 @app.get("/design/{name}")
 def design_page(name: str = "index.html"):
