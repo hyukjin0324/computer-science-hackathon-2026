@@ -456,6 +456,17 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .card.hint { display: flex; flex-direction: column; gap: 8px; } .card.hint .btn { align-self: flex-start; }
 .prow { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: baseline; font-size: var(--fs-body); } .prow span { color: var(--muted); font-size: var(--fs-small); } .prow .late { color: var(--crit); font-weight: 700; }
 details.teamall summary { gap: 8px; } details.teamall summary .gsub { color: var(--muted); font-weight: 500; font-size: var(--fs-small); } details.teamall summary .late { color: var(--crit); font-size: var(--fs-small); }
+.avatar { --sz: 28px; width: var(--sz); height: var(--sz); border-radius: 50%; flex: none; display: inline-grid; place-items: center; overflow: hidden; background: var(--surface-2); color: var(--ink); font-size: calc(var(--sz) * .42); font-weight: 700; border: 1px solid var(--line); vertical-align: middle; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.nm { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+/* 노트북처럼 넓은 화면에서는 휴대폰 틀 안에 넣어 보여 준다 (좁은 화면에서는 그대로 전체 화면) */
+@media (min-width: 900px) and (min-height: 700px) {
+  html { background: #E9EAEE; }
+  body { background: transparent; padding-block: 20px; }
+  .phone { height: calc(100% - 0px); max-height: 880px; background: var(--bg); border-radius: 40px; padding: 0 16px; overflow: hidden; box-shadow: 0 0 0 10px #17181C, 0 28px 70px rgb(23 24 28 / .28); }
+}
+@media (min-width: 900px) and (min-height: 700px) and (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { background: #111113; } }
+@media (min-width: 900px) and (min-height: 700px) { :root[data-theme="dark"] { background: #111113; } }
 details.teamall { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-box); padding: 4px 14px; }
 details.teamall[open] { padding-bottom: 12px; } details.teamall summary { list-style: none; } details.teamall summary::-webkit-details-marker { display: none; }
 details.teamall summary::after { content: '›'; margin-left: auto; color: var(--muted); transition: transform .15s; } details.teamall[open] summary::after { transform: rotate(90deg); } details.teamall summary { cursor: pointer; font-size: var(--fs-body); font-weight: 700; min-height: 40px; display: flex; align-items: center; } details.teamall > a { margin-top: 8px; }
@@ -638,6 +649,18 @@ function logSay(who, text) {
 function bot(text) { logSay("b", text); return add(h("div", "bub", text)); }
 let saidByUser = null;  // 입력창에 직접 쓴 말: 첫 '내 말'은 미리 정해 둔 문장 대신 이걸 보여 준다
 function me(text) { if (saidByUser) { text = saidByUser; saidByUser = null; } logSay("m", text); return add(h("div", "bub me", text)); }
+function avatar(login, size = 28) {
+  // 팀원 얼굴: 실제 저장소(GitHub 프로필 사진)에서만 사진을 쓰고, 데모나 사진을 못 읽으면 이니셜을 보여 준다
+  const s = h("span", "avatar"); s.style.setProperty("--sz", size + "px"); s.setAttribute("aria-hidden", "true");
+  s.textContent = String(login || "?").slice(0, 1).toUpperCase();
+  if (typeof H === "object" && H.mode === "live" && /^[A-Za-z0-9-]{1,39}$/.test(login || "")) {
+    const img = new Image(); img.alt = ""; img.decoding = "async"; img.referrerPolicy = "no-referrer";
+    img.onload = () => { s.textContent = ""; s.appendChild(img); };
+    img.src = `https://github.com/${login}.png?size=${size * 3}`;
+  }
+  return s;
+}
+function nameWithFace(login, label, size) { const w = h("span", "nm"); w.appendChild(avatar(login, size)); w.appendChild(h("b", null, label == null ? login : label)); return w; }
 function snack(t) { const s = h("div", "snack", t); document.querySelector(".phone").appendChild(s); setTimeout(() => s.remove(), 1800); }
 function chip(label, fn) { const b = add(h("button", "btn", label + " ›")); b.type = "button"; b.style.alignSelf = "flex-start"; b.onclick = () => { b.disabled = true; fn(); }; return b; }
 function link(label, url) { const a = h("a", "btn", label + " ↗"); a.href = url; a.target = "_blank"; a.rel = "noopener noreferrer"; return a; }
@@ -1459,7 +1482,7 @@ function homeBoard(v, me2, items) {
   if (groups.length) {
     const sh = h("div", "sech"); sh.appendChild(h("h2", null, "팀원 할 일")); v.appendChild(sh);
     groups.sort((x, y) => y.late - x.late || (y.items.length + y.tasks.length) - (x.items.length + x.tasks.length)).forEach((g) => {
-      const det = h("details", "teamall"); const sm = h("summary"); sm.appendChild(h("b", null, g.m));
+      const det = h("details", "teamall"); const sm = h("summary"); sm.appendChild(nameWithFace(g.m, g.m, 28));
       sm.appendChild(h("span", "gsub", `${roles[g.m] || "역할 없음"} · ${g.items.length + g.tasks.length}개`)); if (g.late) sm.appendChild(h("span", "late", `늦음 ${g.late}`));
       det.appendChild(sm); g.items.forEach((it) => det.appendChild(itemRow(it, true))); g.tasks.forEach((t) => det.appendChild(taskRow(t)));
       v.appendChild(det);
@@ -2396,7 +2419,7 @@ function buildRoles(v, closeSheet) {
     if (!ex.length) { body.textContent = "저장소 팀원을 읽지 못했어요."; return; }
     ex.forEach((m) => {
       pick[m] = [...(r.roles[m] || [])];
-      const row = h("div", "rolerow"); row.appendChild(h("b", null, m + (m === meUser() ? " (나)" : "")));
+      const row = h("div", "rolerow"); row.appendChild(nameWithFace(m, m + (m === meUser() ? " (나)" : ""), 28));
       const chips = h("div", "chips"); chips.setAttribute("role", "group"); chips.setAttribute("aria-label", `${m} 역할`);
       Object.entries(r.choices).forEach(([code, name]) => {
         const b = h("button", "chiptog", name); b.type = "button"; b.setAttribute("aria-pressed", String(pick[m].includes(code)));
@@ -2470,7 +2493,7 @@ const ME_PAGES = {
   const card = h("div", "card"); card.appendChild(h("b", null, "당번 돌아가기"));
   const n0 = h("div", "note", "승인을 맡은 사람이 없는 일은 그날의 당번이 먼저 챙겨요. 순서는 한 번 무작위로 정해서 고정하고, 정한 날수마다 다음 사람에게 넘어가요. 디스코드를 연결해 두면 당번이 바뀌는 날 알려 줘요(서버에서 자동 알림을 켠 경우)."); card.appendChild(n0);
   const list = h("div"); list.style.marginTop = "8px";
-  sch.forEach((x, i) => { const r = h("div", "app"); r.style.gridTemplateColumns = "1fr auto"; const t = h("span"); t.appendChild(h("b", null, x.who + (i === 0 ? " · 지금" : ""))); r.appendChild(t); const dt = h("span", "note", x.from === x.to ? md(x.from) : `${md(x.from)} ~ ${md(x.to)}`); r.appendChild(dt); list.appendChild(r); });
+  sch.forEach((x, i) => { const r = h("div", "app"); r.style.gridTemplateColumns = "1fr auto"; const t = h("span"); t.appendChild(nameWithFace(x.who, x.who + (i === 0 ? " · 지금" : ""), 28)); r.appendChild(t); const dt = h("span", "note", x.from === x.to ? md(x.from) : `${md(x.from)} ~ ${md(x.to)}`); r.appendChild(dt); list.appendChild(r); });
   card.appendChild(list);
   const hl = h("div", "lab", "몇 일마다 바꿀까요?"); hl.style.marginTop = "12px"; card.appendChild(hl);
   let pick = rot, reshuffle = false; const opts = [[1, "매일"], [2, "2일"], [3, "3일"], [7, "일주일"]]; if (!opts.some(([d]) => d === rot)) opts.push([rot, `${rot}일`]);
