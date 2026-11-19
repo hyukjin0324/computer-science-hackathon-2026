@@ -1516,7 +1516,7 @@ function resumeChat() {
     where = `협업 중${subD != null && subD >= 0 ? ` · 제출 마감 D-${subD}` : ""}`;
     if (lastProgress && lastProgress.findings && lastProgress.findings.length) next = ["늦어진 일 보기", () => { me("늦어진 일 보여 줘"); progressCard(lastProgress, true); }];
     else if (subD != null && subD >= 0 && subD <= 3) next = ["제출 전 점검하기", submit];
-    else if (!store.get("plan:" + projKey(), null) && ex.submit_deadline_iso) next = ["마감까지 계획 짜기", planFlow];
+    else if (!hasPlan() && ex.submit_deadline_iso) next = ["마감까지 계획 짜기", planFlow];
     else next = ["오늘 할 일 정리", today];
   }
   const c = h("div", "task resume"); const hd = h("div", "task-h"); hd.appendChild(h("b", null, `이어서 하기 · ${projName()}`)); c.appendChild(hd);
@@ -2247,7 +2247,9 @@ $("fab").onclick = () => { showTab("chat"); today(); };
 /* ---------- 캘린더 ---------- */
 let calSel = null, calState = null;
 function dayKey(d) { return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
-async function loadCalState() { if (curDraft()) { calState = null; return renderCal(); } try { calState = await api("/state"); } catch (e) { calState = null; } renderCal(); }
+function planInRepo() { return !!(calState && calState.milestones && calState.milestones.some((m) => /^계획 · /.test(m.title))); }  // 계획은 이 기기에만 저장되므로, 저장소에 '계획 · …' 마일스톤이 있으면 다른 기기에서도 계획이 있는 것으로 본다
+function hasPlan() { return store.get("plan:" + projKey(), []).length > 0 || planInRepo(); }
+async function loadCalState() { if (curDraft()) { calState = null; return renderCal(); } try { calState = await api("/state"); } catch (e) { calState = null; } renderCal(); if (typeof resumeChat === "function") resumeChat(); }
 const PALETTE = ["--p0", "--p1", "--p2", "--p3", "--p4", "--p5"];
 function colorOf(key) {  // 팀플마다 색을 한 번 정하면 계속 같은 색
   const map = store.get("colors", {});
@@ -2299,7 +2301,7 @@ function events() {
       if (!m.due_on || planned.has(m.title.replace(/^계획 · /, ""))) return;
       if (m.title === "해커톤 제출" && ex && ex.submit_deadline_iso) return;  // 제출 마감과 같은 날
       const its = calState.issues.filter((i) => i.milestone === m.title);
-      push(m.due_on, "step", `마일스톤 · ${m.title}` + (stepDone(false, m) ? " ✓ 완료" : ""), `열린 이슈 ${m.open}개 · 닫힌 이슈 ${m.closed}개` + (its.length ? `\n${its.map((i) => `#${i.number} ${i.title}${i.assignees.length ? " (" + i.assignees.join(", ") + ")" : " (담당자 없음)"}`).join("\n")}` : ""), "today", { ms: m.title, done: stepDone(false, m) });
+      push(m.due_on, "step", (/^계획 · /.test(m.title) ? m.title.replace(/^계획 · /, "") : `마일스톤 · ${m.title}`) + (stepDone(false, m) ? " ✓ 완료" : ""), `열린 이슈 ${m.open}개 · 닫힌 이슈 ${m.closed}개` + (its.length ? `\n${its.map((i) => `#${i.number} ${i.title}${i.assignees.length ? " (" + i.assignees.join(", ") + ")" : " (담당자 없음)"}`).join("\n")}` : ""), "today", { ms: m.title, done: stepDone(false, m) });
     });
   });
   return ev.sort((a, b) => a.d - b.d);
@@ -2326,7 +2328,7 @@ function renderCal() {
   const now = new Date(); now.setHours(0, 0, 0, 0);
   const sub = ev.find((e) => e.title === "제출 마감" && e.d >= now);  // 완료한 제출은 D-day에서 뺀다
   if (sub) { const dd = Math.ceil((new Date(sub.d).setHours(0, 0, 0, 0) - now) / 864e5); const card = h("div", "dday"); const top = h("div", "dday-top"); const big = h("span", "big-d", `D-${dd}`); top.appendChild(big); top.appendChild(h("span", null, `가장 가까운 제출 마감 · ${sub.sub}`)); card.appendChild(top); card.appendChild(h("div", "note", sub.p.name)); body.appendChild(card); }
-  if (extract && !store.get("plan:" + projKey(), []).length && extract.submit_deadline_iso) {
+  if (extract && !hasPlan() && extract.submit_deadline_iso) {
     const t = h("button", "bigrow"); t.type = "button"; t.style.gridTemplateColumns = "1fr auto"; const tx = h("span"); tx.appendChild(h("b", null, `${projName()} 계획 짜기`)); tx.appendChild(h("small", null, "마감에서 거꾸로 할 일을 날짜별로 나눠 드려요")); t.appendChild(tx); t.appendChild(h("span", "chev", "›")); t.onclick = () => { showTab("chat"); planFlow(); }; body.appendChild(t);
   }
   const start = new Date(now); start.setDate(now.getDate() - ((now.getDay() + 6) % 7));
