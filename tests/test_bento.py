@@ -1389,6 +1389,38 @@ def test_attach_rejects_unknown_type_and_broken_hwp():
     assert r.status_code == 422
 
 
+def test_attach_stops_zip_bomb_in_hwpx_and_hwp(monkeypatch):
+    import base64
+    import io
+    import zipfile
+    import zlib
+    monkeypatch.setattr(attach, "MAX_UNPACKED", 1_000_000)  # 테스트에서는 1MB로 낮춰서 확인
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("Contents/section0.xml", b"<a>" + b" " * 5_000_000 + b"</a>")  # 5MB가 몇 KB로 압축된다
+    assert len(buf.getvalue()) < 100_000
+    r = client.post("/api/notice/file", json={"name": "공고.hwpx", "data": base64.b64encode(buf.getvalue()).decode()})
+    assert r.status_code == 413 and "너무 큰" in r.json()["detail"]
+    c = zlib.compressobj(9, zlib.DEFLATED, -15)
+    bomb = c.compress(b"\0" * 5_000_000) + c.flush()
+    with pytest.raises(attach.AttachError) as e:
+        attach._inflate(bomb, attach.MAX_UNPACKED)
+    assert e.value.status == 413
+    small = zlib.compressobj(9, zlib.DEFLATED, -15)
+    assert attach._inflate(small.compress(b"ok") + small.flush(), 100) == b"ok"  # 보통 크기는 그대로 푼다
+
+
+def test_attach_broken_hwpx_gets_friendly_message_not_500():
+    import base64
+    import io
+    import zipfile
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("Contents/section0.xml", "<hs:sec><깨진 xml")
+    r = client.post("/api/notice/file", json={"name": "공고.hwpx", "data": base64.b64encode(buf.getvalue()).decode()})
+    assert r.status_code == 422 and "깨졌거나" in r.json()["detail"]
+
+
 def test_attach_image_needs_ai_and_is_transcribed_by_haiku():
     import base64
     r = client.post("/api/notice/file", json={"name": "poster.png", "mime": "image/png", "data": base64.b64encode(b"\x89PNG" + b"0" * 64).decode()})
