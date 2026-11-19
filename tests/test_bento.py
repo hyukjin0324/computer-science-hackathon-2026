@@ -761,6 +761,38 @@ def test_with_login_only_logged_in_people_run_and_name_is_real(monkeypatch):
     assert ok["ok"] and "seoyeon님 승인으로" in main._demo.d["comments"][14][-1]["body"]  # 화면이 보낸 이름이 아니라 로그인한 사람
 
 
+def _logged_in(login: str) -> TestClient:
+    c = TestClient(main.app)
+    c.cookies.set(auth_mod.SESSION, sign({"kind": "session", "login": login}, main.settings.signing_key))
+    return c
+
+
+def test_with_login_screen_name_header_cannot_set_proposer(monkeypatch):
+    _login_on(monkeypatch)
+    anon = client.post("/api/team-rules", json={"lazy": ["reviewers"], "hours": 6}, headers={"X-Bento-User": "seoyeon"}).json()["proposal"]
+    assert anon["by"] is None  # 로그인하지 않고 적은 이름은 믿지 않는다
+    mine = _logged_in("jiwoo").post("/api/team-rules", json={"lazy": ["reviewers"], "hours": 6}, headers={"X-Bento-User": "seoyeon"}).json()["proposal"]
+    assert mine["by"] == "jiwoo"  # 로그인한 사람이 제안자
+
+
+def test_outsider_cannot_open_approval_request_or_pose_as_teammate(monkeypatch):
+    _login_on(monkeypatch)
+    before = len(client.get("/api/triage").json()["items"])
+    forged = client.post("/api/team-rules", json={"lazy": ["reviewers", "reminders"], "hours": 6}, headers={"X-Bento-User": "seoyeon"}).json()["proposal"]
+    assert client.post("/api/approval-request", json={"token": forged["token"]}).status_code == 401  # 로그인 안 함
+    r = _logged_in("outsider").post("/api/approval-request", json={"token": forged["token"]})
+    assert r.status_code == 403 and "팀원만" in r.json()["detail"]  # 팀원이 아닌 GitHub 계정
+    r = _logged_in("doyoon").post("/api/approval-request", json={"token": forged["token"]})
+    assert r.status_code == 403 and "내가 낸 제안만" in r.json()["detail"]  # 팀원이라도 남의(또는 이름 없는) 제안은 안 된다
+    assert len(client.get("/api/triage").json()["items"]) == before  # 승인 대기에 아무것도 생기지 않았다
+    me = _logged_in("seoyeon")
+    own = me.post("/api/team-rules", json={"lazy": ["reviewers"], "hours": 6}).json()["proposal"]
+    ok = me.post("/api/approval-request", json={"token": own["token"]}).json()
+    assert ok["issue"] and not ok["already"]  # 팀원이 자기 제안을 보내는 평소 흐름은 그대로
+    req = [t for t in client.get("/api/triage").json()["items"] if t["id"].startswith("approve-")]
+    assert len(req) == 1 and req[0]["proposed_by"] == "seoyeon"
+
+
 def test_proposal_token_cannot_be_used_as_login(monkeypatch):
     _login_on(monkeypatch)
     p = _option("review")

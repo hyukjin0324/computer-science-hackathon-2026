@@ -97,8 +97,10 @@ async def _remember_asker(request: Request, call_next):
     """누가 제안을 만들었는지: 로그인한 사람(로그인을 켰을 때) 또는 화면에서 고른 아이디."""
     who = None
     try:
-        u = current_user(request) if settings.login_enabled else None
-        who = (u or {}).get("login") or (request.headers.get("x-bento-user") or "").strip() or None
+        if settings.login_enabled:  # 로그인을 켰으면 GitHub가 확인한 아이디만 믿는다 (화면이 보낸 이름은 누구나 적을 수 있다)
+            who = (current_user(request) or {}).get("login") or None
+        else:  # 로그인이 꺼진 데모·로컬: 화면의 '누구세요?'에서 고른 이름
+            who = (request.headers.get("x-bento-user") or "").strip() or None
     except Exception:  # noqa: BLE001
         who = None
     tok = _ASKER.set(who)
@@ -139,16 +141,21 @@ class DiscordIn(BaseModel):
     url: str = ""
 
 
-def _discord_actor(request: Request, st) -> str | None:
-    """디스코드 연결을 바꿀 수 있는 사람: 로그인했다면 그 저장소 팀원."""
+def _member_actor(request: Request, st, what: str) -> str | None:
+    """로그인을 켠 서버에서 이 일을 할 수 있는 사람: 로그인한 그 저장소 팀원. 로그인이 꺼져 있으면 None."""
     if not settings.login_enabled:
         return None
     u = current_user(request)
     if not u:
         raise HTTPException(401, {"message": "GitHub로 로그인해 주세요", "login": True})
     if u["login"] not in st.members:
-        raise HTTPException(403, "이 저장소 팀원만 디스코드를 연결할 수 있어요")
+        raise HTTPException(403, f"이 저장소 팀원만 {what} 수 있어요")
     return u["login"]
+
+
+def _discord_actor(request: Request, st) -> str | None:
+    """디스코드 연결을 바꿀 수 있는 사람: 로그인했다면 그 저장소 팀원."""
+    return _member_actor(request, st, "디스코드를 연결할")
 
 
 @app.get("/api/discord")
@@ -917,6 +924,10 @@ def approval_request(body: RequestIn, request: Request, x_bento_code: str | None
     except ProposalError as e:
         raise HTTPException(400, str(e)) from e
     gh, st = state_for(data["repo"])
+    # 로그인을 켠 서버: 그 저장소 팀원이, 자기가 낸 제안만 승인 요청을 보낼 수 있다 (팀 밖에서 이슈를 만들거나 팀원을 사칭하지 못하게)
+    actor = _member_actor(request, st, "승인 요청을 보낼")
+    if actor and data.get("by") != actor:
+        raise HTTPException(403, "내가 낸 제안만 승인 요청을 보낼 수 있어요. 화면을 새로 고친 뒤 다시 제안해 주세요")
     actions = ActionList.validate_python(data["actions"])
     key = _tok_key(body.token)
     for i in st.issues:
