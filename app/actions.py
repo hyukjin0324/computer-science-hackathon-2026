@@ -235,12 +235,12 @@ def validate(actions: list, state: RepoState) -> list[str]:
 
 
 def _ms_day(iso: str | None) -> str:
-    """마일스톤 마감은 GitHub에 날짜만 남는다(보내는 값은 그 날짜의 00:00Z). 시각처럼 보이는 09:00 대신 날짜만 보여 준다."""
+    """마일스톤 마감은 GitHub에 날짜만 남는다(보내는 값은 그 날짜의 12:00Z, 예전 값은 00:00Z). 시각처럼 보이는 09:00 대신 날짜만 보여 준다."""
     if not iso:
         return "날짜 미정"
     from datetime import datetime, timedelta, timezone
     d = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-    day = d.date() if iso.endswith("T00:00:00Z") else d.astimezone(timezone(timedelta(hours=9))).date()
+    day = d.date() if iso.endswith(("T00:00:00Z", "T12:00:00Z")) else d.astimezone(timezone(timedelta(hours=9))).date()
     return f"{day.month}월 {day.day}일({'월화수목금토일'[day.weekday()]})"
 
 

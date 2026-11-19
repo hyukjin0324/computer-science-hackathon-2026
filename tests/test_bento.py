@@ -978,8 +978,8 @@ def test_seed_page_is_local_only_and_needs_live_app():
 def test_github_milestone_dates_are_korean_dates():
     from app.notice import _utc
     from app.state import ms_due
-    assert _utc("2026-11-15T23:00:00+09:00") == "2026-11-15T00:00:00Z"  # 날짜가 밀리지 않게 한국 날짜로
-    assert _utc("2026-11-20T10:00:00+09:00") == "2026-11-20T00:00:00Z"
+    assert _utc("2026-11-15T23:00:00+09:00") == "2026-11-15T12:00:00Z"  # 날짜가 밀리지 않게 한국 날짜로
+    assert _utc("2026-11-20T10:00:00+09:00") == "2026-11-20T12:00:00Z"
     assert ms_due("2026-11-16T00:00:00Z").isoformat() == "2026-11-16T14:59:00+00:00"  # 그 날짜 한국 시간 23:59
 
 
@@ -1922,6 +1922,19 @@ def test_plan_issue_tells_where_it_lives_and_to_close_it():
     steps = [{"title": "핵심 기능", "due": (datetime.now(timezone.utc) + timedelta(days=2)).isoformat(), "note": "MVP"}]
     p = client.post("/api/schedule/github", json={"steps": steps}).json()["proposal"]
     assert any("닫아 주세요" in (s.get("text") or "") for s in p["steps"])
+
+
+def test_milestone_date_survives_github_converting_to_pacific_time():
+    """GitHub는 보낸 시각을 태평양 시간 날짜로 저장한다. 00:00Z로 보내면 하루 전 날짜가 되므로 정오로 보낸다."""
+    from datetime import datetime as dt
+    from zoneinfo import ZoneInfo
+    from app.notice import _utc
+    from app.state import ms_due
+    for day in ("2026-11-20", "2026-03-09", "2026-07-01"):  # 겨울·서머타임 전후
+        sent = _utc(f"{day}T23:00:00+09:00")
+        saved = dt.fromisoformat(sent.replace("Z", "+00:00")).astimezone(ZoneInfo("America/Los_Angeles")).date().isoformat()
+        assert saved == day, (day, sent, saved)
+    assert ms_due("2026-11-24T00:00:00Z").isoformat() == "2026-11-24T14:59:00+00:00"  # GitHub가 돌려주는 날짜 값은 그대로 그 날짜로 읽는다
 
 
 def test_alert_time_spans_are_easy_to_read():

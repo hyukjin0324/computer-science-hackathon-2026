@@ -286,7 +286,7 @@ def _seed_plan(repo: str, me: str, state) -> list[tuple[str, str]]:
     return out
 
 
-SEED_MS = [("계획 · 아이디어·역할 확정", "2026-11-15T00:00:00Z"), ("계획 · 핵심 기능 완성 (MVP)", "2026-11-18T00:00:00Z"), ("계획 · 최종 점검", "2026-11-19T00:00:00Z")]
+SEED_MS = [("계획 · 아이디어·역할 확정", "2026-11-15T12:00:00Z"), ("계획 · 핵심 기능 완성 (MVP)", "2026-11-18T12:00:00Z"), ("계획 · 최종 점검", "2026-11-19T12:00:00Z")]
 SEED_ISSUES = [("[계획] 아이디어·역할 확정", True, "계획 · 아이디어·역할 확정"), ("[계획] 핵심 기능 완성 (MVP)", True, "계획 · 핵심 기능 완성 (MVP)"),
                ("[계획] 최종 점검", False, "계획 · 최종 점검"), ("[제출물] 발표 자료", False, "해커톤 제출"), ("[제출물] 시연 영상", False, "해커톤 제출")]
 
@@ -333,7 +333,7 @@ async def seed_run(request: Request):
     done = []
     sub = st.milestone("해커톤 제출")
     if "due" in keys and sub:
-        gh.update_milestone(sub.number, "2026-11-20T00:00:00Z"); done.append("'해커톤 제출' 마감 채움")
+        gh.update_milestone(sub.number, "2026-11-20T12:00:00Z"); done.append("'해커톤 제출' 마감 채움")
     if "close_form" in keys:
         n = next(i.number for i in st.issues if i.title == "[제출] 제출 폼 작성")
         gh.comment(n, "제출 버튼은 사람이 마지막에 직접 누르는 일이라 할 일에서 뺐어요. (Bento)"); gh.update_issue(n, state="closed"); done.append(f"#{n} 닫음")
