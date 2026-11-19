@@ -165,6 +165,20 @@ def allow_ai(who: str, now: float | None = None) -> None:
 _CACHE: dict[str, NoticeExtract] = {}
 _CACHE_MAX = 100
 EMBED = re.compile(r"<!-- bento-notice:([0-9a-f]{16}) ([A-Za-z0-9_\-=]+) -->")
+SRC = re.compile(r"<!-- bento-src:(https://[^\s<>]{4,300}) -->")  # 공고를 읽어 온 주소: 서버가 하루 한 번 다시 읽어 마감이 바뀌면 알린다
+
+
+def safe_src(url: str | None) -> str | None:
+    u = (url or "").strip()
+    return u if u.startswith("https://") and len(u) <= 300 and not re.search(r"[\s<>]", u) else None
+
+
+def source_url(descriptions: list[str]) -> str | None:
+    for d in descriptions:
+        if m := SRC.search(d or ""):
+            return m.group(1)
+    return None
+
 
 # ---------- 사용량 기록 ----------
 PRICE_PER_MTOK = {"claude-haiku-5-5": (0.10, 0.50), "claude-sonnet-5-5": (2.0, 10.0), "claude-opus-5-5": (4.0, 20.0)}  # 입력, 출력 (USD / 100만 토큰)
@@ -335,12 +349,12 @@ def _is_repo_item(name: str) -> bool:
     return bool(re.search(r"저장소|repo|github", name, re.I)) and not re.search(r"README", name, re.I)
 
 
-def plan(ex: NoticeExtract, state: RepoState | None, milestone_title: str = "해커톤 제출", h: str | None = None) -> tuple[list, list[int]]:
+def plan(ex: NoticeExtract, state: RepoState | None, milestone_title: str = "해커톤 제출", h: str | None = None, src: str | None = None) -> tuple[list, list[int]]:
     """공고를 저장소 일정으로 바꾸는 행동 목록. 이미 있는 관련 이슈는 새로 만들지 않고 연결한다.
 
     마일스톤 설명에 분석 결과를 숨겨 저장해서, 팀원이 같은 공고를 다시 분석하지 않아도 되게 한다.
     """
-    desc = f"{ex.title} 제출 · Bento가 공고에서 만든 마일스톤" + (f"\n\n{embed(ex, h)}" if h else "")
+    desc = f"{ex.title} 제출 · Bento가 공고에서 만든 마일스톤" + (f"\n\n{embed(ex, h)}" if h else "") + (f"\n<!-- bento-src:{src} -->" if safe_src(src) else "")
     actions: list = [CreateMilestone(title=milestone_title, due_on=_utc(ex.submit_deadline_iso), description=desc)]
     linked: list[int] = []
     existing = [i for i in (state.issues if state else []) if not is_suspicious(i.body)]
