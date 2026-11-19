@@ -13,7 +13,7 @@
 | 기능명세서 (Notion) | https://app.notion.com/p/41a74ed5ffce816c9174e84558855a89 |
 | 표지 이미지 (발표용 1600×900) | [docs/cover.png](docs/cover.png) |
 | 프로토타입 (화면 시안) | https://claude.ai/artifact/XYafR8CsNqyoVyFXfvB8Jr |
-| 피그마 가져오기용 시안 | https://racing-basalt-z9sddsr-mini33392-6593.vercel.app/design/ (html.to.design 플러그인에 주소를 넣으면 고칠 수 있는 레이어로 들어와요) |
+| 피그마 가져오기용 시안 | https://racing-basalt-z9sddsr-mini33392-6593.vercel.app/design/ (실제 앱 화면을 떠 온 것. html.to.design 플러그인에 주소를 넣으면 고칠 수 있는 레이어로 들어와요) |
 | 발표 자료 | (제출 전에 채우기) |
 
 ## 왜 만들었나
@@ -23,18 +23,23 @@ Bento는 이런 일을 대신 지켜보고, 해야 할 일을 **누가, 언제�
 
 ## 무엇을 하나요
 
+신청 → 팀 세팅(역할·당번) → 협업 → 제출, 이 흐름을 휴대폰 화면(홈 · 대화 · 캘린더 · 마이페이지) 네 곳에서 챙겨 줘요.
+
 | 단계 | Bento가 하는 일 |
 |---|---|
-| 대회 찾기 | 학부 공지·개발 행사 모음에서 해커톤·공모전을 모아 보여 줘요 |
-| 신청 | 공고에서 마감·팀 인원·참가 자격·제출물을 뽑고, 원문 인용과 대조해요. 신청 버튼은 사용자가 직접 눌러요 |
-| 계획 | 제출 마감에서 거꾸로 단계별 계획을 짜고 GitHub 마일스톤·할 일·담당자로 만들어요. 발표 자료·시연 시나리오 같은 중간 마감도 넣어요 |
-| 협업 | 저장소를 지켜보다가 막힌 곳을 찾아 내 할 일 / 팀장이 정할 일 / 팀원 할 일로 나눠 보여 줘요 |
-| 진행 점검 | 계획과 실제 진행을 비교해서 늦은 단계를 찾고, 남은 시간에 맞게 다시 짜요 |
+| 신청 | 공고 링크·파일·글을 읽어 마감·팀 인원·참가 자격·제출물을 뽑고, 원문 인용과 대조해요. 신청 버튼은 사용자가 직접 눌러요 |
+| 팀 세팅 | 마이페이지에서 팀원별 **역할**(기획·PM, FE, BE …)과 디스코드를 한 번 정해 두면, 그 뒤 모든 담당 배정이 거기에 맞춰져요. 역할은 저장소 라벨에 저장돼 팀 전체가 같이 봐요 |
+| 계획 | 제출 마감에서 거꾸로 단계별 계획을 짜요(제출물 준비는 마감일 전날까지, 오래 걸리는 MVP는 앞쪽). GitHub 마일스톤·이슈·담당자로 만들고, 이미 있으면 다시 만들지 않아요 |
+| 협업 | 저장소를 지켜보다가 막힌 곳을 급한 순서로 찾아 **내 할 일 / 팀장이 정할 일 / 팀원 할 일**로 나눠 보여 줘요 |
+| 진행 점검 | 캘린더에서 "끝났어요"를 누르면 GitHub 이슈도 함께 닫혀요(실행 취소 가능). 닫히지 않은 단계가 늦어지면 남은 시간에 맞게 다시 짜 줘요 |
+| 알림 | 앱을 열지 않아도 매일 저녁 9시(한국 시간) 서버가 저장소를 읽고, 늦은 일·마감 임박·공고 변경을 **팀 디스코드**로 알려요 |
 | 제출 | 제출물이 다 있는지, 저장소가 공개인지, 마감 뒤 커밋이 없는지 점검해요 |
+
+모바일 우선이에요. 휴대폰에서는 홈 화면에 추가해 앱처럼 쓰고(PWA), 노트북에서는 일반 웹으로 열려요(마이페이지에서 휴대폰 틀 보기 켜고 끄기).
 
 ### 저장소에서 찾아 주는 일 (규칙 기반, AI 비용 없음)
 
-리뷰 대기 · 수정 요청 무응답 · 리뷰 없이 머지 · 담당 없는 할 일 · 맡기만 하고 손 안 댄 할 일 · 연락이 끊긴 팀원 · 초대 미수락 · main 빌드 깨짐 · 비밀키 커밋(값은 절대 보여 주지 않음) · 큰 파일·설치 폴더 · 계정에 안 잡힌 커밋 · 마감 임박·마감 뒤 커밋 · 공고 마감 날짜 변경(하루 한 번 다시 읽기)
+리뷰 대기 · 수정 요청 무응답 · 리뷰 없이 머지 · 담당 없는 할 일 · 맡기만 하고 손 안 댄 할 일 · 연락이 끊긴 팀원 · 초대 미수락 · main 빌드 깨짐 · 비밀키 커밋(값은 절대 보여 주지 않음) · 큰 파일·설치 폴더 · 계정에 안 잡힌 커밋 · 마감 임박·마감 뒤 커밋 · 공고 마감 날짜 변경(하루 한 번 공고 주소를 다시 읽어 바뀐 날짜를 디스코드로 알림)
 
 ### 에이전트 원칙
 
@@ -42,7 +47,8 @@ Bento는 이런 일을 대신 지켜보고, 해야 할 일을 **누가, 언제�
 관찰(저장소·공고 읽기) → 판단(규칙으로 우선순위) → 제안(서명된 토큰) → 사람이 고치고 승인 → 실행 직전 다시 확인 → 실행 → 결과 링크
 ```
 
-- 승인받고 직접 하는 일: 리뷰어 지정, 댓글, 이슈·마일스톤 만들기, 담당자 지정, 이슈 닫기, 팀 메시지
+- 승인받고 직접 하는 일: 리뷰어 지정, 댓글, 이슈·마일스톤 만들기, 담당자 지정, 팀 메시지
+- 승인 없이 바로 되는 일(되돌릴 수 있어요): 역할 저장, 캘린더 "끝났어요"(이슈 닫기, 실행 취소 있음)
 - **하지 않는 일**: 머지, 푸시, 코드 수정, 폼 제출 → 링크와 명령어로 안내만 해요
 - 팀 전체에 영향을 주는 변경은 제안한 사람이 아닌 다른 팀원이나 팀장이 승인해야 실행돼요
 - 저장소 글 속 "에이전트에게 하는 지시"는 따르지 않고 표시만 해요
@@ -60,10 +66,10 @@ Bento는 이런 일을 대신 지켜보고, 해야 할 일을 **누가, 언제�
 ## 구조
 
 ```text
-public/index.html   모바일 웹 화면 (홈 · 대화 · 캘린더 · 나)
-app/main.py         API (/api/...)
+public/index.html   모바일 웹 화면 (홈 · 대화 · 캘린더 · 마이페이지), 설치형(PWA) manifest·아이콘 포함
+app/main.py         API (/api/...) · 매일 도는 알림(/api/agent/run)
 app/github.py       GitHub App 클라이언트 (설치 토큰, 읽기 위주)
-app/state.py        저장소 상태 (리뷰 대기, CI, 충돌 등)
+app/state.py        저장소 상태 (리뷰 대기, CI, 충돌 등, 병렬로 읽고 15초 캐시)
 app/signals.py      PR·이슈 밖의 신호 (main 빌드, 활동, 파일, 초대, 키 모양)
 app/triage.py       막힌 곳 감지 규칙 → 우선순위와 행동 제안
 app/watch.py        팀원·저장소 상태 감지 (조용한 팀원, 비밀키, 마감 뒤 커밋 …)
@@ -72,7 +78,14 @@ app/actions.py      할 수 있는 행동 목록 · 검증 · 실행
 app/proposals.py    제안 서명 (DB 없이 승인 흐름을 안전하게)
 app/notice.py       공고 분석 (Claude) + 원문 인용 대조
 app/rules.py        AI 없이 공고 읽기 (규칙)
-app/schedule.py     마감에서 거꾸로 계획 짜기
+app/schedule.py     마감에서 거꾸로 계획 짜기 (제출물은 마감 전날, MVP는 앞쪽)
+app/progress.py     계획 대비 진행 점검 · 늦음 요약
+app/discord.py      팀 디스코드 웹훅 연결 (암호화해 저장소 라벨에 저장)
+app/setup.py        팀 규칙·역할 저장 (저장소 라벨)
+app/eligibility.py  참가 자격 판정
+app/submission.py   제출물 점검
+app/websearch.py · fetch.py · forms.py · attach.py  공고 읽기(웹 검색·링크·파일)
+app/coord.py        팀 단위 조율 · app/render.py 화면용 문장
 app/discover.py     대회 찾기 (사이트별 10초 간격, 목록은 1시간에 한 번)
 app/chat.py         대화창 자유 대화 (Claude)
 app/auth.py         GitHub 로그인
@@ -104,7 +117,7 @@ http://localhost:8787 을 열면 데모 저장소로 동작해요. GitHub App이
    - Metadata: Read-only
 4. Subscribe to events: Pull request, Pull request review, Issues, Issue comment, Check run
 5. 만든 뒤 Private key를 내려받고, 팀 저장소에 앱을 설치
-6. 환경 변수 설정 (`.env.example` 참고): `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `BENTO_REPO`, `BENTO_SIGNING_KEY`, `BENTO_ACCESS_CODE`, `ANTHROPIC_API_KEY`
+6. 환경 변수 설정 (`.env.example` 참고): `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `BENTO_REPO`, `BENTO_SIGNING_KEY`, `BENTO_ACCESS_CODE`, `ANTHROPIC_API_KEY`, `DISCORD_WEBHOOK_URL`(선택), `CRON_SECRET`(매일 알림용)
 
 배포 주소가 공개라면 `BENTO_ACCESS_CODE`를 꼭 설정하세요. 설정하지 않으면 주소를 아는 누구나 승인 버튼을 누를 수 있어요.
 
@@ -113,6 +126,8 @@ http://localhost:8787 을 열면 데모 저장소로 동작해요. GitHub App이
 ```bash
 npx vercel deploy --prod
 ```
+
+`vercel.json`의 크론이 매일 21:00(한국 시간)에 `/api/agent/run`을 불러 디스코드 알림을 보내요. Vercel에 `CRON_SECRET`을 넣어 두면 그 호출만 통과해요. 팀 디스코드는 마이페이지에서 웹훅 주소를 붙여 넣어 연결해요(서버 기본값 `DISCORD_WEBHOOK_URL`은 선택).
 
 환경 변수는 Vercel 프로젝트 Settings → Environment Variables에 넣어요. `.env`와 `*.pem`은 저장소와 배포에 올리지 않아요.
 
