@@ -378,15 +378,23 @@ class NoticeIn(BaseModel):
 
 
 @app.post("/api/notice")
-def analyze_notice(body: NoticeIn):
+def analyze_notice(body: NoticeIn, request: Request, x_bento_code: str | None = Header(default=None)):
     gh, st = None, None
     if not body.new_project:
         try:
             gh, st = state_for(body.repo)
         except HTTPException:
             pass
+
+    def guard():  # AI를 실제로 부를 때만: 로그인(또는 팀 접근 코드) 확인 + 횟수 제한. 캐시·규칙으로 읽을 때는 묻지 않는다
+        _check_code(x_bento_code, request)
+        u = current_user(request) if settings.login_enabled else None
+        notice_mod.allow_ai((u or {}).get("login") or (request.client.host if request.client else "anon"))
+
     try:
-        ex, dropped, source, usage = notice_mod.extract(body.text, [m.description for m in st.milestones] if st else None, allow_ai=not body.no_ai)
+        ex, dropped, source, usage = notice_mod.extract(body.text, [m.description for m in st.milestones] if st else None, allow_ai=not body.no_ai, guard=guard)
+    except notice_mod.NoticeLimit as e:
+        raise HTTPException(429, str(e)) from e
     except notice_mod.NoticeError as e:
         raise HTTPException(422, str(e)) from e
     if body.submit_deadline_iso:
@@ -785,8 +793,13 @@ def agent_run(authorization: str | None = Header(default=None)):
 
 
 @app.get("/api/discover")
-def discover_api(interests: str = "", force: bool = False):
-    """Bento가 먼저 찾아온 대회. 학과 게시판·공개 행사 목록을 1시간에 한 번만 읽는다. AI를 쓰지 않는다."""
+def discover_api(request: Request, interests: str = "", force: bool = False, x_bento_code: str | None = Header(default=None)):
+    """Bento가 먼저 찾아온 대회. 학과 게시판·공개 행사 목록을 1시간에 한 번만 읽는다. AI를 쓰지 않는다.
+
+    force(1시간을 기다리지 않고 다시 읽기)는 출처 사이트를 직접 읽으러 가므로 로그인이나 팀 접근 코드가 있어야 한다.
+    """
+    if force:
+        _check_code(x_bento_code, request)
     return disc.discover([k.strip() for k in interests.split(",") if k.strip()][:10], force=force)
 
 
