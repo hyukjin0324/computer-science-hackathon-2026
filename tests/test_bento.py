@@ -1122,7 +1122,7 @@ def test_watch_secret_never_shows_value():
     blob = str(it)
     assert key not in blob and "backend/.env" in it["title"] and ".env.example" not in it["title"]
     cmds = " ".join(h.get("command", "") for h in it["handoff"] if h)
-    assert "git rm --cached 'backend/.env'" in cmds and "src/config.ts" not in cmds  # 키가 적힌 코드 파일은 지우지 않는다
+    assert "git rm --cached backend/.env" in cmds and "src/config.ts" not in cmds  # 키가 적힌 코드 파일은 지우지 않는다
     assert "GitHub 토큰" in it["why"] and it["options"] == []  # 공개 댓글로 알리지 않는다
     assert secret_file("a/.env.local") and not secret_file(".env.sample") and not secret_file("src/env.ts")
     assert key_kinds("-sk-ant-" + "x" * 30) == [] and key_kinds("+-----BEGIN PRIVATE KEY-----") == ["개인 키"]  # 지운 줄은 안 본다
@@ -2120,3 +2120,40 @@ def test_calendar_undo_reopens_only_issues_the_calendar_closed():
     assert back["reopened"] == [nums[1]]  # 캘린더로 닫은 것만 다시 연다
     again = client.post("/api/plan/done", json={"milestone": "계획 · 테스트 단계", "reopen": nums}).json()
     assert again["reopened"] == []  # 이미 되돌린 것을 또 열지 않는다
+
+
+# ---- 심사 기준 자가 채점 ----
+from app import criteria as crit  # noqa: E402
+
+
+def test_criteria_parse_reads_weights_and_names():
+    from app.notice import Fact
+    f = [Fact(label="심사 기준", value="기술 완성도 30 · 창의성 25 · 실용성 25 · 발표 및 협업 20", quote="x")]
+    got = crit.parse(f)["items"]
+    assert [(i["name"], i["weight"]) for i in got] == [("기술 완성도", 30), ("창의성", 25), ("실용성", 25), ("발표 및 협업", 20)]
+    assert [crit.kind_of(i["name"]) for i in got] == ["tech", "idea", "value", "team"]
+    pct = crit.parse([], "문제 정의 30%, 완성도 30%, 창의성 20%, 발표 20%")["items"]
+    assert [i["weight"] for i in pct] == [30, 30, 20, 20]
+    assert crit.parse([Fact(label="시상", value="대상 100만 · 최우수 50만", quote="")])["items"] == []
+    assert crit.parse([], "심사는 공정하게 진행합니다")["items"] == []
+
+
+def test_criteria_score_endpoint_uses_repo_evidence():
+    facts = [{"label": "심사 기준", "value": "기술 완성도 30 · 창의성 25 · 실용성 25 · 발표 및 협업 20", "quote": "기술 완성도 30"}]
+    r = client.post("/api/criteria-score", json={"facts": facts, "links": {"slides": "https://example.com/a.pdf"}})
+    assert r.status_code == 200
+    j = r.json()
+    assert j["found"] and j["total"] == 100 and 0 <= j["points"] <= j["max"] <= 100
+    names = [c["name"] for c in j["criteria"]]
+    assert names == ["기술 완성도", "창의성", "실용성", "발표 및 협업"]
+    team = next(c for c in j["criteria"] if c["kind"] == "team")
+    assert any(s["id"] == "slides" and s["ok"] for s in team["signals"])  # 넣은 링크는 근거로 센다
+    assert team["human"]  # 기계가 못 보는 건 점수에 넣지 않고 사람 확인으로 둔다
+    assert all(t["fix"] for c in j["criteria"] for t in c["tips"])
+
+
+def test_criteria_without_criteria_in_notice_asks_for_text():
+    j = client.post("/api/criteria-score", json={"facts": []}).json()
+    assert j["found"] is False and j["criteria"] == []
+    j2 = client.post("/api/criteria-score", json={"facts": [], "text": "완성도 40, 창의성 30, 발표 30"}).json()
+    assert j2["found"] and j2["total"] == 100

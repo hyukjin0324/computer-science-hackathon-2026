@@ -43,6 +43,23 @@ def _check_host(url: str) -> None:
             raise FetchError("내부망 주소는 열 수 없어요")
 
 
+def _check_peer(r) -> None:
+    """실제로 연결된 서버 IP를 다시 본다. 검사할 때와 연결할 때 DNS 답이 다르면(DNS 바꿔치기) 내부망으로 붙을 수 있어서,
+    내부망이면 응답을 읽지 않고 멈춘다. 연결 정보를 알 수 없으면(테스트용 가짜 연결 등) 넘어간다."""
+    try:
+        addr = r.extensions["network_stream"].get_extra_info("server_addr")
+    except (KeyError, AttributeError):
+        return
+    if not addr:
+        return
+    try:
+        ip = ipaddress.ip_address(addr[0])
+    except ValueError:
+        return
+    if not ip.is_global:
+        raise FetchError("내부망 주소는 열 수 없어요")
+
+
 class _Text(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -96,6 +113,7 @@ def fetch_page(url: str, client: httpx.Client | None = None, max_bytes: int = MA
         for _ in range(MAX_REDIRECTS + 2):
             _check_host(url)
             with client.stream("GET", url, follow_redirects=False) as r:
+                _check_peer(r)
                 if r.is_redirect and r.headers.get("location"):
                     url = urljoin(url, r.headers["location"])
                     continue
@@ -130,6 +148,10 @@ def probe(url: str, client: httpx.Client | None = None) -> dict:
             except FetchError as e:
                 return {"ok": False, "status": None, "url": url, "error": str(e)}
             with client.stream("GET", url, follow_redirects=False) as r:
+                try:
+                    _check_peer(r)
+                except FetchError as e:
+                    return {"ok": False, "status": None, "url": url, "error": str(e)}
                 if r.is_redirect and r.headers.get("location"):
                     url = urljoin(url, r.headers["location"])
                     continue

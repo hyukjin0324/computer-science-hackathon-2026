@@ -5,6 +5,7 @@
 """
 
 import re
+import shlex
 from collections import Counter
 from itertools import combinations
 
@@ -123,7 +124,7 @@ def triage(state: RepoState, review_wait_hours: float = 24) -> list[dict]:
                           "handoff": [
                               {"label": "CI 기록 보기", "url": f"{pr.url}/checks"} if pr.ci == "fail" else None,
                               {"label": "바뀐 파일 보기", "url": f"{pr.url}/files"},
-                              {"label": "브랜치 받기", "command": f"git fetch origin && git checkout {pr.branch}"},
+                              {"label": "브랜치 받기", "command": f"git fetch origin && git checkout {shlex.quote(pr.branch)}"},
                               {"label": "main 최신 내용 합치기", "command": "git merge origin/main"} if pr.mergeable == "dirty" else None,
                           ],
                           "options": [{"label": f"{pr.author} 님께 상황 묻기", "recommended": True, "sub": "PR 댓글", "actions": [

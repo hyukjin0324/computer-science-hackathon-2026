@@ -29,7 +29,7 @@ from .demo import DemoGitHub
 from .fetch import FetchError, fetch_notice
 from .schedule import work_plan
 from .github import GitHub, GitHubError, installed_repos
-from .proposals import ProposalError, sign, verify
+from .proposals import MAX_AGE, ProposalError, sign, verify
 from .state import build_state
 from .triage import triage
 
@@ -408,8 +408,8 @@ def analyze_notice(body: NoticeIn, request: Request, x_bento_code: str | None = 
         except HTTPException:
             pass
 
-    def guard():  # AI를 실제로 부를 때만: 로그인(또는 팀 접근 코드) 확인 + 횟수 제한. 캐시·규칙으로 읽을 때는 묻지 않는다
-        _check_code(x_bento_code, request)
+    def guard():  # AI를 실제로 부를 때만: 로그인(또는 팀 접근 코드)·팀원 확인 + 횟수 제한. 캐시·규칙으로 읽을 때는 묻지 않는다
+        _check_ai(x_bento_code, request)
         u = current_user(request) if settings.login_enabled else None
         notice_mod.allow_ai((u or {}).get("login") or (request.client.host if request.client else "anon"))
 
@@ -447,6 +447,37 @@ def _check_code(code: str | None, request: Request | None = None) -> None:
         raise HTTPException(401, "팀 접근 코드가 맞지 않아요")
 
 
+_AI_MEMBER: dict[str, tuple[float, bool]] = {}  # 로그인 아이디 → (확인한 시각, Bento가 설치된 저장소의 팀원인지)
+AI_MEMBER_TTL = 600
+
+
+def _is_team_member(login: str) -> bool:
+    """Bento가 설치된 저장소 중 하나라도 팀원이면 True. GitHub를 못 읽으면 False(기억하지 않아서 다음에 다시 본다)."""
+    hit = _AI_MEMBER.get(login)
+    if hit and time.time() - hit[0] < AI_MEMBER_TTL:
+        return hit[1]
+    try:
+        ok = any(login in gh_for(r).members() for r in installed_repos(settings))
+    except Exception:  # noqa: BLE001
+        return False
+    _AI_MEMBER[login] = (time.time(), ok)
+    return ok
+
+
+def _check_ai(code: str | None, request: Request) -> None:
+    """AI를 쓰는 기능: 로그인(또는 팀 접근 코드) + 로그인을 켠 실제 서버에서는 Bento가 설치된 저장소의 팀원만.
+
+    GitHub 계정만 있으면 누구나 로그인할 수 있어서, 팀 밖 사람이 하루 AI 한도(서버 전체)를 다 써 버리면
+    정작 팀은 그날 AI를 못 썼다.
+    """
+    _check_code(code, request)
+    if not (settings.login_enabled and settings.live):
+        return
+    u = current_user(request)
+    if u and not _is_team_member(u["login"]):
+        raise HTTPException(403, "Bento를 설치한 저장소의 팀원만 AI 기능을 쓸 수 있어요")
+
+
 class FetchIn(BaseModel):
     url: str
     title: str | None = None  # 이미 아는 대회 이름 (웹 검색할 때 쓴다)
@@ -469,7 +500,12 @@ def fetch_url(body: FetchIn, request: Request, x_bento_code: str | None = Header
     except FetchError as e:
         raise HTTPException(422, str(e)) from e
     body_text = (page.get("text") or "").replace(page.get("title") or "", "").strip()
-    if len(body_text) < THIN and not body.no_ai and websearch.allowed(page.get("url") or body.url) and websearch.ready():
+    try:
+        ai_ok = True
+        _check_ai(x_bento_code, request)
+    except HTTPException:
+        ai_ok = False  # 팀원이 아니면 웹 검색 없이 읽은 만큼만 돌려준다
+    if ai_ok and len(body_text) < THIN and not body.no_ai and websearch.allowed(page.get("url") or body.url) and websearch.ready():
         u = current_user(request) if settings.login_enabled else None
         who = (u or {}).get("login") or (request.client.host if request.client else "anon")
         try:
@@ -507,7 +543,7 @@ def notice_file(body: FileIn, request: Request, x_bento_code: str | None = Heade
     try:
         ai = attach.kind_of(body.name, body.mime) in ("pdf", "image")
         if ai:
-            _check_code(x_bento_code, request)
+            _check_ai(x_bento_code, request)
         u = current_user(request) if settings.login_enabled else None
         who = (u or {}).get("login") or (request.client.host if request.client else "anon")
         return attach.read_file(body.name, body.mime, raw, who=who, ai_ready=ai and websearch.ready())
@@ -525,7 +561,7 @@ class ChatIn(BaseModel):
 def chat_free(body: ChatIn, request: Request, x_bento_code: str | None = Header(default=None)):
     """정해진 낱말로 못 알아들은 말에 짧게 답하고, 맞는 Bento 기능 하나를 고른다. 실행은 하지 않는다."""
     from . import chat as chat_mod
-    _check_code(x_bento_code, request)
+    _check_ai(x_bento_code, request)
     u = current_user(request) if settings.login_enabled else None
     who = (u or {}).get("login") or (request.client.host if request.client else "anon")
     try:
@@ -800,12 +836,16 @@ class TickIn(BaseModel):
 
 
 @app.post("/api/lazy/tick")
-def lazy_tick_api(body: TickIn):
-    """앱을 열 때마다 부른다. 팀이 켠 규칙과 시간 조건이 맞을 때만 움직인다."""
+def lazy_tick_api(body: TickIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    """앱을 열 때마다 부른다. 팀이 켠 규칙과 시간 조건이 맞을 때만 움직인다.
+
+    GitHub에 댓글을 달거나 실행하므로 로그인(또는 팀 접근 코드)이 있어야 한다. 화면은 실패하면 조용히 넘어간다.
+    """
+    _check_code(x_bento_code, request)
     return lazy_tick(body.repo)
 
 
-_LAST_ALERT: dict[str, str] = {}
+_LAST_ALERT: dict[str, str] = {}  # (예전) 서버 메모리로만 기억하던 보낸 알림. 지금은 저장소 라벨(ALERT_LABEL)에 둔다
 
 
 NOTICE_BASE = "bento-notice-base"  # 지난번에 본 공고 {해시|신청 마감|제출 마감}를 팀 저장소 라벨 설명에 둔다 (서버가 다시 켜져도 이어서 비교)
@@ -870,11 +910,114 @@ def notice_watch(gh, st, hook: str) -> str:
     return "changed" if diffs else "text-only"
 
 
+ALERT_LABEL = "bento-alerted-"  # 이미 보낸 알림 표시. 서버리스는 인스턴스마다 메모리가 따로라, 다음 날 실행 때도 알 수 있게 저장소 라벨에 둔다
+ALERT_KEEP = 14  # 라벨 설명은 100자까지: 6자 표시 14개 + 쉼표
+
+
+def _h6(s: str) -> str:
+    return hashlib.sha256(s.encode()).hexdigest()[:6]
+
+
+def _sent_marks(gh, kind: str) -> list[str]:
+    """이 저장소에 이미 보낸 알림 표시 (kind: sum·duty·esc·disc). 못 읽으면 빈 목록(한 번 더 보낼 수는 있다)."""
+    try:
+        return [m for m in (gh.get_label(ALERT_LABEL + kind).get("description") or "").split(",") if m]
+    except GitHubError:
+        return []
+
+
+def _save_marks(gh, kind: str, marks: list[str]) -> None:
+    desc = ",".join(list(dict.fromkeys(marks))[:ALERT_KEEP])[:100]
+    try:
+        gh.update_label(ALERT_LABEL + kind, desc)
+    except GitHubError:
+        try:
+            gh.create_label(ALERT_LABEL + kind, "EDEDED", desc)
+        except GitHubError:
+            pass  # 표시를 못 남겨도 알림은 이미 보냈다
+
+
+def _post(hook: str, content: str) -> bool:
+    """디스코드로 보낸다. 실패하면 False (보낸 것으로 표시하지 않아서 다음 실행 때 다시 보낸다). 다른 점검은 계속한다."""
+    import httpx
+    try:
+        r = httpx.post(hook, json={"content": content, "allowed_mentions": {"parse": []}}, timeout=10)
+    except httpx.HTTPError:
+        return False
+    return getattr(r, "status_code", 200) < 400
+
+
+def _agent_repo(repo: str, gh, st) -> dict:
+    """저장소 하나의 매일 점검. 보낸 알림은 저장소 라벨에 표시해서, 다음 날·다른 서버에서도 같은 알림을 다시 보내지 않는다."""
+    now = datetime.now(timezone.utc)
+    ex = notice_mod.from_descriptions([m.description for m in st.milestones])
+    r = prog.check(st, [], ex.submit_deadline_iso if ex else None)
+    sent = False
+    team_hook = discord_mod.read(gh, settings.signing_key)
+    hook = team_hook or settings.discord_webhook
+    notify = bool(team_hook) or os.getenv("BENTO_AUTO_NOTIFY") == "1"  # 팀이 디스코드를 직접 연결했으면 알림을 받겠다는 뜻이다
+    app_url = os.getenv("BENTO_APP_URL", "")
+    rules_now = getattr(st, "rules", {}) or {}
+    if rules_now.get("seed") and hook and notify:  # 당번 순서를 정해 둔 팀만: 새 당번이 시작하는 날 알린다
+        sched = own.duty_schedule(st.members, rules_now, now, 2)
+        today_kst = datetime.now(own.KST).date().isoformat()
+        if len(sched) == 2 and sched[0]["from"] == today_kst and today_kst not in _sent_marks(gh, "duty"):
+            days = rules_now.get("rotate", 1)
+            if _post(hook, f"[{repo}] 오늘부터 {days}일 동안 당번은 {sched[0]['who']}님이에요 (~{sched[0]['to'][5:].replace('-', '/')}). "
+                           f"다음 당번은 {sched[1]['who']}님, {sched[1]['from'][5:].replace('-', '/')}부터예요."):
+                _save_marks(gh, "duty", [today_kst])
+    key = _h6(r["summary"])
+    if r["findings"] and hook and notify and key not in _sent_marks(gh, "sum"):  # 같은 발견은 한 번만 (내용이 바뀌면 다시)
+        if _post(hook, f"[{repo}]\n{r['summary']}" + (f"\n앱에서 확인하고 승인하기: {app_url}" if app_url else "")):
+            _save_marks(gh, "sum", [key])
+            sent = True
+    # 승인이 미뤄지면 단계적으로 알린다: 12시간 → 주인에게 다시, 24시간 → 팀 전체 (단계마다 한 번만)
+    lines, now_keys = [], []
+    done = _sent_marks(gh, "esc") if hook and notify else []
+    for it in triage(st, settings.review_wait_hours):
+        owner, age = own.owner_and_age(it, st, settings.review_wait_hours, now)
+        lv = own.level(age)
+        if not lv:
+            continue
+        k = _h6(f"{it['id']}:{lv}")
+        now_keys.append(k)
+        if k not in done:
+            lines.append(f"· {owner}님이 처리할 차례예요: {it['title']} ({prog.span(age)}째 그대로)" if lv == 1
+                         else f"· {it['title']} ({prog.span(age)}째 그대로) · 이제 팀원 누구나 처리할 수 있어요")
+    esc_ok = True
+    if lines and hook and notify:
+        esc_ok = _post(hook, f"[{repo}] 처리를 기다리는 일\n" + "\n".join(lines)
+                       + "\n→ Bento가 해결 방법을 제안해 뒀어요. 앱 홈에서 제안을 확인하고 '승인하고 실행'을 누르면 바로 처리돼요."
+                       + (f"\n{app_url}" if app_url else ""))
+    if hook and notify and esc_ok and set(now_keys) != set(done):
+        _save_marks(gh, "esc", now_keys)  # 지금 기다리는 일만 기억한다 (해결된 일은 지운다)
+    notice_result = None
+    if hook and notify:
+        try:
+            notice_result = notice_watch(gh, st, hook)
+        except Exception:  # noqa: BLE001 - 공고 사이트가 잠깐 안 열려도 다른 점검은 계속한다
+            notice_result = "error"
+    tick = lazy_tick(repo)
+    # 새로 올라온 대회 알리기 (마감 2주 안, 이 팀에 처음 알리는 것만)
+    fresh = []
+    if hook and os.getenv("BENTO_AUTO_NOTIFY") == "1":
+        seen = _sent_marks(gh, "disc")
+        try:
+            fresh = [x for x in disc.discover()["items"] if x["deadline_iso"] and _h6(x["id"]) not in seen
+                     and datetime.fromisoformat(x["deadline_iso"]) - now < timedelta(days=14)][:3]
+        except Exception:  # noqa: BLE001 - 출처 사이트가 잠깐 안 열려도 다른 점검은 계속한다
+            fresh = []
+        if fresh and _post(hook, "Bento가 찾아온 대회\n" + "\n".join(f"· {x['title']} · 마감 {x['deadline_text']} ({x['source_name']})" for x in fresh)):
+            _save_marks(gh, "disc", [_h6(x["id"]) for x in fresh] + seen)
+    return {"repo": repo, "findings": len(r["findings"]), "notified": sent, "escalations": len(lines), "lazy": tick, "notice": notice_result}
+
+
 @app.get("/api/agent/run")
 def agent_run(authorization: str | None = Header(default=None)):
     """매일 정해진 시간에 혼자 도는 점검 (Vercel Cron 등). 저장소는 읽기만 하고, 발견한 게 있으면 팀 채널에 알린다.
 
     고치는 행동은 하지 않는다. 다시 짠 계획은 앱에서 사람이 승인해야 실행된다.
+    저장소 하나에서 오류가 나도(디스코드가 잠깐 안 됨, GitHub 오류 등) 나머지 저장소는 계속 점검한다.
     """
     secret = os.getenv("CRON_SECRET")
     if not secret or not hmac.compare_digest(authorization or "", f"Bearer {secret}"):
@@ -884,68 +1027,10 @@ def agent_run(authorization: str | None = Header(default=None)):
     for repo in repos:
         try:
             gh, st = state_for(repo)
-        except HTTPException:
-            continue
-        ex = notice_mod.from_descriptions([m.description for m in st.milestones])
-        r = prog.check(st, [], ex.submit_deadline_iso if ex else None)
-        sent = False
-        team_hook = discord_mod.read(gh, settings.signing_key)
-        hook = team_hook or settings.discord_webhook
-        notify = bool(team_hook) or os.getenv("BENTO_AUTO_NOTIFY") == "1"  # 팀이 디스코드를 직접 연결했으면 알림을 받겠다는 뜻이다
-        key = hashlib.sha256(r["summary"].encode()).hexdigest()[:12]
-        rules_now = getattr(st, "rules", {}) or {}
-        if rules_now.get("seed") and hook and notify:  # 당번 순서를 정해 둔 팀만: 새 당번이 시작하는 날 알린다
-            sched = own.duty_schedule(st.members, rules_now, datetime.now(timezone.utc), 2)
-            today_kst = datetime.now(own.KST).date().isoformat()
-            if len(sched) == 2 and sched[0]["from"] == today_kst and _LAST_ALERT.get("duty:" + repo) != today_kst:
-                import httpx
-                days = rules_now.get("rotate", 1)
-                httpx.post(hook, json={"content": f"[{repo}] 오늘부터 {days}일 동안 당번은 {sched[0]['who']}님이에요 (~{sched[0]['to'][5:].replace('-', '/')}). 다음 당번은 {sched[1]['who']}님, {sched[1]['from'][5:].replace('-', '/')}부터예요.",
-                                           "allowed_mentions": {"parse": []}}, timeout=10)
-                _LAST_ALERT["duty:" + repo] = today_kst
-        if r["findings"] and hook and notify and _LAST_ALERT.get(repo) != key:
-            import httpx
-            app_url = os.getenv("BENTO_APP_URL", "")
-            httpx.post(hook, json={"content": f"[{repo}]\n{r['summary']}" + (f"\n앱에서 확인하고 승인하기: {app_url}" if app_url else ""),
-                                                       "allowed_mentions": {"parse": []}}, timeout=10)
-            _LAST_ALERT[repo] = key
-            sent = True
-        # 승인이 미뤄지면 단계적으로 알린다: 12시간 → 주인에게 다시, 24시간 → 팀 전체
-        lines = []
-        for it in triage(st, settings.review_wait_hours):
-            owner, age = own.owner_and_age(it, st, settings.review_wait_hours, datetime.now(timezone.utc))
-            lv = own.level(age)
-            k = f"{repo}:{it['id']}:{lv}"
-            if lv and _LAST_ALERT.get(k) != "sent":
-                _LAST_ALERT[k] = "sent"
-                lines.append(f"· {owner}님이 처리할 차례예요: {it['title']} ({prog.span(age)}째 그대로)" if lv == 1
-                             else f"· {it['title']} ({prog.span(age)}째 그대로) · 이제 팀원 누구나 처리할 수 있어요")
-        if lines and hook and notify:
-            import httpx
-            app_url = os.getenv("BENTO_APP_URL", "")
-            httpx.post(hook, json={"content": f"[{repo}] 처리를 기다리는 일\n" + "\n".join(lines)
-                                   + "\n→ Bento가 해결 방법을 제안해 뒀어요. 앱 홈에서 제안을 확인하고 '승인하고 실행'을 누르면 바로 처리돼요."
-                                   + (f"\n{app_url}" if app_url else ""), "allowed_mentions": {"parse": []}}, timeout=10)
-        notice_result = None
-        if hook and notify:
-            try:
-                notice_result = notice_watch(gh, st, hook)
-            except Exception:  # noqa: BLE001 - 공고 사이트가 잠깐 안 열려도 다른 점검은 계속한다
-                notice_result = "error"
-        tick = lazy_tick(repo)
-        # 새로 올라온 대회 알리기 (마감 2주 안, 처음 본 것만)
-        try:
-            fresh = [x for x in disc.discover()["items"] if x["deadline_iso"] and _LAST_ALERT.get("disc:" + x["id"]) != "sent"
-                     and datetime.fromisoformat(x["deadline_iso"]) - datetime.now(timezone.utc) < timedelta(days=14)][:3]
-        except Exception:  # noqa: BLE001 - 출처 사이트가 잠깐 안 열려도 다른 점검은 계속한다
-            fresh = []
-        for x in fresh:
-            _LAST_ALERT["disc:" + x["id"]] = "sent"
-        if fresh and hook and os.getenv("BENTO_AUTO_NOTIFY") == "1":
-            import httpx
-            httpx.post(hook, json={"content": "Bento가 찾아온 대회\n" + "\n".join(f"· {x['title']} · 마감 {x['deadline_text']} ({x['source_name']})" for x in fresh),
-                                                       "allowed_mentions": {"parse": []}}, timeout=10)
-        report.append({"repo": repo, "findings": len(r["findings"]), "notified": sent, "escalations": len(lines), "lazy": tick, "notice": notice_result})
+            report.append(_agent_repo(repo, gh, st))
+        except Exception as e:  # noqa: BLE001 - 한 저장소의 실패가 다른 팀 점검을 막지 않게
+            print(json.dumps({"event": "bento_agent_error", "repo": repo, "error": f"{type(e).__name__}: {e}"[:300]}, ensure_ascii=False), flush=True)
+            report.append({"repo": repo, "error": True})
     return {"ok": True, "report": report}
 
 
@@ -1037,9 +1122,11 @@ def run_proposal(body: ExecuteIn, request: Request, x_bento_code: str | None = H
     else:
         _check_code(x_bento_code)
     try:
-        data = verify(body.token, settings.signing_key)
+        data = verify(body.token, settings.signing_key, max_age=APPROVE_MAX_AGE)
     except ProposalError as e:
         raise HTTPException(400, str(e)) from e
+    if time.time() - data.get("iat", 0) > MAX_AGE and not _open_request_for(data["repo"], body.token):
+        raise HTTPException(400, "오래된 제안이에요. 상황을 다시 확인해 주세요")  # 승인 요청으로 올린 것만 3일까지, 나머지는 지금처럼 6시간
     actions = ActionList.validate_python(data["actions"])
     for idx, text in body.edits.items():  # 사람이 고칠 수 있는 건 글뿐
         if 0 <= idx < len(actions) and (field := EDITABLE.get(actions[idx].type)):
@@ -1113,8 +1200,25 @@ def approval_request(body: RequestIn, request: Request, x_bento_code: str | None
     return {"issue": n.get("number"), "url": n.get("html_url"), "already": False}
 
 
+APPROVE_MAX_AGE = 3 * 24 * 3600  # 다른 팀원에게 보낸 승인 요청은 3일 동안 승인할 수 있다 (보통 제안은 6시간)
+
+
+def _open_request_for(repo: str, token: str) -> bool:
+    """이 제안이 아직 열려 있는 [승인 요청] 이슈로 올라가 있는지."""
+    key = _tok_key(token)
+    try:
+        return any((i.get("title") or "").startswith(APPROVE_PREFIX) and f"bento-approve:{key}" in (i.get("body") or "")
+                   for i in gh_for(repo).open_issues())
+    except Exception:  # noqa: BLE001 - 못 읽으면 오래된 제안으로 본다
+        return False
+
+
 def _approval_items(gh, st) -> list[dict]:
-    """GitHub에 올라온 승인 요청 → 승인 대기 항목 (제안한 사람 말고 다른 팀원·팀장이 승인)."""
+    """GitHub에 올라온 승인 요청 → 승인 대기 항목 (제안한 사람 말고 다른 팀원·팀장이 승인).
+
+    승인 요청은 3일 동안 승인할 수 있다. 전에는 보통 제안처럼 6시간이 지나면 목록에서 조용히 사라져서,
+    GitHub 이슈는 열려 있는데 승인할 방법이 없었다. 3일이 지나면 '오래된 승인 요청'으로 남겨 알린다.
+    """
     out = []
     for i in st.issues:
         if not i.title.startswith(APPROVE_PREFIX):
@@ -1122,15 +1226,21 @@ def _approval_items(gh, st) -> list[dict]:
         try:
             body = gh.issue(i.number).get("body") or ""
             m = re.search(r"bento-token:([A-Za-z0-9._\-=]+)", body)
-            data = verify(m.group(1), settings.signing_key) if m else None
+            data = verify(m.group(1), settings.signing_key, max_age=10 ** 9) if m else None  # 서명만 확인하고 나이는 아래에서 본다
         except (ProposalError, GitHubError, AttributeError):
             data = None
         if not data or data.get("repo") != gh.repo:
             continue
+        ev = [{"label": f"#{i.number} 승인 요청", "url": i.url}]
+        if time.time() - data.get("iat", 0) > APPROVE_MAX_AGE:
+            out.append({"id": f"approve-{i.number}", "sev": "확인", "title": f"오래된 승인 요청 · {data.get('summary', '')}",
+                        "why": "3일 넘게 승인되지 않아 더는 실행할 수 없어요. 필요하면 다시 제안하고, GitHub의 승인 요청 이슈는 닫아 주세요",
+                        "evidence": ev, "options": [], "handoff": [], "proposed_by": data.get("by"), "expired": True})
+            continue
         actions = ActionList.validate_python(data["actions"])
         out.append({"id": f"approve-{i.number}", "sev": "주의", "title": f"승인 요청 · {data.get('summary', '')}",
                     "why": f"{data.get('by') or '팀원'} 님이 제안했어요 · 제안한 사람이 아닌 팀원이나 팀장이 승인해요",
-                    "evidence": [{"label": f"#{i.number} 승인 요청", "url": i.url}], "options": [],
+                    "evidence": ev, "options": [],
                     "proposal": {"summary": data.get("summary", ""), "steps": _steps(actions, gh.repo), "token": m.group(1), "by": data.get("by"), "team_wide": True},
                     "proposed_by": data.get("by")})
     return out
@@ -1144,10 +1254,16 @@ class SubmitIn(BaseModel):
 
 
 @app.post("/api/submit-check")
-def submit_check(body: SubmitIn):
-    """제출 직전 확인: 자동 확인(근거 포함) · 사람 확인 목록 · 팀원 확인 상태."""
-    gh, st = state_for(body.repo)
+def submit_check(body: SubmitIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    """제출 직전 확인: 자동 확인(근거 포함) · 사람 확인 목록 · 팀원 확인 상태.
+
+    사용자가 적은 링크는 서버가 대신 열어 보므로, 링크가 있을 때만 로그인이나 팀 접근 코드를 확인한다
+    (공고 링크 열기와 같은 기준. 링크 없이 저장소만 보는 점검은 그대로).
+    """
     links = {k: v.strip() for k, v in body.links.items() if k in ("deploy", "video", "slides") and v and v.strip().startswith(("http://", "https://"))}
+    if links:
+        _check_code(x_bento_code, request)
+    gh, st = state_for(body.repo)
     try:
         out = sub_mod.run_checks(gh, st, body.deliverables, body.deadline_iso, links)
     except GitHubError as e:
@@ -1156,6 +1272,25 @@ def submit_check(body: SubmitIn):
     out["confirm"] = sub_mod.confirm_status(gh, n, st.members) if n else None
     out["members"] = st.members
     return out
+
+
+class CriteriaIn(BaseModel):
+    repo: str | None = None
+    facts: list[notice_mod.Fact] = []
+    text: str | None = None  # 공고에서 못 읽었을 때 직접 붙여 넣은 심사 기준 문장
+    links: dict[str, str] = {}
+
+
+@app.post("/api/criteria-score")
+def criteria_score(body: CriteriaIn):
+    """공고의 심사 기준 항목별로, 우리 저장소에서 확인되는 근거를 점수로 보여 준다 (AI 없음)."""
+    from . import criteria as crit
+    gh, st = state_for(body.repo)
+    links = {k: v.strip() for k, v in body.links.items() if k in ("deploy", "video", "slides") and v and v.strip().startswith(("http://", "https://"))}
+    try:
+        return crit.run(gh, st, body.facts, (body.text or "")[:600], links)
+    except GitHubError as e:
+        raise HTTPException(502, f"GitHub에서 읽지 못했어요: {e}") from e
 
 
 class ApplyCheckIn(BaseModel):

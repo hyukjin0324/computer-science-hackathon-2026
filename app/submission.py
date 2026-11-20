@@ -124,9 +124,15 @@ def run_checks(gh, state, deliverables: list[Deliverable], deadline_iso: str | N
 
     if deadline_iso:
         from .notice import aware_iso
-        left = (datetime.fromisoformat(aware_iso(deadline_iso)) - now).total_seconds() / 3600
-        status = "fail" if left <= 0 else "warn" if left < 3 else "ok"
-        rows.append(_row("마감까지 남은 시간", status, "마감이 지났어요" if left <= 0 else f"{int(left // 24)}일 {int(left % 24)}시간 남았어요"))
+        try:
+            due = datetime.fromisoformat(aware_iso(deadline_iso))
+        except (ValueError, TypeError):  # 읽을 수 없는 날짜는 서버 오류(500) 대신 확인 필요로
+            due = None
+            rows.append(_row("마감까지 남은 시간", "warn", "마감 날짜를 읽지 못했어요. 공고에서 제출 마감을 확인해 주세요"))
+        if due:
+            left = (due - now).total_seconds() / 3600
+            status = "fail" if left <= 0 else "warn" if left < 3 else "ok"
+            rows.append(_row("마감까지 남은 시간", status, "마감이 지났어요" if left <= 0 else f"{int(left // 24)}일 {int(left % 24)}시간 남았어요"))
 
     lock = None
     if n := find_confirm_issue(state):

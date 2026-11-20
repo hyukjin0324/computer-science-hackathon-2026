@@ -12,6 +12,12 @@ SUBMIT_MS = "해커톤 제출"
 MIN_STEP = timedelta(hours=6)  # 단계 하나에 최소 이 정도는 있어야 현실적이다
 
 
+def _aware(iso: str | None) -> str | None:
+    """시간대가 없는 날짜는 한국 시간으로 본다 (공고 날짜와 같은 기준). 읽을 수 없으면 ValueError."""
+    from .notice import aware_iso
+    return aware_iso(iso) if iso else iso
+
+
 def _h(td: timedelta) -> int:
     return int(td.total_seconds() // 3600)
 
@@ -57,6 +63,9 @@ def check(state: RepoState, plan: list[dict] | None, deadline_iso: str | None, n
           plan_start_iso: str | None = None) -> dict:
     """진행 점검. findings(발견), moves(바꿀 날짜), assign(담당 제안), scope(범위 줄이기 제안)."""
     now = now or datetime.now(timezone.utc)
+    # 화면 밖에서 온 '2026-12-01'처럼 시간대 없는 날짜도 비교할 수 있게 (섞이면 서버 오류가 났다)
+    plan = [{**s, "due": _aware(s["due"])} for s in (plan or [])]
+    deadline_iso, plan_start_iso = _aware(deadline_iso), _aware(plan_start_iso)
     findings: list[dict] = []
     ms_plan = {m.title[len(PLAN_PREFIX):]: m for m in state.milestones if m.title.startswith(PLAN_PREFIX)}
     steps = [{"title": t, "due": ms_due(m.due_on).isoformat(), "raw_due": m.due_on} for t, m in ms_plan.items() if m.due_on]

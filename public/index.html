@@ -273,6 +273,12 @@ textarea { width: 100%; min-height: 80px; resize: vertical; border: 1px solid va
 .elig .verdict .crow > span { font-weight: 800; }
 .elig .verdict .crow.fail > span { color: var(--crit); } .elig .verdict .crow.ok > span { color: var(--ok); } .elig .verdict .crow.warn > span { color: var(--warn); }
 .rolerow { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); } .rolerow b { font-size: var(--fs-body); }
+.crit-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; } .crit-h b { font-size: var(--fs-title); } .crit-h .big { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; } .crit-h .big small { font-size: var(--fs-body); color: var(--muted); font-weight: 600; }
+.crit { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); } .crit:first-of-type { border-top: 0; }
+.crit .row1 { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; } .crit .row1 span { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+.crit .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; } .crit .bar i { display: block; height: 100%; background: var(--ink); border-radius: 4px; }
+.crit .tip { font-size: var(--fs-small); color: var(--ink); } .crit .tip b { color: var(--ok); font-variant-numeric: tabular-nums; }
+.crit details summary { font-size: var(--fs-small); color: var(--muted); cursor: pointer; } .crit details .crow { margin-top: 6px; }
 .crow { display: grid; grid-template-columns: 20px 1fr; gap: 8px; font-size: var(--fs-body); }
 .crow small { display: block; color: var(--muted); font-size: var(--fs-small); }
 .crow .ev { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; }
@@ -814,7 +820,7 @@ function pickNoticeFile(btn, done) {
 }
 function pickIcon(k) { const e = h("span", "em"); e.innerHTML = lineIcon(k); return e; }
 function PICKS() {
-  return [["trophy", "새 대회 고르기", "Bento가 찾아온 대회에서 고르거나 공고 링크로 추가", () => discoverChat("새 대회 준비할래")], ["clip", "공고 파일로 시작", "포스터·HWP·PDF를 올리면 마감·자격을 정리해요", () => { me("공고 파일 올릴게"); noticeForm(null, null); }], ["list", "오늘 팀플 할 일 정리", "급한 순서대로 보여 드려요", today], ["cal", "마감까지 계획 짜기", "할 일을 날짜별로 나눠 캘린더와 GitHub에", planFlow], ["search", "진행 점검·다시 계획", "늦어진 단계를 찾아 남은 시간에 맞게 다시 짜요", () => progressCheck(false)], ["send", "제출 전 점검하기", "제출물과 저장소를 대조해요", submit]];
+  return [["trophy", "새 대회 고르기", "Bento가 찾아온 대회에서 고르거나 공고 링크로 추가", () => discoverChat("새 대회 준비할래")], ["clip", "공고 파일로 시작", "포스터·HWP·PDF를 올리면 마감·자격을 정리해요", () => { me("공고 파일 올릴게"); noticeForm(null, null); }], ["list", "오늘 팀플 할 일 정리", "급한 순서대로 보여 드려요", today], ["cal", "마감까지 계획 짜기", "할 일을 날짜별로 나눠 캘린더와 GitHub에", planFlow], ["search", "진행 점검·다시 계획", "늦어진 단계를 찾아 남은 시간에 맞게 다시 짜요", () => progressCheck(false)], ["send", "제출 전 점검하기", "제출물과 저장소를 대조해요", submit], ["trophy", "심사 기준으로 채점", "공고의 심사 기준에 맞춰 우리 저장소 근거를 점수로 봐요", () => criteriaScore()]];
 }
 function openPicks() {
   // 입력창 ＋: 대화가 길어져도 언제든 '바로 맡겨 보기'를 연다
@@ -1886,6 +1892,33 @@ function openItem(it) {
   scroll();
 }
 
+/* ---------- 심사 기준 자가 채점 ---------- */
+async function criteriaScore(text) {
+  if (needRepo("심사 기준으로 채점해 줘")) return;
+  if (text == null) me("심사 기준으로 채점해 줘");
+  if (!extract) { bot("먼저 대회 공고를 분석해야 심사 기준을 알 수 있어요."); chip("대회 공고 분석하기", notice); return; }
+  let r; try { r = await thinking("심사 기준을 우리 저장소와 맞춰 보고 있어요", api("/criteria-score", { method: "POST", body: JSON.stringify({ repo: curRepo(), facts: extract.facts || [], text: text || null, links: info() }) })); } catch (e) { return fail(e); }
+  if (!r.found) {
+    bot("공고에서 심사 기준의 항목과 배점을 못 찾았어요. 공고의 심사 기준 문장을 붙여 넣어 주세요. 예: 기술 완성도 30, 창의성 25, 실용성 25, 발표 20");
+    const c = add(h("div", "task")); const ta = h("textarea"); ta.setAttribute("aria-label", "심사 기준 문장"); ta.style.minHeight = "64px"; ta.placeholder = "항목 이름과 배점을 적어 주세요"; c.appendChild(ta);
+    const b = h("button", "btn primary", "이 기준으로 채점하기"); b.type = "button"; b.onclick = () => { if (ta.value.trim().length < 6) return ta.focus(); b.disabled = ta.disabled = true; criteriaScore(ta.value.trim()); }; c.appendChild(b); scroll(); return;
+  }
+  const c = add(h("div", "task")); const hd = h("div", "crit-h"); hd.appendChild(h("b", null, "심사 기준 자가 채점"));
+  const big = h("span", "big", String(r.points)); big.appendChild(h("small", null, ` / ${r.max}점`)); hd.appendChild(big); c.appendChild(hd);
+  c.appendChild(h("div", "note", r.note)); if (r.quote) c.appendChild(h("div", "note", "공고 원문: " + r.quote.slice(0, 120)));
+  r.criteria.forEach((k) => {
+    const w = h("div", "crit"); const r1 = h("div", "row1"); r1.appendChild(h("div", null, k.name));
+    r1.appendChild(h("span", null, k.points == null ? `${k.weight}점 · 사람이 판단` : `${k.points} / ${k.weight}점`)); w.appendChild(r1);
+    if (k.points != null) { const bar = h("div", "bar"); const i = h("i"); i.style.width = Math.round((k.points / k.weight) * 100) + "%"; bar.appendChild(i); w.appendChild(bar); }
+    k.tips.slice(0, 2).forEach((t) => { const d = h("div", "tip"); d.appendChild(h("b", null, `+${t.worth}점 `)); d.appendChild(document.createTextNode(t.fix)); w.appendChild(d); });
+    const det = h("details"); det.appendChild(h("summary", null, `근거 ${k.signals.length}개 보기`));
+    k.signals.forEach((x) => det.appendChild(crow({ name: x.text, status: x.ok ? "ok" : "fail", detail: x.detail, evidence: x.evidence })));
+    k.human.forEach((x) => det.appendChild(crow({ name: x.text, status: "warn", detail: x.detail })));
+    w.appendChild(det); c.appendChild(w);
+  });
+  c.appendChild(h("div", "note", `기준 버전: 커밋 ${r.head}`)); scroll();
+}
+
 /* ---------- 제출 점검 ---------- */
 async function submit() {
   if (needRepo("제출 전에 점검해 줘")) return;
@@ -2120,6 +2153,7 @@ async function runSubmitCheck() {
   const repoUrl = `https://github.com/${curRepo()}`; const fr = h("div", "frow"); fr.appendChild(h("span", null, repoUrl)); fr.appendChild(copyBtn("복사", () => repoUrl)); s2.appendChild(fr);
   if (noticeUrl()) s2.appendChild(link("공고·제출 페이지 열기", noticeUrl()));
   proofStage(s3, "submit", fresh ? conf.issue : null);
+  chip("심사 기준으로 채점해 보기", () => criteriaScore());
   scroll();
 }
 
