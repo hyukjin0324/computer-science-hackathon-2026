@@ -2250,7 +2250,9 @@ async function freeChat(t) {
   if (r.action && FREE_ACTIONS[r.action]) chip(r.label || "이어서 하기", FREE_ACTIONS[r.action]); else chip("할 수 있는 일 보기", openPicks);
 }
 $("plusBtn").onclick = () => { showTab("chat"); openPicks(); };
-$("inviteBtn").onclick = async () => { try { await navigator.clipboard.writeText(location.href); snack("팀원에게 보낼 링크를 복사했어요"); } catch (e) { snack(location.href); } };
+// 초대 링크에 지금 팀플(저장소)을 담는다. 서버에 팀플이 여럿이면 받은 사람이 기본 저장소로 들어가 버렸다
+function inviteLink() { const r = !curDraft() && curRepo(); return location.origin + location.pathname + (r ? "?repo=" + encodeURIComponent(r) : "") + "#home"; }
+$("inviteBtn").onclick = async () => { const url = inviteLink(); try { await navigator.clipboard.writeText(url); snack("팀원에게 보낼 링크를 복사했어요"); } catch (e) { snack(url); } };
 $("menuBtn").onclick = openProjects;
 $("projBtn").onclick = openProjectSheet;
 $("fab").onclick = () => { showTab("chat"); today(); };
@@ -2650,6 +2652,7 @@ $("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); 
 
 (async () => {
   const startTab = ["chat", "cal", "me"].find((t) => location.hash === "#" + t);  // '#chat'처럼 주소로 연 탭은 준비가 끝나면 그 탭으로
+  const inviteRepo = (new URLSearchParams(location.search).get("repo") || "").trim();  // 팀원이 보낸 초대 링크의 팀플 (owner/name)
   intro(); renderBox(); renderCal(); showTab("home");
   // 서버에 로그인 여부를 묻는 동안(0.1~0.3초) 홈이 비치지 않게 먼저 막을 덮는다. 첫 화면이 뜨면 이 막이 대신 사라진다
   const splash = h("div", "onb splash"); splash.setAttribute("aria-hidden", "true"); document.body.classList.add("onboarding");
@@ -2663,6 +2666,10 @@ $("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); 
     if (!cur || (cur.draft && !curDraft())) cur = { repo: curRepo() };
     if (!curDraft() && store.get("extract:" + projKey(), null) == null && store.get("extract", null)) store.set("extract:" + projKey(), store.get("extract", null));  // 예전 버전 기록 옮기기
     if (cur && cur.draft && !curDraft()) cur = { repo: curRepo() };
+    if (/^[\w.-]+\/[\w.-]+$/.test(inviteRepo)) {  // 초대 링크로 열었으면 그 팀플로 들어가고, 주소에서는 지운다 (새로 고쳐도 다시 바뀌지 않게)
+      cur = { repo: inviteRepo };
+      try { history.replaceState(history.state, "", location.pathname + location.hash); } catch (e) { /* 무시 */ }
+    }
     useProject(cur, true); resumeChat(); booted = true; loadDiscord().then(() => renderMe());
     if (startTab) showTab(startTab);
     loadProjects().then(() => { renderHome(); renderCal(); }).catch(() => {}).finally(() => reminders());  // 팀플 목록을 미리 받아 두면 고르기 화면이 바로 뜬다 (받은 뒤 지난 저장소 기록을 걸러 다시 그림)
