@@ -2157,3 +2157,13 @@ def test_criteria_without_criteria_in_notice_asks_for_text():
     assert j["found"] is False and j["criteria"] == []
     j2 = client.post("/api/criteria-score", json={"facts": [], "text": "완성도 40, 창의성 30, 발표 30"}).json()
     assert j2["found"] and j2["total"] == 100
+
+
+def test_criteria_score_needs_login_only_when_links_are_given(monkeypatch):
+    monkeypatch.setattr(crit, "probe", lambda url: {"ok": True, "status": 200, "url": url})  # 실제 네트워크로 나가지 않게
+    monkeypatch.setattr(main, "settings", main.settings.__class__(**{**main.settings.__dict__, "access_code": "c0de"}))
+    facts = [{"label": "심사 기준", "value": "기술 완성도 50 · 발표 50", "quote": "q"}]
+    assert client.post("/api/criteria-score", json={"facts": facts}).status_code == 200  # 링크 없이 저장소만 보는 채점은 그대로
+    withlink = {"facts": facts, "links": {"deploy": "https://example.com"}}
+    assert client.post("/api/criteria-score", json=withlink).status_code == 401  # 서버가 대신 열어 보는 링크가 있으면 확인
+    assert client.post("/api/criteria-score", json=withlink, headers={"X-Bento-Code": "c0de"}).status_code == 200

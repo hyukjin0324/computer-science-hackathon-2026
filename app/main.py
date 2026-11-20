@@ -1282,11 +1282,16 @@ class CriteriaIn(BaseModel):
 
 
 @app.post("/api/criteria-score")
-def criteria_score(body: CriteriaIn):
-    """공고의 심사 기준 항목별로, 우리 저장소에서 확인되는 근거를 점수로 보여 준다 (AI 없음)."""
+def criteria_score(body: CriteriaIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    """공고의 심사 기준 항목별로, 우리 저장소에서 확인되는 근거를 점수로 보여 준다 (AI 없음).
+
+    사용자가 적은 링크는 서버가 대신 열어 보므로, 링크가 있을 때만 로그인이나 팀 접근 코드를 확인한다 (제출 점검과 같은 기준).
+    """
     from . import criteria as crit
-    gh, st = state_for(body.repo)
     links = {k: v.strip() for k, v in body.links.items() if k in ("deploy", "video", "slides") and v and v.strip().startswith(("http://", "https://"))}
+    if links:
+        _check_code(x_bento_code, request)
+    gh, st = state_for(body.repo)
     try:
         return crit.run(gh, st, body.facts, (body.text or "")[:600], links)
     except GitHubError as e:
