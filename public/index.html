@@ -951,7 +951,7 @@ function pickNoticeFile(btn, done) {
 }
 function pickIcon(k) { const e = h("span", "em"); e.innerHTML = lineIcon(k); return e; }
 function PICKS() {
-  return [["trophy", "새 대회 고르기", "Bento가 찾아온 대회에서 고르거나 공고 링크로 추가", () => discoverChat("새 대회 준비할래")], ["clip", "공고 파일로 시작", "포스터·HWP·PDF를 올리면 마감·자격을 정리해요", () => { me("공고 파일 올릴게"); noticeForm(null, null); }], ["list", "오늘 팀플 할 일 정리", "급한 순서대로 보여 드려요", today], ["cal", "마감까지 계획 짜기", "할 일을 날짜별로 나눠 캘린더와 GitHub에", planFlow], ["search", "진행 점검·다시 계획", "늦어진 단계를 찾아 남은 시간에 맞게 다시 짜요", () => progressCheck(false)], ["send", "제출 전 점검하기", "제출물과 저장소를 대조해요", submit], ["trophy", "심사 기준으로 채점", "공고의 심사 기준에 맞춰 우리 저장소 근거를 점수로 봐요", () => criteriaScore()]];
+  return [["trophy", "새 대회 고르기", "찾아온 대회 고르기 · 공고 링크 추가", () => discoverChat("새 대회 준비할래")], ["clip", "공고 파일로 시작", "포스터·HWP·PDF를 올리면 마감·자격을 정리해요", () => { me("공고 파일 올릴게"); noticeForm(null, null); }], ["list", "오늘 팀플 할 일 정리", "급한 순서대로 보여 드려요", today], ["cal", "마감까지 계획 짜기", "할 일을 날짜별로 나눠 캘린더와 GitHub에", planFlow], ["search", "진행 점검·다시 계획", "늦어진 단계를 찾아 남은 시간에 맞게 다시 짜요", () => progressCheck(false)], ["send", "제출 전 점검하기", "제출물과 저장소를 대조해요", submit], ["trophy", "심사 기준으로 채점", "공고의 심사 기준에 맞춰 우리 저장소 근거를 점수로 봐요", () => criteriaScore()]];
 }
 function openPicks() {
   // 입력창 ＋: 대화가 길어져도 언제든 '바로 맡겨 보기'를 연다
@@ -996,7 +996,7 @@ function intro() {
   const all = PICKS(), find = (name) => all.find((x) => x[1].includes(name));
   // 처음 보이는 건 흐름 네 가지만: 대회 → 오늘 할 일 → 계획·점검 → 제출. 공고 파일·심사 기준 채점은 각 흐름 안에서(＋ 시트에도 있어요)
   const short = [find("새 대회 고르기"), find("할 일 정리"),
-    ["cal", "계획 짜기·진행 점검", "마감까지 날짜별 계획을 짜고, 늦어지면 다시 짜요", () => (hasPlan() ? progressCheck(false) : planFlow())],
+    ["cal", "계획 짜기·진행 점검", "날짜별 계획 짜기, 늦으면 다시 짜기", () => (hasPlan() ? progressCheck(false) : planFlow())],
     find("제출 전 점검하기")];
   short.forEach(([em, t, s, fn]) => {
     const x = h("button", "pick"); x.type = "button"; x.appendChild(pickIcon(em)); const tx = h("span"); tx.appendChild(h("b", null, t)); tx.appendChild(h("small", null, s)); x.appendChild(tx); x.appendChild(h("span", "chev", "›"));
@@ -2716,7 +2716,7 @@ function renderCal() {
   shown.forEach((e) => {
     const box = h("div", "evt"); box.style.setProperty("--c", `var(${e.c})`);
     const b = h("button"); b.type = "button"; const w = h("span", "when"); w.appendChild(h("b", null, `${e.d.getMonth() + 1}/${e.d.getDate()}`)); w.appendChild(document.createTextNode(`${String(e.d.getHours()).padStart(2, "0")}:${String(e.d.getMinutes()).padStart(2, "0")}`)); b.appendChild(w);
-    b.appendChild(h("span", "bar2")); const what = h("span", "what"); const tt = h("b", null, e.title); if (e.kind === "due") { const tg = h("span", "sev crit", "마감"); tg.style.marginLeft = "6px"; tt.appendChild(tg); } what.appendChild(tt);
+    b.appendChild(h("span", "bar2")); const what = h("span", "what"); const tt = h("b", null, e.title); what.appendChild(tt);
     const sm = h("small", null, [multi ? (e.p.draft ? "준비 중 · " : "") + e.p.name : "", e.sub].filter(Boolean).join(" · ")); sm.style.whiteSpace = "pre-line"; what.appendChild(sm); b.appendChild(what); b.appendChild(h("span", "chev", "›"));
     const acts = h("div", "acts2");
     const act = (label, s2, fn) => { const t = h("button", "bigrow"); t.type = "button"; const tx = h("span"); tx.appendChild(h("b", null, label)); tx.appendChild(h("small", null, s2)); t.appendChild(tx); t.appendChild(h("span", "chev", "›")); t.onclick = inProject(e.p, fn); acts.appendChild(t); };
