@@ -2083,3 +2083,40 @@ def test_notice_source_address_is_saved_in_the_milestone_only_when_safe():
     assert source_url([actions[0].description]) == "https://example.com/n?id=1"
     actions, _ = plan(SAMPLE_EXTRACT, None, h="0123456789abcdef", src="http://insecure.example.com")
     assert source_url([actions[0].description]) is None
+
+
+# ---- 심사 기준 자가 채점 ----
+from app import criteria as crit  # noqa: E402
+
+
+def test_criteria_parse_reads_weights_and_names():
+    from app.notice import Fact
+    f = [Fact(label="심사 기준", value="기술 완성도 30 · 창의성 25 · 실용성 25 · 발표 및 협업 20", quote="x")]
+    got = crit.parse(f)["items"]
+    assert [(i["name"], i["weight"]) for i in got] == [("기술 완성도", 30), ("창의성", 25), ("실용성", 25), ("발표 및 협업", 20)]
+    assert [crit.kind_of(i["name"]) for i in got] == ["tech", "idea", "value", "team"]
+    pct = crit.parse([], "문제 정의 30%, 완성도 30%, 창의성 20%, 발표 20%")["items"]
+    assert [i["weight"] for i in pct] == [30, 30, 20, 20]
+    assert crit.parse([Fact(label="시상", value="대상 100만 · 최우수 50만", quote="")])["items"] == []
+    assert crit.parse([], "심사는 공정하게 진행합니다")["items"] == []
+
+
+def test_criteria_score_endpoint_uses_repo_evidence():
+    facts = [{"label": "심사 기준", "value": "기술 완성도 30 · 창의성 25 · 실용성 25 · 발표 및 협업 20", "quote": "기술 완성도 30"}]
+    r = client.post("/api/criteria-score", json={"facts": facts, "links": {"slides": "https://example.com/a.pdf"}})
+    assert r.status_code == 200
+    j = r.json()
+    assert j["found"] and j["total"] == 100 and 0 <= j["points"] <= j["max"] <= 100
+    names = [c["name"] for c in j["criteria"]]
+    assert names == ["기술 완성도", "창의성", "실용성", "발표 및 협업"]
+    team = next(c for c in j["criteria"] if c["kind"] == "team")
+    assert any(s["id"] == "slides" and s["ok"] for s in team["signals"])  # 넣은 링크는 근거로 센다
+    assert team["human"]  # 기계가 못 보는 건 점수에 넣지 않고 사람 확인으로 둔다
+    assert all(t["fix"] for c in j["criteria"] for t in c["tips"])
+
+
+def test_criteria_without_criteria_in_notice_asks_for_text():
+    j = client.post("/api/criteria-score", json={"facts": []}).json()
+    assert j["found"] is False and j["criteria"] == []
+    j2 = client.post("/api/criteria-score", json={"facts": [], "text": "완성도 40, 창의성 30, 발표 30"}).json()
+    assert j2["found"] and j2["total"] == 100

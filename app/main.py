@@ -1143,6 +1143,25 @@ def submit_check(body: SubmitIn):
     return out
 
 
+class CriteriaIn(BaseModel):
+    repo: str | None = None
+    facts: list[notice_mod.Fact] = []
+    text: str | None = None  # 공고에서 못 읽었을 때 직접 붙여 넣은 심사 기준 문장
+    links: dict[str, str] = {}
+
+
+@app.post("/api/criteria-score")
+def criteria_score(body: CriteriaIn):
+    """공고의 심사 기준 항목별로, 우리 저장소에서 확인되는 근거를 점수로 보여 준다 (AI 없음)."""
+    from . import criteria as crit
+    gh, st = state_for(body.repo)
+    links = {k: v.strip() for k, v in body.links.items() if k in ("deploy", "video", "slides") and v and v.strip().startswith(("http://", "https://"))}
+    try:
+        return crit.run(gh, st, body.facts, (body.text or "")[:600], links)
+    except GitHubError as e:
+        raise HTTPException(502, f"GitHub에서 읽지 못했어요: {e}") from e
+
+
 class ApplyCheckIn(BaseModel):
     extract: notice_mod.NoticeExtract
     members: list[str] = []
