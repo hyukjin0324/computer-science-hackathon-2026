@@ -1242,7 +1242,7 @@ def test_chat_returns_reply_and_known_action(monkeypatch):
     chat_mod._hits.clear()
     fake = _FakeChatClaude('{"reply": "마감에 맞춰 계획을 짜 드릴게요.", "action": "plan"}')
     r = chat_mod.ask("이번 주에 뭘 해야 할지 정리해줘", [{"role": "assistant", "text": "앞 답"}, {"role": "user", "text": "전에 한 말"}, {"role": "assistant", "text": "AI 답"}], who="t1", client=fake)
-    assert r == {"ai": True, "reply": "마감에 맞춰 계획을 짜 드릴게요.", "action": "plan", "label": "계획 짜기"}
+    assert r == {"ai": True, "kind": "ask", "reply": "마감에 맞춰 계획을 짜 드릴게요.", "action": "plan", "label": "계획 짜기"}
     msgs = fake.sent["messages"]
     assert msgs[0]["role"] == "user" and msgs[-1] == {"role": "user", "content": "이번 주에 뭘 해야 할지 정리해줘"}
     assert fake.sent["model"] == "claude-haiku-5-5"
@@ -2178,3 +2178,27 @@ def test_issue_links_say_what_to_check():
         assert e["label"].startswith("#") and e["label"].endswith("확인하러 가기"), e["label"]  # '이슈 #49'만으로는 뭘 하는 버튼인지 모른다
         assert len(e["label"]) <= 40
     assert "\n" not in it["why"] and "#" not in it["why"]  # 번호·제목 나열 대신 한 줄 안내
+
+
+def test_chat_request_runs_the_feature_without_chatting():
+    chat_mod._hits.clear()
+    fake = _FakeChatClaude('{"kind": "do", "reply": "네, 바로 열게요.", "action": "today"}')
+    r = chat_mod.ask("오늘 할 일 보여 줘", who="t_do", client=fake)
+    assert r["kind"] == "do" and r["action"] == "today" and r["label"] == "오늘 할 일 보기"  # 화면이 설명 없이 바로 연다
+    assert "kind" in chat_mod.SCHEMA["required"] and "do" in chat_mod.SYSTEM
+
+
+def test_chat_off_topic_gets_a_fixed_short_notice_not_an_invented_answer():
+    chat_mod._hits.clear()
+    fake = _FakeChatClaude('{"kind": "offtopic", "reply": "오늘은 맑고 기온은 12도예요! 우산은 필요 없어요.", "action": "none"}')
+    r = chat_mod.ask("날씨가 어때", who="t_off", client=fake)
+    assert r == {"ai": True, "kind": "offtopic", "reply": chat_mod.OFFTOPIC, "action": "none", "label": None}
+    assert "날씨" not in r["reply"] and "도와드리기 어려워요" in r["reply"]  # AI가 지어낸 답은 버린다
+
+
+def test_chat_do_without_a_feature_or_unknown_kind_falls_back_to_ask():
+    chat_mod._hits.clear()
+    r = chat_mod.ask("그냥 뭐든 해 줘", who="t_do2", client=_FakeChatClaude('{"kind": "do", "reply": "무엇을 할까요?", "action": "none"}'))
+    assert r["kind"] == "ask" and r["action"] == "none"
+    r2 = chat_mod.ask("안녕", who="t_do3", client=_FakeChatClaude('{"kind": "zzz", "reply": "안녕하세요", "action": "none"}'))
+    assert r2["kind"] == "ask"

@@ -39,6 +39,10 @@ Bento가 할 수 있는 일:
 - today: 오늘 할 일·리뷰·담당 정하기 보기, 연락이 끊겼거나 맡은 일을 안 하는 팀원 챙기기(안부 댓글)
 - progress: 계획 대비 늦은 일 점검, 다시 계획
 - submit: 제출 전 빠진 것 점검
+kind(말의 종류)를 먼저 정한다:
+- do: 사용자가 Bento 기능을 해 달라고 요청한 말("~해 줘", "~할래", "~보여 줘", "~찾아 줘" 등). 이때 action은 반드시 그 기능이고 none이 아니다. 화면이 설명 없이 바로 그 기능을 연다. reply는 아주 짧게 한 문장.
+- ask: 팀플·대회와 관련된 질문이나 상담. 아래 규칙대로 짧게 답한다.
+- offtopic: 팀플·대회·Bento와 관계없는 말(날씨, 잡담, 코딩 질문, 상식 질문 등). action은 none이고, reply는 쓰지 않아도 된다(화면이 정해진 안내를 보여 준다). 이런 말에 답을 지어내거나 이야기를 이어 가지 않는다.
 규칙:
 - 한국어 존댓말로 1~3문장, 쉬운 말로 짧게 답한다.
 - 먼저 action을 하나 고른다. 지금 사용자에게 가장 먼저 필요한 기능 하나이고, 맞는 게 없으면 none이다.
@@ -58,16 +62,20 @@ CONTEXT_RULE = """
 SCHEMA = {
     "type": "object",
     "properties": {
-        "action": {"type": "string", "enum": list(ACTIONS)},  # 먼저 고르고, 답은 그 기능에 맞춰 쓴다
+        "kind": {"type": "string", "enum": ["do", "ask", "offtopic"]},  # 말의 종류를 먼저 정한다
+        "action": {"type": "string", "enum": list(ACTIONS)},  # 그다음 기능을 고르고, 답은 그 기능에 맞춰 쓴다
         "reply": {"type": "string"},
     },
-    "required": ["action", "reply"],
+    "required": ["kind", "action", "reply"],
     "additionalProperties": False,
 }
 
 _lock = threading.Lock()
 _hits: dict[str, list[float]] = {}
 _day = {"key": "", "n": 0}
+
+
+OFFTOPIC = "저는 대회 준비를 돕는 AI라 이 요청은 도와드리기 어려워요. 대회 찾기, 팀 일정·할 일 관리, 제출 준비와 관련된 질문을 해 주세요."
 
 
 class ChatError(Exception):
@@ -190,6 +198,11 @@ def ask(message: str, history=None, who: str = "anon", client=None, context=None
     except json.JSONDecodeError as e:
         raise ChatError("AI 답을 읽지 못했어요. 다시 해 주세요", 503) from e
     action = data.get("action") if data.get("action") in ACTIONS else "none"
+    kind = data.get("kind") if data.get("kind") in ("do", "ask", "offtopic") else "ask"
+    if kind == "offtopic":  # 관련 없는 말: 지어낸 답 대신 정해진 안내 한 줄
+        return {"ai": True, "kind": "offtopic", "reply": OFFTOPIC, "action": "none", "label": None}
     reply = str(data.get("reply") or "").strip()[:600] or "무슨 뜻인지 잘 모르겠어요. 조금만 더 알려 주세요."
+    if kind == "do" and action != "none":  # 요청: 화면이 설명 없이 바로 그 기능을 연다 (실행·승인은 그 기능 안에서 사람이 한다)
+        return {"ai": True, "kind": "do", "reply": reply, "action": action, "label": ACTIONS[action]}
     action = align(reply, action)
-    return {"ai": True, "reply": reply, "action": action, "label": ACTIONS[action]}
+    return {"ai": True, "kind": "ask", "reply": reply, "action": action, "label": ACTIONS[action]}
