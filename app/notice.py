@@ -238,12 +238,24 @@ def _iso(s: str | None) -> str | None:
         return None
 
 
+def unique_deliverables(delivs: list) -> list:
+    """이름이 같은 제출물은 처음 것만 남긴다 (빈칸·대소문자는 무시). '제출물: 발표 자료' 줄과 '발표 자료를 모두 제출' 줄이 함께 있는 공고."""
+    seen, out = set(), []
+    for d in delivs:
+        key = _norm(d.name).lower()
+        if key and key not in seen:
+            seen.add(key)
+            out.append(d)
+    return out
+
+
 def verify_quotes(ex: NoticeExtract, text: str) -> tuple[NoticeExtract, int]:
     """원문에 없는 인용이 붙은 항목은 버린다. 버린 개수를 함께 돌려준다."""
     src = _norm(text)
     facts = [f for f in ex.facts if f.quote.strip() and _norm(f.quote) in src]
     delivs = [d for d in ex.deliverables if d.quote.strip() and _norm(d.quote) in src]
     dropped = len(ex.facts) - len(facts) + len(ex.deliverables) - len(delivs)
+    delivs = unique_deliverables(delivs)  # 공고가 같은 제출물을 두 번 적어도 한 번만 (버린 개수에는 세지 않는다)
     clean = ex.model_copy(update={"facts": facts[:10], "deliverables": delivs[:10],
                                   "apply_deadline_iso": _iso(ex.apply_deadline_iso), "submit_deadline_iso": _iso(ex.submit_deadline_iso)})
     return clean, dropped
@@ -358,7 +370,8 @@ def plan(ex: NoticeExtract, state: RepoState | None, milestone_title: str = "해
     actions: list = [CreateMilestone(title=milestone_title, due_on=_utc(ex.submit_deadline_iso), description=desc)]
     linked: list[int] = []
     existing = [i for i in (state.issues if state else []) if not is_suspicious(i.body)]
-    for d in ex.deliverables:
+    # 저장소에 저장해 둔 예전 분석 결과에 같은 제출물이 두 번 있어도, 같은 제목의 이슈를 두 번 만들려다 제안 전체가 실패하지 않게
+    for d in unique_deliverables(ex.deliverables):
         if _is_repo_item(d.name) or is_submit_act(d.name):
             continue
         kws = [k for k in KEYWORDS if k.lower() in d.name.lower()]
