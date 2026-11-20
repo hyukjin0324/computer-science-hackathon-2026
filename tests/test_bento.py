@@ -2167,3 +2167,13 @@ def test_criteria_score_needs_login_only_when_links_are_given(monkeypatch):
     withlink = {"facts": facts, "links": {"deploy": "https://example.com"}}
     assert client.post("/api/criteria-score", json=withlink).status_code == 401  # 서버가 대신 열어 보는 링크가 있으면 확인
     assert client.post("/api/criteria-score", json=withlink, headers={"X-Bento-Code": "c0de"}).status_code == 200
+
+
+def test_issue_links_say_what_to_check():
+    items = client.get("/api/triage").json()["items"]
+    it = next(i for i in items if i["id"] == "assign")
+    assert it["evidence"], "담당 없는 이슈 카드에는 이슈 링크가 있어야 한다"
+    for e in it["evidence"]:
+        assert e["label"].startswith("#") and e["label"].endswith("확인하러 가기"), e["label"]  # '이슈 #49'만으로는 뭘 하는 버튼인지 모른다
+        assert len(e["label"]) <= 40
+    assert "\n" not in it["why"] and "#" not in it["why"]  # 번호·제목 나열 대신 한 줄 안내

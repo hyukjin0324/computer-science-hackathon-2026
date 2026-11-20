@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 
 from .actions import Comment, CreateIssue, is_suspicious
 from .state import RepoState, hours, ms_due, parse_ts
+from .triage import issue_link
 
 QUIET_H = 72  # 이만큼 활동이 없으면 '연락이 끊긴 팀원'
 STALE_H = 72  # 맡은 할 일이 이만큼 그대로면 '손을 안 댄 할 일'
@@ -119,7 +120,7 @@ def watch(state: RepoState) -> list[dict]:
         stale.sort(key=lambda x: -x[1])
         items.append({"id": "stale", "sev": "주의", "who": lead, "age": 0, "title": f"맡은 지 3일 넘게 그대로인 할 일 {len(stale)}개",
                       "why": " · ".join(f"#{i.number} {i.title} ({', '.join(i.assignees)}, {d}일째)" for i, d in stale[:3]),
-                      "evidence": [{"label": f"이슈 #{i.number}", "url": i.url} for i, _ in stale[:3]],
+                      "evidence": [issue_link(i, "진행 확인하러 가기") for i, _ in stale[:3]],
                       "options": [{"label": "담당자께 진행 상황 묻기", "recommended": True, "sub": f"이슈 {min(3, len(stale))}개에 댓글", "actions": [
                           Comment(number=i.number, body=f"{' '.join('@' + a for a in i.assignees)} 님, 이 일은 어디까지 됐나요? 막힌 게 있으면 말씀해 주세요. 시작 전이면 PR이나 브랜치를 먼저 열어 두면 팀이 알 수 있어요!")
                           for i, _ in stale[:3]]}]})
