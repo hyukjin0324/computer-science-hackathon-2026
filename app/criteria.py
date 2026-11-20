@@ -17,11 +17,11 @@ LABEL = re.compile(r"심사|평가")
 SKIP_LABEL = re.compile(r"시상|상금|일정|방법|절차")
 CHUNK = re.compile(r"^(?P<name>[가-힣A-Za-z][가-힣A-Za-z0-9 ·/&]*?)\s*[:：]?\s*(?P<w>\d{1,3})\s*(?:%|점|퍼센트)?$")
 
-KINDS = [  # 앞에서부터 맞는 첫 종류
+KINDS = [  # 항목 이름에서 가장 먼저 나오는 낱말의 종류 ('기술의 완성도와 시연'은 기술, '발표 및 협업'은 발표·협업)
     ("team", re.compile(r"발표|협업|팀|전달|소통|시연|역할")),
-    ("idea", re.compile(r"창의|참신|독창|혁신|차별|아이디어")),
-    ("tech", re.compile(r"기술|완성|구현|안정|품질|성능|개발")),
-    ("value", re.compile(r"실용|유용|활용|효용|필요|문제|사업|시장|확장|가치|타당|공감")),
+    ("idea", re.compile(r"창의|참신|독창|혁신|차별|아이디어|기획")),
+    ("tech", re.compile(r"기술|완성|구현|안정|품질|성능|개발|디자인|UI|UX|사용성", re.I)),
+    ("value", re.compile(r"실용|유용|활용|효용|필요|문제|사업|시장|확장|가치|타당|공감|실현|가능성|파급|기대\s*효과")),
 ]
 KIND_NAME = {"tech": "기술", "idea": "창의", "value": "가치", "team": "발표·협업", "other": "기타"}
 
@@ -50,10 +50,16 @@ def parse(facts: list[Fact] | list[dict], text: str | None = None) -> dict:
     return {"items": [], "quote": ""}
 
 
+WEIGHT_IN_PARENS = re.compile(r"[(（\[]\s*(\d{1,3})\s*(?:%|점|퍼센트)?\s*[)）\]]")  # '기술 완성도(30)', '창의성 (30점)'
+# 항목 나누는 곳: 쉼표·가운뎃점·줄바꿈·①② 같은 번호. '/'는 앞뒤에 빈칸이 있거나 배점 바로 뒤일 때만 ('UI/UX'는 자르지 않는다)
+SPLIT = re.compile(r"[·,;，、\n|①-⑳]+|\s+/\s*|/\s+|(?<=[\d%점])\s*/")
+
+
 def _items(raw: str) -> list[dict]:
-    s = re.sub(r"\([^)]*\)|\[[^\]]*\]", " ", raw or "")
+    s = WEIGHT_IN_PARENS.sub(r" \1", raw or "")  # 괄호 속 배점은 살리고
+    s = re.sub(r"\([^)]*\)|（[^）]*）|\[[^\]]*\]", " ", s)  # 나머지 괄호 속 설명은 지운다
     out, seen = [], set()
-    for part in re.split(r"[·,;，、\n/|]+", s):
+    for part in SPLIT.split(s):
         part = re.sub(r"\s+", " ", part).strip(" -•*")
         m = CHUNK.match(part)
         if not m:
@@ -68,7 +74,8 @@ def _items(raw: str) -> list[dict]:
 
 
 def kind_of(name: str) -> str:
-    return next((k for k, rx in KINDS if rx.search(name)), "other")
+    hits = [(m.start(), i, k) for i, (k, rx) in enumerate(KINDS) if (m := rx.search(name))]
+    return min(hits)[2] if hits else "other"
 
 
 def _sig(id, text, ok, w=1, detail="", evidence=None, fix=None):
@@ -86,8 +93,8 @@ def gather(gh, state, links: dict, probe_fn=None) -> dict:
         paths = [t.get("path", "") for t in gh.tree(head)]
     except Exception:  # noqa: BLE001 - 파일 목록을 못 읽어도 나머지는 채점한다
         paths = []
-    try:
-        commits = gh.commits(branch=branch, per_page=100)
+    try:  # 최근 100개만 보면 초반에만 기여한 팀원이 '커밋 없음'으로 나와서, 목록을 끝까지(최대 1,000개) 읽는다
+        commits = gh.api_all(gh._r("/commits"), {"sha": branch}) if hasattr(gh, "api_all") else gh.commits(branch=branch, per_page=100)
     except Exception:  # noqa: BLE001
         commits = []
     authors = set()
