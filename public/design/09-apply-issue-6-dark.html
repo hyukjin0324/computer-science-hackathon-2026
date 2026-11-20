@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390">
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:inherit}
+</style>
+<style>html,body{margin:0;padding:0} body{width:390px;min-height:844px}</style>
+<title>Bento · #6 수정 시안</title>
+<style>.issue6 { --paper:#fff; --ink:#17181c; --muted:#5b5f66; --line:#e5e6e9; --soft:#f0f1f3; --info:#2558b8; --info-bg:#e6eefb; --ok:#1e7a46; --ok-bg:#e1f3e8; --warn:#8a5a00; --warn-bg:#fff3d1; --fail:#b93b27; --fail-bg:#fbe9e5; --due:#6b4e00; --due-bg:#fff1c7; --primary:#17181c; --primary-ink:#fff; }
+.issue6.dark { --paper:#252627; --ink:#f2f2f5; --muted:#aaaeb6; --line:#3a3c41; --soft:#303135; --info:#8fb8ff; --info-bg:#1a2740; --ok:#6cd49a; --ok-bg:#1b3326; --warn:#f2b653; --warn-bg:#3a2d15; --fail:#ff8a73; --fail-bg:#3a211c; --due:#ffe08a; --due-bg:#3a2e11; --primary:#fff; --primary-ink:#000; }
+.issue6 p { margin:0; } .issue6-main { overflow-y:auto !important; scrollbar-width:none; }
+.contest-data, .source-heading, .deadline-row { display:flex; align-items:center; gap:8px; }
+.contest-hero { display:flex; align-items:flex-start; gap:8px; }
+.contest-mark { display:grid; place-items:center; flex:none; width:36px; height:36px; border-radius:10px; background:var(--info-bg); color:var(--info); }
+.contest-meta { display:flex; gap:4px 8px; flex-wrap:wrap; margin-top:4px; }
+.source-chip, .day-chip { display:inline-flex; padding:2px 8px; border-radius:10px; font-size:12px; font-weight:700; line-height:1.5; }
+.source-chip { color:var(--muted); background:var(--soft); }
+.day-chip { color:var(--due); background:var(--due-bg); } .day-chip.soon { color:var(--fail); background:var(--fail-bg); }
+.contest-result { display:grid; grid-template-columns:36px minmax(0,1fr) 18px; align-items:center; gap:8px; box-sizing:border-box; background:var(--paper); color:var(--ink); border:1px solid var(--line); border-radius:16px; padding:10px 14px; text-align:left; font:inherit; }
+.contest-result strong { font-size:14.5px; line-height:1.38; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.contest-meta + small { display:block; margin-top:4px; color:var(--muted); }
+.e6-results { display:flex; flex-direction:column; gap:8px; }
+.e6-summary { padding:8px 12px; background:var(--soft); border-radius:14px; font-size:14px; }
+.e6-row { display:grid; grid-template-columns:24px minmax(0,1fr); gap:8px; padding:8px 0; }
+.e6-row + .e6-row { border-top:1px solid var(--line); }
+.e6-row strong { font-size:13.5px; } .e6-status { font-size:12px; font-weight:700; color:var(--status); margin-left:8px; }
+.e6-row small { color:var(--muted); display:block; font-size:12.5px; line-height:1.52; margin:1px 0; }
+.e6-state { display:grid; width:24px; height:24px; border-radius:50%; place-items:center; background:var(--status-bg); color:var(--status); }
+.e6-row.ok { --status:var(--ok); --status-bg:var(--ok-bg); }
+.e6-row.warn { --status:var(--warn); --status-bg:var(--warn-bg); }
+.e6-row.fail { --status:var(--fail); --status-bg:var(--fail-bg); }
+.e6-link { display:inline-block; color:var(--info); font-size:13px; padding:4px 0; text-underline-offset:2px; }
+.source-evidence { display:flex; flex-direction:column; gap:8px; border-radius:14px; padding:12px; background:var(--info-bg); color:var(--ink); font-size:13px; }
+.source-heading, .source-evidence .e6-btn { color:var(--info); }
+.source-evidence .e6-btn { border-color:var(--info); background:transparent; }
+.source-details summary { cursor:pointer; min-height:44px; display:flex; align-items:center; justify-content:space-between; gap:8px; list-style:none; }
+.source-details summary::-webkit-details-marker { display:none; }
+.source-details[open] summary svg { transform:rotate(180deg); }
+.source-links { display:flex; flex-direction:column; padding-left:8px; }
+.e6-btn { min-height:44px; box-sizing:border-box; border:1px solid var(--line); border-radius:999px; background:var(--paper); color:var(--ink); font:inherit; font-weight:700; text-decoration:none; display:flex; align-items:center; justify-content:center; gap:6px; padding:8px 14px; }
+.e6-btn.primary { background:var(--primary); color:var(--primary-ink); border-color:transparent; }
+.apply-card { display:grid; gap:12px; background:var(--paper); border:1px solid var(--line); border-radius:20px; padding:16px; font-size:14px; }
+.apply-card > p, .deadline-row { color:var(--muted); font-size:13px; }
+.apply-card > .e6-link { justify-self:start; }
+.question-group { border:0 !important; padding:0 !important; }
+.question-group > div:first-child { display:none; }</style>
+</head>
+<body>
+<div style="width: 390px; height: 844px; box-sizing: border-box; background: #000000; color: #FFFFFF; font-family: 'Noto Sans KR', system-ui, sans-serif; display: flex; flex-direction: column; overflow: hidden" class="issue6 dark">
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 10px 4px">
+    <span style="width: 44px; height: 44px; display: grid; place-items: center"><svg width="22" height="22" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></span>
+    <span style="display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 999px; background: #1C1C1E; border: 1px solid #2C2C2E; font-size: 14.5px; font-weight: 800"><i style="width: 9px; height: 9px; border-radius: 50%; background: #6EA8FF"></i>준비 중 · 교내 해커톤 ▾</span>
+    <span style="width: 44px"></span>
+  </div>
+  <div style="flex: 1; overflow: hidden; padding: 6px 16px 0; display: flex; flex-direction: column; gap: 10px" class="issue6-main">
+    <div style="background: #1C1C1E; border: 1.5px solid #FFFFFF; border-radius: 20px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; justify-content: space-between; align-items: center">
+<b style="font-size: 15px">신청하기 · 교내 해커톤</b><span style="font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 99px; background: #3A3115; color: #FFE08A">2/3</span>
+</div>
+      <ol style="list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px">
+<li style="display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center">
+<i style="width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 12.5px; font-weight: 800; background: #FFC83D; color: #17181C; box-shadow: 0 0 0 4px #3A3115">1</i><b style="font-size: 12px; line-height: 1.25; color: #FFFFFF">자격 확인</b><small style="font-size: 10.5px; color: #98989F; margin-top: -3px">Bento</small>
+</li>
+<li style="display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center">
+<i style="width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 12.5px; font-weight: 800; background: #2C2C2E; color: #98989F">2</i><b style="font-size: 12px; line-height: 1.25; color: #98989F">신청 페이지에서 신청</b><small style="font-size: 10.5px; color: #98989F; margin-top: -3px">직접</small>
+</li>
+<li style="display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center">
+<i style="width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 12.5px; font-weight: 800; background: #2C2C2E; color: #98989F">3</i><b style="font-size: 12px; line-height: 1.25; color: #98989F">신청했어요</b><small style="font-size: 10.5px; color: #98989F; margin-top: -3px">직접</small>
+</li>
+</ol>
+    </div>
+    <div class="apply-card" id="official-notice">
+<b>2단계 · 신청 페이지에서 직접 신청</b><div class="deadline-row">
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM4 10h16M8 3v4M16 3v4"></path></svg><span>신청 마감 11월 22일(일) 23:59</span><span class="day-chip">D-4</span>
+</div>
+<p>실명·학번과 개인정보 동의는 신청 페이지에서 직접 입력해요.</p>
+<a class="e6-btn primary" href="#official-notice">신청 페이지 열기 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M7 7h10v10"></path></svg></a><button type="button" class="e6-btn">신청했어요</button><p>누르면 신청 마감 알림을 멈추고 다음 단계로 넘어가요.</p>
+<a class="e6-link" href="#official-notice">이 대회는 따로 신청이 없어요</a>
+</div>
+</div>
+  <div style="padding: 8px 16px 16px"><nav aria-label="탭" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; background: #1C1C1E; border: 1px solid #2C2C2E; border-radius: 22px; padding: 4px"><span style="height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11.5px; color: #98989F"><svg width="21" height="21" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 11l8-7 8 7v9H4z"></path></svg>홈</span><span style="height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11.5px; font-weight: 800; color: #FFFFFF"><svg width="21" height="21" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12a8 7 0 1 1 3.5 5.8L4 19.5l1.2-3.6A6.6 6.6 0 0 1 4 12z"></path></svg>대화</span><span style="height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11.5px; color: #98989F"><svg width="21" height="21" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="3"></rect><path d="M3.5 10h17M8 3v4M16 3v4"></path></svg>캘린더</span><span style="height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 11.5px; color: #98989F"><svg width="21" height="21" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"></path></svg>나</span></nav></div>
+</div>
+</body>
+</html>
