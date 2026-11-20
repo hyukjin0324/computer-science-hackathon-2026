@@ -1954,7 +1954,12 @@ function onboarding() {
 function dtxt(iso) { if (!iso) return ""; const n = new Date(); n.setHours(0, 0, 0, 0); const d = new Date(iso); d.setHours(0, 0, 0, 0); const k = Math.round((d - n) / 864e5); return k >= 0 ? `D-${k}` : `D+${-k}`; }
 function projSub(p) { if (p.error) return "저장소를 읽지 못했어요"; return [p.notice || "연결된 공고 없음", p.due ? `제출 ${dtxt(p.due)}` : "", p.total ? `제출물 ${p.done}/${p.total}` : ""].filter(Boolean).join(" · "); }
 function draftSub(d) { const ex = d.extract || {}; return [d.applied ? "신청 완료" : "신청 준비", ex.apply_deadline_iso ? `신청 ${dtxt(ex.apply_deadline_iso)}` : "", ex.submit_deadline_iso ? `제출 ${dtxt(ex.submit_deadline_iso)}` : ""].filter(Boolean).join(" · "); }
-async function loadProjects() { const r = await api("/projects"); projects = r.projects; if (r.install_url) H.install_url = r.install_url; return projects; }
+async function loadProjects() {
+  const r = await api("/projects"); projects = r.projects; if (r.install_url) H.install_url = r.install_url;
+  // 로그인한 사람의 저장소만 받았는데 지금 보고 있는 저장소가 그 안에 없으면(배포한 사람의 기본 저장소 등) 내 저장소로 옮긴다
+  if (r.mine_only && r.default && !curDraft() && !projects.some((p) => p.repo === curRepo())) useProject({ repo: r.default }, true);
+  return projects;
+}
 let DISC = { connected: false, source: null };  // 이 팀의 디스코드 연결 (서버 기본 채널이거나 팀이 직접 연결한 것)
 async function loadDiscord() {
   try { DISC = await api("/discord?repo=" + encodeURIComponent(curRepo())); } catch (e) { DISC = { connected: !!(H && H.discord), source: H && H.discord ? "server" : null }; }
@@ -2029,8 +2034,12 @@ function fillProjectList(box, close) {  // 서랍·시트·마이페이지 팀�
   return (async () => {
   try {
     await loadProjects(); live.innerHTML = "";
-    if (!projects.length) live.appendChild(h("div", "note", "Bento 앱이 설치된 저장소가 없어요."));
+    if (!projects.length) live.appendChild(h("div", "note", ME.logged_in ? "Bento 앱이 설치된 내 저장소가 아직 없어요." : "Bento 앱이 설치된 저장소가 없어요."));
     projects.forEach((p) => live.appendChild(proj(p.repo.split("/")[1], projSub(p), colorOf("r:" + p.repo), !curDraft() && curRepo() === p.repo, () => useProject({ repo: p.repo }))));
+    if (H.install_url) {  // 내 GitHub 저장소가 목록에 없으면: 그 저장소에 Bento 앱을 설치하면 여기에 생긴다 (전에는 이 화면에 방법이 없었다)
+      live.appendChild(h("div", "note", "내 저장소가 안 보이면, 그 저장소에 Bento 앱을 설치해 주세요. 설치하고 돌아오면 바로 연결돼요."));
+      const ins = link("내 저장소에 Bento 설치", H.install_url); ins.target = "_self"; live.appendChild(ins);
+    }
   } catch (e) { live.innerHTML = ""; live.appendChild(h("div", "note", e.message)); }
   })();
 }

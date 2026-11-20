@@ -254,8 +254,12 @@ def github_installed(installation_id: int = 0, setup_action: str = ""):
 
 
 @app.get("/api/projects")
-def projects():
-    """진행 중인 팀플 = Bento 앱이 설치된 저장소. 저장소마다 연결된 공고와 제출 마일스톤을 함께 준다."""
+def projects(request: Request):
+    """진행 중인 팀플 = Bento 앱이 설치된 저장소. 저장소마다 연결된 공고와 제출 마일스톤을 함께 준다.
+
+    GitHub로 로그인했으면 그 사람이 팀원인 저장소만 준다. 전에는 누가 로그인하든 앱이 설치된 모든 저장소
+    (배포한 사람의 저장소)가 떠서, 내 저장소는 없고 남의 저장소만 보였다.
+    """
     if settings.live:
         try:
             repos = installed_repos(settings)
@@ -263,8 +267,15 @@ def projects():
             raise HTTPException(502, "설치된 저장소 목록을 읽지 못했어요") from e
     else:
         repos = [_demo.repo]
+    user = current_user(request) if settings.live and settings.login_enabled else None
     out = []
     for r in repos:
+        if user:
+            try:
+                if user["login"] not in gh_for(r).members():
+                    continue  # 내가 팀원이 아닌 저장소는 보여 주지 않는다
+            except (GitHubError, HTTPException):
+                continue
         p = {"repo": r, "notice": None, "due": None, "done": None, "total": None}
         try:
             ms = gh_for(r).milestones()
@@ -279,7 +290,10 @@ def projects():
             done, left = sub.get("closed_issues", 0), sub.get("open_issues", 0)
             p.update(due=sub.get("due_on"), done=done, total=done + left)
         out.append(p)
-    return {"projects": out, "default": settings.default_repo if settings.live else _demo.repo, "install_url": _install_url()}
+    default = settings.default_repo if settings.live else _demo.repo
+    if user and not any(p["repo"] == default for p in out):
+        default = out[0]["repo"] if out else None  # 서버 기본 저장소의 팀원이 아니면 내 저장소를 기본으로
+    return {"projects": out, "default": default, "install_url": _install_url(), "mine_only": bool(user)}
 
 
 @app.get("/api/state")
