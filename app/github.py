@@ -63,9 +63,21 @@ class GitHub:
     def _r(self, p: str = "") -> str:
         return f"/repos/{self.owner}/{self.name}{p}"
 
+    MAX_PAGES = 10  # 목록은 100개씩 최대 1,000개까지 읽는다 (GitHub 호출이 끝없이 늘지 않게)
+
+    def api_all(self, path: str, params: dict | None = None) -> list:
+        """목록을 끝까지 읽는다. GitHub는 한 번에 최대 100개만 주므로, 꽉 찬 페이지가 오면 다음 페이지를 더 읽는다."""
+        out: list = []
+        for page in range(1, self.MAX_PAGES + 1):
+            batch = self.api("GET", path, params={**(params or {}), "per_page": 100, "page": page})
+            out += batch
+            if len(batch) < 100:
+                break
+        return out
+
     # ---------- 읽기 ----------
     def open_prs(self):
-        return self.api("GET", self._r("/pulls"), params={"state": "open", "per_page": 30})
+        return self.api_all(self._r("/pulls"), {"state": "open"})
 
     def pr_detail(self, n: int):
         return self.api("GET", self._r(f"/pulls/{n}"))
@@ -90,16 +102,16 @@ class GitHub:
         return [c["author"]["login"] for c in commits if c.get("author")]
 
     def open_issues(self):
-        items = self.api("GET", self._r("/issues"), params={"state": "open", "per_page": 100})
+        items = self.api_all(self._r("/issues"), {"state": "open"})
         return [i for i in items if "pull_request" not in i]
 
     def milestones(self):
-        return self.api("GET", self._r("/milestones"), params={"state": "open", "per_page": 30})
+        return self.api_all(self._r("/milestones"), {"state": "open"})
 
     def leads(self) -> list[str]:
         """팀장: 저장소 관리자(admin). 읽을 수 없으면 저장소 주인."""
         try:
-            people = self.api("GET", self._r("/collaborators"), params={"per_page": 100})
+            people = self.api_all(self._r("/collaborators"))
             admins = [u["login"] for u in people if (u.get("permissions") or {}).get("admin")]
             if admins:
                 return admins
@@ -111,7 +123,7 @@ class GitHub:
         return (self.api("GET", f"/users/{login}") or {}).get("name")
 
     def members(self) -> list[str]:
-        return [u["login"] for u in self.api("GET", self._r("/assignees"), params={"per_page": 100})]
+        return [u["login"] for u in self.api_all(self._r("/assignees"))]
 
     # 팀 상태 신호 읽기: 커밋·활동·초대·파일 목록 (모두 읽기만 한다)
     def commits(self, branch: str | None = None, since: str | None = None, per_page: int = 50):
@@ -163,14 +175,14 @@ class GitHub:
         return self.api("GET", self._r(f"/issues/{n}"))
 
     def issue_comments(self, n: int):
-        return self.api("GET", self._r(f"/issues/{n}/comments"), params={"per_page": 100})
+        return self.api_all(self._r(f"/issues/{n}/comments"))
 
     # 라벨: 서버 여러 대가 함께 쓰는 잠금·기록 장소 (Issues 쓰기 권한으로 충분하다)
     def create_label(self, name: str, color: str, description: str):
         return self.api("POST", self._r("/labels"), json={"name": name, "color": color, "description": description})
 
     def labels(self):
-        return self.api("GET", self._r("/labels"), params={"per_page": 100})
+        return self.api_all(self._r("/labels"))
 
     def get_label(self, name: str):
         return self.api("GET", self._r(f"/labels/{name}"))
