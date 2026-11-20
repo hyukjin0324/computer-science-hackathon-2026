@@ -1783,9 +1783,6 @@ function renderHome() {
       const ask = h("div", "nodate-ask"); ask.appendChild(h("span", "q", "제출 마감을 못 찾았어요. 입력하실래요?"));
       const sd = h("button", "btn primary", "마감 날짜 입력하기"); sd.type = "button"; sd.onclick = () => { showTab("chat"); askDeadline(); }; ask.appendChild(sd); dtx.appendChild(ask);
     }
-    if (dd2 != null && st < 3 && !needApply) {  // 정해진 제출 마감도 나중에 고칠 수 있게 (전에는 한 번 정하면 바꿀 곳이 없었다)
-      const fix = h("button", "linkbtn", "마감 고치기 ›"); fix.type = "button"; fix.onclick = () => { showTab("chat"); editDeadline(); }; dtx.appendChild(fix);
-    }
     dtx.appendChild(h("span", "dname", extract.title || ""));
   } else {
     dtx.appendChild(h("span", "dl", "아직 고른 대회가 없어요"));
@@ -2638,9 +2635,15 @@ function cancelFlow(t) {
   chip("다른 걸 할래요", openPicks);
 }
 $("msg").addEventListener("input", syncComposer);
+// 팀플·대회와 관계없는 말: 서버(chat.py)의 안내와 같은 문구. 팀플 낱말이 함께 있으면 잡담으로 보지 않는다
+const OFFTOPIC_MSG = "저는 대회 준비를 돕는 AI라 이 요청은 도와드리기 어려워요. 대회 찾기, 팀 일정·할 일 관리, 제출 준비와 관련된 질문을 해 주세요.";
+const OFFTOPIC_RX = /날씨|기온|미세먼지|주식|코인|비트코인|환율|로또|운세|농담|노래|영화|드라마|웹툰|뉴스|축구|야구|연애|레시피|맛집추천|번역해|심심/;
+const ONTOPIC_RX = /대회|공모전|해커톤|팀|마감|제출|계획|일정|신청|공고|이슈|PR|리뷰|깃허브|github|bento|벤토|할일|심사|채점/i;
 $("composer").addEventListener("submit", (e) => { e.preventDefault(); const input = $("msg"); const t = input.value.trim(); if (!t || $("todayBtn").disabled) return; input.value = ""; if (touchPointer.matches) input.blur(); showTab("chat"); const n = t.replace(/\s/g, "");
   if (/취소|그만|안할래|안해|하지마|멈춰|중단|포기|지워|삭제/.test(n)) return cancelFlow(t);  // 멈추는 말이 먼저
+  if (OFFTOPIC_RX.test(n) && !ONTOPIC_RX.test(n)) { me(t); bot(OFFTOPIC_MSG); chip("할 수 있는 일 보기", openPicks); return; }  // 날씨·잡담 같은 말은 AI도 기능도 거치지 않고 정해진 안내만 (키워드 규칙이 '오늘 날씨'를 오늘 할 일로 보내지 않게 가장 먼저)
   saidByUser = t; setTimeout(() => { saidByUser = null; }, 0);  // 바로 이어지는 첫 '내 말'에만 쓴다
+  if (/마감/.test(n) && /고치|고칠|고쳐|바꾸|바꿀|바꿔|수정|변경/.test(n) && extract) return editDeadline();  // 제출 마감 고치기는 대화에서만 (홈 카드에는 두지 않는다)
   if (/찾아|추천|나갈만한|해커톤있|공모전있|새대회/.test(n)) return discoverChat();
   if (/늦|지연|진행|재계획|다시계획/.test(n)) return progressCheck(false);
   if (/계획|일정짜|스케줄/.test(n)) return planFlow();
