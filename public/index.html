@@ -992,7 +992,12 @@ function intro() {
   if (typeof projName === "function" && cur) add(h("div", "bub", `'${projName()}' 대화방이에요. 이 대회 이야기만 여기 모여요.`));
   const p = h("div", "panel"); const ph = h("div", "panel-h"); ph.appendChild(h("b", null, "바로 맡겨 보기")); const pp = h("button", "more"); pp.type = "button"; pp.id = "panelProj"; pp.onclick = openProjects; ph.appendChild(pp); p.appendChild(ph);
   const picks = h("div", "picks");
-  PICKS().forEach(([em, t, s, fn]) => {
+  const all = PICKS(), find = (name) => all.find((x) => x[1].includes(name));
+  // 처음 보이는 건 흐름 네 가지만: 대회 → 오늘 할 일 → 계획·점검 → 제출. 공고 파일·심사 기준 채점은 각 흐름 안에서(＋ 시트에도 있어요)
+  const short = [find("새 대회 고르기"), find("할 일 정리"),
+    ["cal", "계획 짜기·진행 점검", "마감까지 날짜별 계획을 짜고, 늦어지면 다시 짜요", () => (hasPlan() ? progressCheck(false) : planFlow())],
+    find("제출 전 점검하기")];
+  short.forEach(([em, t, s, fn]) => {
     const x = h("button", "pick"); x.type = "button"; x.appendChild(pickIcon(em)); const tx = h("span"); tx.appendChild(h("b", null, t)); tx.appendChild(h("small", null, s)); x.appendChild(tx); x.appendChild(h("span", "chev", "›"));
     x.onclick = () => { showTab("chat"); fn(); }; picks.appendChild(x);
   });
