@@ -742,7 +742,7 @@ function goLogin() { location.href = "/auth/login"; }
 function ghBtn(label, primary) { const b = h("button", "btn" + (primary ? " primary" : "") + " lg"); b.type = "button"; b.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 19c-4 1.3-4-2-6-2.5M15 21v-3.5a3 3 0 0 0-.8-2.3c2.8-.3 5.8-1.4 5.8-6.2a4.8 4.8 0 0 0-1.3-3.3 4.5 4.5 0 0 0-.1-3.3s-1.1-.3-3.5 1.3a12 12 0 0 0-6.2 0C6.5 2.1 5.4 2.4 5.4 2.4a4.5 4.5 0 0 0-.1 3.3A4.8 4.8 0 0 0 4 9c0 4.8 3 5.9 5.8 6.2a3 3 0 0 0-.8 2.3V21"/></svg>`; b.appendChild(document.createTextNode(label)); b.style.justifyContent = "center"; b.onclick = goLogin; return b; }
 function setMe(u) { store.set("me:" + curRepo(), u); renderHome(); renderMe(); }
 async function api(path, opt = {}) {
-  const q = repo && opt.method !== "POST" ? (path.includes("?") ? "&" : "?") + "repo=" + encodeURIComponent(repo) : "";
+  const q = repo && opt.method !== "POST" && !/[?&]repo=/.test(path) ? (path.includes("?") ? "&" : "?") + "repo=" + encodeURIComponent(repo) : "";  // 주소에 repo가 이미 있으면 또 붙이지 않는다
   const headers = { "Content-Type": "application/json" };
   const code = store.get("code", ""); if (code) headers["X-Bento-Code"] = code;
   const who = typeof meUser === "function" ? meUser() : null; if (who) headers["X-Bento-User"] = who;  // 누가 승인했는지 GitHub에 남긴다
@@ -2649,6 +2649,7 @@ let toastText = "";
 $("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); };
 
 (async () => {
+  const startTab = ["chat", "cal", "me"].find((t) => location.hash === "#" + t);  // '#chat'처럼 주소로 연 탭은 준비가 끝나면 그 탭으로
   intro(); renderBox(); renderCal(); showTab("home");
   // 서버에 로그인 여부를 묻는 동안(0.1~0.3초) 홈이 비치지 않게 먼저 막을 덮는다. 첫 화면이 뜨면 이 막이 대신 사라진다
   const splash = h("div", "onb splash"); splash.setAttribute("aria-hidden", "true"); document.body.classList.add("onboarding");
@@ -2663,6 +2664,7 @@ $("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); 
     if (!curDraft() && store.get("extract:" + projKey(), null) == null && store.get("extract", null)) store.set("extract:" + projKey(), store.get("extract", null));  // 예전 버전 기록 옮기기
     if (cur && cur.draft && !curDraft()) cur = { repo: curRepo() };
     useProject(cur, true); resumeChat(); booted = true; loadDiscord().then(() => renderMe());
+    if (startTab) showTab(startTab);
     loadProjects().then(() => { renderHome(); renderCal(); }).catch(() => {}).finally(() => reminders());  // 팀플 목록을 미리 받아 두면 고르기 화면이 바로 뜬다 (받은 뒤 지난 저장소 기록을 걸러 다시 그림)
     loadDiscover();  // 학과 게시판·해커톤 목록에서 대회를 먼저 찾아온다 (1시간 캐시)
     if (!curDraft()) setTimeout(() => progressCheck(true), 400);  // 열 때마다 Bento가 먼저 점검한다
