@@ -254,8 +254,12 @@ def github_installed(installation_id: int = 0, setup_action: str = ""):
 
 
 @app.get("/api/projects")
-def projects():
-    """진행 중인 팀플 = Bento 앱이 설치된 저장소. 저장소마다 연결된 공고와 제출 마일스톤을 함께 준다."""
+def projects(request: Request):
+    """진행 중인 팀플 = Bento 앱이 설치된 저장소. 저장소마다 연결된 공고와 제출 마일스톤을 함께 준다.
+
+    GitHub로 로그인했으면 그 사람이 팀원인 저장소만 준다. 전에는 누가 로그인하든 앱이 설치된 모든 저장소
+    (배포한 사람의 저장소)가 떠서, 내 저장소는 없고 남의 저장소만 보였다.
+    """
     if settings.live:
         try:
             repos = installed_repos(settings)
@@ -263,8 +267,15 @@ def projects():
             raise HTTPException(502, "설치된 저장소 목록을 읽지 못했어요") from e
     else:
         repos = [_demo.repo]
+    user = current_user(request) if settings.live and settings.login_enabled else None
     out = []
     for r in repos:
+        if user:
+            try:
+                if user["login"] not in gh_for(r).members():
+                    continue  # 내가 팀원이 아닌 저장소는 보여 주지 않는다
+            except (GitHubError, HTTPException):
+                continue
         p = {"repo": r, "notice": None, "due": None, "done": None, "total": None}
         try:
             ms = gh_for(r).milestones()
@@ -279,7 +290,10 @@ def projects():
             done, left = sub.get("closed_issues", 0), sub.get("open_issues", 0)
             p.update(due=sub.get("due_on"), done=done, total=done + left)
         out.append(p)
-    return {"projects": out, "default": settings.default_repo if settings.live else _demo.repo, "install_url": _install_url()}
+    default = settings.default_repo if settings.live else _demo.repo
+    if user and not any(p["repo"] == default for p in out):
+        default = out[0]["repo"] if out else None  # 서버 기본 저장소의 팀원이 아니면 내 저장소를 기본으로
+    return {"projects": out, "default": default, "install_url": _install_url(), "mine_only": bool(user)}
 
 
 @app.get("/api/state")
@@ -568,6 +582,36 @@ def chat_free(body: ChatIn, request: Request, x_bento_code: str | None = Header(
         return chat_mod.ask(body.message, body.history, who=who, context=body.context)
     except chat_mod.ChatError as e:
         raise HTTPException(e.status, str(e)) from e
+
+
+class DeadlineIn(BaseModel):
+    repo: str | None = None
+    submit_deadline_iso: str
+
+
+@app.post("/api/notice/deadline")
+def move_submit_deadline(body: DeadlineIn):
+    """제출 마감을 고칠 때: 저장소의 '해커톤 제출' 마일스톤 마감과, 그 안에 숨겨 둔 공고 분석의 날짜를 함께 옮기는 제안.
+
+    전에는 한 번 정한 마감(직접 적은 날짜 포함)을 바꿀 길이 없어서, 오타가 나면 팀 전체 일정에 그대로 남았다.
+    팀 전체에 영향을 주는 변경이라 지금 규칙대로 제안한 사람이 아닌 팀원이나 팀장이 승인해야 실행된다.
+    """
+    try:
+        iso = notice_mod.aware_iso(body.submit_deadline_iso)
+        datetime.fromisoformat(iso)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(422, "날짜 형식이 맞지 않아요") from e
+    gh, st = state_for(body.repo)
+    ms = st.milestone("해커톤 제출")
+    if not ms:
+        return {"proposal": None, "message": "GitHub에 아직 제출 마감(마일스톤)이 없어서 이 기기에서만 바꿨어요"}
+    due = notice_mod._utc(iso)
+    if ms.due_on and ms.due_on[:10] == due[:10] and notice_mod.from_descriptions([ms.description]) and \
+            (notice_mod.from_descriptions([ms.description]).submit_deadline_iso or "") == iso:
+        return {"proposal": None, "message": "GitHub의 제출 마감도 이미 이 날짜예요"}
+    act = UpdateMilestone(title="해커톤 제출", due_on=due, reason="제출 마감을 고쳐요 · 팀원 기기와 매일 점검도 새 날짜를 써요",
+                          expect_due=ms.due_on, description=notice_mod.retime_description(ms.description, iso))
+    return {"proposal": _proposal(gh.repo, "제출 마감 고치기", [act], "deadline")}
 
 
 class RecheckIn(BaseModel):

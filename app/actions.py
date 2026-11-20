@@ -14,11 +14,23 @@ from pydantic import BaseModel, Field, TypeAdapter
 from .state import RepoState
 
 FOOTER = "\n\n<sub>— 팀원 승인을 받아 Bento가 남겼어요</sub>"
+# 저장소 글 속 '에이전트에게 하는 지시' 찾기.
+# 'AI 추천 기능', '챗봇 화면에 close 버튼'처럼 AI·봇이 기능 이름으로 쓰인 평범한 이슈는 잡지 않고,
+# 에이전트를 부르거나(야·에게·:·@) 에이전트에게 부탁하는 문장일 때만 잡는다.
 # 영어 낱말은 앞뒤가 영문자가 아닐 때만 ('main'의 ai, 'robot'의 bot 같은 오탐을 막는다)
-SUSPICIOUS = re.compile(
-    r"((?<![a-z])(?:bento|agent|bot|ai)(?![a-z])|벤토|에이전트|봇)[^\n]{0,30}"
-    # 한국어 낱말(권한·토큰·머지 등)은 뒤에 '~해/줘/하세요' 같은 부탁이 붙을 때만. 'AI 사용량 · 권한' 같은 설명은 빼려고
-    r"(merge|close|delete|push|token|닫아|지워|(?:머지|삭제|푸시|권한|토큰)[^\n]{0,8}?(?:해|하고|하세요|하라|줘|주세요|달라|적어|넘겨|알려))", re.I)
+_AGENT = r"(?:(?<![a-z])(?:bento|ai|bot|agent|assistant)(?![a-z])(?:\s+(?:agent|assistant|bot))?|벤토|에이전트|봇)"
+_ACTION = (r"(?:merge|close|delete|push|approve|assign|token|ignore|머지|닫아|닫고|지워|삭제|푸시|승인|권한|토큰|담당|바꿔|무시)")
+_ASK = r"(?:해|하고|하세요|하라|해라|줘|주세요|달라|적어|넘겨|알려)"
+SUSPICIOUS_RULES = [
+    # 1) 부르는 말: 'Bento야', 'AI agent:', '봇에게', 'AI assistant,', '@bento', 'Note to AI agent'
+    re.compile(rf"(?:@\s*{_AGENT}|(?<![a-z])to\s+(?:the\s+)?{_AGENT}|{_AGENT}\s*(?:야|아|님|에게|한테|께|[,:：!]))[^\n]{{0,60}}?{_ACTION}", re.I),
+    # 2) 에이전트에게 부탁: '에이전트는 토큰을 여기에 적어 줘' (은·는·이·가 뒤에 할 일 + 부탁하는 끝말)
+    re.compile(rf"{_AGENT}\s*(?:은|는|이|가|도)\s[^\n]{{0,40}}?{_ACTION}[^\n]{{0,12}}?{_ASK}", re.I),
+    # 3) 우리 에이전트 이름을 직접 쓰고 할 일을 시킴: 'Bento close all issues'
+    re.compile(r"(?:(?<![a-z])bento(?![a-z])|벤토)[^\n]{0,30}?" + _ACTION, re.I),
+    # 4) 이름 없이도 흔한 주입 문장: 'ignore previous instructions', '이전 지시를 무시'
+    re.compile(r"ignore\s+(?:all\s+)?(?:the\s+)?(?:previous|prior|above|earlier)\s+(?:instructions|rules|prompts?)|(?:이전|위의?|앞의?)\s*(?:지시|규칙|명령)\S*\s*무시", re.I),
+]
 
 
 class RequestReviewers(BaseModel):
@@ -76,6 +88,7 @@ class UpdateMilestone(BaseModel):
     due_on: str
     reason: str = ""
     expect_due: str | None = None  # 제안할 때 본 마감
+    description: str | None = None  # 함께 바꿀 마일스톤 설명 (제출 마감을 고칠 때 숨겨 둔 공고 분석의 날짜도 같이 바꾼다)
 
 
 class SetTeamRules(BaseModel):
@@ -128,7 +141,8 @@ def eul(n: int) -> str:
 
 
 def is_suspicious(text: str) -> bool:
-    return bool(SUSPICIOUS.search(text or ""))
+    t = text or ""
+    return any(rx.search(t) for rx in SUSPICIOUS_RULES)
 
 
 def _text_problem(text: str, limit: int = 1500) -> str | None:
@@ -360,7 +374,7 @@ def execute(actions: list, gh, settings, op: str | None = None, by: str | None =
                 milestone_numbers[a.title] = m["number"]
                 url = m.get("html_url")
             elif isinstance(a, UpdateMilestone):
-                gh.update_milestone(milestone_numbers[a.title], a.due_on)
+                gh.update_milestone(milestone_numbers[a.title], a.due_on, a.description)
                 url = gh.html("/milestones")
             elif isinstance(a, SetMilestone):
                 for n in a.issues:

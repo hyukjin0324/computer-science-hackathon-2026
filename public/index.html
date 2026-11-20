@@ -1255,11 +1255,13 @@ function askNoticeDeadline(r, next) {
   const ok = h("button", "btn primary", "이 날짜로 일정 만들기"); ok.type = "button";
   const no = h("button", "btn", "날짜 없이 만들기"); no.type = "button";
   rb.appendChild(ok); rb.appendChild(no); c.appendChild(lb); c.appendChild(i); c.appendChild(rb);
-  ok.onclick = async () => {
+  ok.onclick = () => {
     if (!i.value) { snack("날짜와 시간을 골라 주세요"); return i.focus(); }
     ok.disabled = no.disabled = i.disabled = true;
-    let r2; try { r2 = await thinking("일정을 다시 만들고 있어요", noticeApi({ ...lastNoticeBody, submit_deadline_iso: new Date(i.value).toISOString() })); } catch (e) { ok.disabled = no.disabled = i.disabled = false; return fail(e); }
-    c.remove(); setExtract(r2.extract); offerPlan(r2, next);
+    confirmDeadline(i.value, async (k) => {  // GitHub 마일스톤에 그대로 들어가는 날짜라, 만들기 전에 한 번 확인한다
+      let r2; try { r2 = await thinking("일정을 다시 만들고 있어요", noticeApi({ ...lastNoticeBody, submit_deadline_iso: k.iso })); } catch (e) { ok.disabled = no.disabled = i.disabled = false; return fail(e); }
+      c.remove(); setExtract(r2.extract); offerPlan(r2, next);
+    }, () => { ok.disabled = no.disabled = i.disabled = false; i.focus(); });
   };
   no.onclick = () => { ok.disabled = no.disabled = i.disabled = true; c.remove(); offerPlan(r, next, true); };
 }
@@ -1399,8 +1401,67 @@ function askDeadline() {
   const l = h("label", "lab", "제출 마감"); l.htmlFor = id; const i = h("input", "finput"); i.id = id; i.type = "datetime-local";
   const src = noticeUrl(); if (src) c.appendChild(link("공고 원문 보기", src));
   const b = h("button", "btn primary", "이 날짜로 계획 짜기"); b.type = "button"; c.append(l, i, b);
-  b.onclick = () => { if (!i.value) return i.focus(); b.disabled = i.disabled = true; const iso = new Date(i.value).toISOString(); setExtract({ ...extract, submit_deadline_iso: iso, submit_deadline: new Date(i.value).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }) }); planFlow(); };
+  b.onclick = () => {
+    if (!i.value) return i.focus(); b.disabled = i.disabled = true;
+    confirmDeadline(i.value, (k) => { setExtract({ ...extract, submit_deadline_iso: k.iso, submit_deadline: deadlineLabel(i.value) }); Promise.resolve(planFlow()).then(() => syncGithubDeadline(k.iso)); },
+      () => { b.disabled = i.disabled = false; i.focus(); });
+  };
   scroll();
+}
+
+/* ---------- 제출 마감: 넣을 때 한 번 확인하고, 나중에도 고칠 수 있게 ----------
+   전에는 날짜를 고르면 확인 없이 바로 정해지고, 그 뒤로는 바꿀 곳이 없었다 (오타가 나면 팀 일정에 그대로 남았다). */
+function deadlineLabel(value) { return new Date(value).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
+function deadlineCheck(value) {
+  const d = new Date(value); const now = new Date();
+  const days = Math.round((new Date(d).setHours(0, 0, 0, 0) - new Date(now).setHours(0, 0, 0, 0)) / 864e5);
+  const text = `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일(${"일월화수목금토"[d.getDay()]}) ${fmtTime(d)} · ${days > 0 ? "D-" + days : days === 0 ? "D-day" : "이미 지난 날짜"}`;
+  const warn = d < now ? "이미 지난 날짜예요." : d.getFullYear() > now.getFullYear() + 1 ? `${d.getFullYear()}년이에요. 연도를 다시 봐 주세요.` : days > 180 ? "6개월보다 더 남은 날짜예요. 연도를 다시 봐 주세요." : "";
+  return { iso: d.toISOString(), text, warn };
+}
+function confirmDeadline(value, onYes, onBack) {
+  const k = deadlineCheck(value);
+  const c = add(h("div", "task")); c.appendChild(h("b", null, "이 날짜가 맞나요?")); c.appendChild(h("div", "note", k.text));
+  if (k.warn) c.appendChild(h("div", "note", "! " + k.warn));
+  const rb = h("div", "row-btns"); const yes = h("button", "btn primary", "맞아요"); yes.type = "button"; const back = h("button", "btn", "다시 고르기"); back.type = "button";
+  rb.append(yes, back); c.appendChild(rb); scroll(); yes.focus();
+  yes.onclick = () => { c.remove(); onYes(k); };
+  back.onclick = () => { c.remove(); onBack(); };
+}
+function editDeadline() {
+  me("제출 마감 고칠래");
+  bot("제출 마감을 고칠게요. 공고에서 다시 확인해서 골라 주세요.");
+  const c = add(h("div", "task")); const id = "ed" + Date.now();
+  const l = h("label", "lab", "제출 마감"); l.htmlFor = id; const i = h("input", "finput"); i.id = id; i.type = "datetime-local";
+  if (extract && extract.submit_deadline_iso) { const d = new Date(extract.submit_deadline_iso); i.value = new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16); }
+  const src = noticeUrl(); if (src) c.appendChild(link("공고 원문 보기", src));
+  const b = h("button", "btn primary", "이 날짜로 고치기"); b.type = "button"; c.append(l, i, b); scroll();
+  b.onclick = () => {
+    if (!i.value) return i.focus(); b.disabled = i.disabled = true;
+    confirmDeadline(i.value, (k) => {
+      c.remove(); setExtract({ ...extract, submit_deadline_iso: k.iso, submit_deadline: deadlineLabel(i.value) }); renderHome();
+      bot(`제출 마감을 ${k.text.split(" · ")[0]}로 고쳤어요.`); syncGithubDeadline(k.iso, true);
+    }, () => { b.disabled = i.disabled = false; i.focus(); });
+  };
+}
+async function syncGithubDeadline(iso, offerPlan) {  // 저장소가 있으면 GitHub '해커톤 제출' 마감과 숨겨 둔 공고 분석의 날짜도 옮기는 제안 (승인 필요)
+  const after = () => { if (offerPlan) chip("계획 다시 짜기", planFlow); };
+  if (curDraft()) return after();
+  let r; try { r = await api("/notice/deadline", { method: "POST", body: JSON.stringify({ repo: curRepo(), submit_deadline_iso: iso }) }); } catch (e) { return after(); }
+  if (!r.proposal) return after();
+  bot("GitHub의 제출 마감(해커톤 제출)도 같이 옮길까요? 그래야 팀원 기기와 매일 점검도 새 날짜를 써요. 팀 전체에 영향을 주는 변경이라 다른 팀원이나 팀장이 승인해야 실행돼요.");
+  approval(r.proposal, (ok) => { if (ok) loadCalState(); after(); });
+}
+function checkRepoDeadline() {  // 팀원이 GitHub에서 제출 마감을 옮겼으면 이 기기 날짜와 다르다고 알려 준다 (한 번만)
+  if (!calState || !extract || curDraft()) return;
+  const m = (calState.milestones || []).find((x) => x.title === "해커톤 제출"); if (!m || !m.due_on) return;
+  const day = m.due_on.slice(0, 10); const cur = extract.submit_deadline_iso;
+  const kst = (iso) => new Date(new Date(iso).getTime() + 9 * 36e5).toISOString();
+  if (!cur || kst(cur).slice(0, 10) === day) return;
+  const seenKey = "deadlineSeen:" + projKey(); if (store.get(seenKey, null) === day) return; store.set(seenKey, day);
+  const iso = `${day}T${kst(cur).slice(11, 16)}:00+09:00`;
+  bot(`GitHub의 제출 마감은 ${Number(day.slice(5, 7))}월 ${Number(day.slice(8, 10))}일인데, 이 기기에는 다른 날짜로 적혀 있어요. 팀원이 바꿨을 수 있어요.`);
+  chip("GitHub 날짜로 맞추기", () => { setExtract({ ...extract, submit_deadline_iso: new Date(iso).toISOString(), submit_deadline: deadlineLabel(iso) }); renderHome(); bot("GitHub의 제출 마감으로 맞췄어요."); chip("계획 다시 짜기", planFlow); });
 }
 async function planFlow() {
   me("마감까지 계획 짜 줘");
@@ -1459,6 +1520,7 @@ async function noticeWatch(force) {
     yes.disabled = true; const ex = { ...extract };
     r.diffs.forEach((d) => { ex[d.field] = d.new; ex[d.field.replace(/_iso$/, "")] = f(d.new); });
     setExtract(ex); renderHome(); bot("바뀐 마감을 반영했어요. 계획도 새 날짜에 맞춰 다시 짜 둘까요?"); chip("계획 다시 짜기", planFlow);
+    const s = r.diffs.find((d) => d.field === "submit_deadline_iso"); if (s) syncGithubDeadline(s.new);  // 이 기기만이 아니라 GitHub의 제출 마감도
   };
   rb.appendChild(yes); c.appendChild(rb); scroll();
 }
@@ -1721,6 +1783,9 @@ function renderHome() {
       const ask = h("div", "nodate-ask"); ask.appendChild(h("span", "q", "제출 마감을 못 찾았어요. 입력하실래요?"));
       const sd = h("button", "btn primary", "마감 날짜 입력하기"); sd.type = "button"; sd.onclick = () => { showTab("chat"); askDeadline(); }; ask.appendChild(sd); dtx.appendChild(ask);
     }
+    if (dd2 != null && st < 3 && !needApply) {  // 정해진 제출 마감도 나중에 고칠 수 있게 (전에는 한 번 정하면 바꿀 곳이 없었다)
+      const fix = h("button", "linkbtn", "마감 고치기 ›"); fix.type = "button"; fix.onclick = () => { showTab("chat"); editDeadline(); }; dtx.appendChild(fix);
+    }
     dtx.appendChild(h("span", "dname", extract.title || ""));
   } else {
     dtx.appendChild(h("span", "dl", "아직 고른 대회가 없어요"));
@@ -1889,7 +1954,12 @@ function onboarding() {
 function dtxt(iso) { if (!iso) return ""; const n = new Date(); n.setHours(0, 0, 0, 0); const d = new Date(iso); d.setHours(0, 0, 0, 0); const k = Math.round((d - n) / 864e5); return k >= 0 ? `D-${k}` : `D+${-k}`; }
 function projSub(p) { if (p.error) return "저장소를 읽지 못했어요"; return [p.notice || "연결된 공고 없음", p.due ? `제출 ${dtxt(p.due)}` : "", p.total ? `제출물 ${p.done}/${p.total}` : ""].filter(Boolean).join(" · "); }
 function draftSub(d) { const ex = d.extract || {}; return [d.applied ? "신청 완료" : "신청 준비", ex.apply_deadline_iso ? `신청 ${dtxt(ex.apply_deadline_iso)}` : "", ex.submit_deadline_iso ? `제출 ${dtxt(ex.submit_deadline_iso)}` : ""].filter(Boolean).join(" · "); }
-async function loadProjects() { const r = await api("/projects"); projects = r.projects; if (r.install_url) H.install_url = r.install_url; return projects; }
+async function loadProjects() {
+  const r = await api("/projects"); projects = r.projects; if (r.install_url) H.install_url = r.install_url;
+  // 로그인한 사람의 저장소만 받았는데 지금 보고 있는 저장소가 그 안에 없으면(배포한 사람의 기본 저장소 등) 내 저장소로 옮긴다
+  if (r.mine_only && r.default && !curDraft() && !projects.some((p) => p.repo === curRepo())) useProject({ repo: r.default }, true);
+  return projects;
+}
 let DISC = { connected: false, source: null };  // 이 팀의 디스코드 연결 (서버 기본 채널이거나 팀이 직접 연결한 것)
 async function loadDiscord() {
   try { DISC = await api("/discord?repo=" + encodeURIComponent(curRepo())); } catch (e) { DISC = { connected: !!(H && H.discord), source: H && H.discord ? "server" : null }; }
@@ -1964,8 +2034,12 @@ function fillProjectList(box, close) {  // 서랍·시트·마이페이지 팀�
   return (async () => {
   try {
     await loadProjects(); live.innerHTML = "";
-    if (!projects.length) live.appendChild(h("div", "note", "Bento 앱이 설치된 저장소가 없어요."));
+    if (!projects.length) live.appendChild(h("div", "note", ME.logged_in ? "Bento 앱이 설치된 내 저장소가 아직 없어요." : "Bento 앱이 설치된 저장소가 없어요."));
     projects.forEach((p) => live.appendChild(proj(p.repo.split("/")[1], projSub(p), colorOf("r:" + p.repo), !curDraft() && curRepo() === p.repo, () => useProject({ repo: p.repo }))));
+    if (H.install_url) {  // 내 GitHub 저장소가 목록에 없으면: 그 저장소에 Bento 앱을 설치하면 여기에 생긴다 (전에는 이 화면에 방법이 없었다)
+      live.appendChild(h("div", "note", "내 저장소가 안 보이면, 그 저장소에 Bento 앱을 설치해 주세요. 설치하고 돌아오면 바로 연결돼요."));
+      const ins = link("내 저장소에 Bento 설치", H.install_url); ins.target = "_self"; live.appendChild(ins);
+    }
   } catch (e) { live.innerHTML = ""; live.appendChild(h("div", "note", e.message)); }
   })();
 }
@@ -2610,7 +2684,7 @@ let calSel = null, calState = null;
 function dayKey(d) { return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
 function planInRepo() { return !!(calState && calState.milestones && calState.milestones.some((m) => /^계획 · /.test(m.title))); }  // 계획은 이 기기에만 저장되므로, 저장소에 '계획 · …' 마일스톤이 있으면 다른 기기에서도 계획이 있는 것으로 본다
 function hasPlan() { return store.get("plan:" + projKey(), []).length > 0 || planInRepo(); }
-async function loadCalState() { if (curDraft()) { calState = null; return renderCal(); } try { calState = await api("/state"); } catch (e) { calState = null; } renderCal(); if (typeof resumeChat === "function") resumeChat(); }
+async function loadCalState() { if (curDraft()) { calState = null; return renderCal(); } try { calState = await api("/state"); } catch (e) { calState = null; } renderCal(); if (typeof resumeChat === "function") resumeChat(); if (booted) checkRepoDeadline(); }
 const PALETTE = ["--p0", "--p1", "--p2", "--p3", "--p4", "--p5"];
 function colorOf(key) {  // 팀플마다 색을 한 번 정하면 계속 같은 색
   const map = store.get("colors", {});
@@ -3020,6 +3094,7 @@ $("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); 
       try { history.replaceState(history.state, "", location.pathname + location.hash); } catch (e) { /* 무시 */ }
     }
     useProject(cur, true); resumeChat(); booted = true; loadDiscord().then(() => renderMe());
+    setTimeout(checkRepoDeadline, 2500);  // 처음 열 때도 GitHub의 제출 마감과 이 기기 날짜가 다른지 본다
     if (startTab) showTab(startTab);
     loadProjects().then(() => { renderHome(); renderCal(); }).catch(() => {}).finally(() => reminders());  // 팀플 목록을 미리 받아 두면 고르기 화면이 바로 뜬다 (받은 뒤 지난 저장소 기록을 걸러 다시 그림)
     loadDiscover();  // 학과 게시판·해커톤 목록에서 대회를 먼저 찾아온다 (1시간 캐시)

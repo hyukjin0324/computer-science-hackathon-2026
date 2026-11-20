@@ -66,17 +66,10 @@ def allowed(url: str) -> bool:
 
 
 def _allow(who: str, now: float) -> None:
-    day = time.strftime("%Y-%m-%d", time.gmtime(now))
-    with _lock:
-        if _day["key"] != day:
-            _day.update(key=day, n=0)
-        if _day["n"] >= PER_DAY_ALL:
-            raise SearchError("오늘 쓸 수 있는 공고 검색을 다 썼어요")
-        recent = [t for t in _hits.get(who, []) if now - t < 3600]
-        if len(recent) >= PER_HOUR:
-            raise SearchError("공고 검색을 너무 자주 했어요. 조금 뒤에 다시 해 주세요")
-        _hits[who] = recent + [now]
-        _day["n"] += 1
+    from .limits import take
+    take(_lock, _hits, _day, who, now, PER_HOUR, PER_DAY_ALL,
+         SearchError("오늘 쓸 수 있는 공고 검색을 다 썼어요"),
+         SearchError("공고 검색을 너무 자주 했어요. 조금 뒤에 다시 해 주세요"))
 
 
 GENERIC = {"ai", "개발", "챌린지", "해커톤", "공모전", "대회", "활용", "경진대회", "2026", "2025", "제", "회", "the", "and", "of"}

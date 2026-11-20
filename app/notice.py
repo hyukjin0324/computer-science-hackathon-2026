@@ -144,19 +144,10 @@ _ai_day = {"key": "", "n": 0}
 
 def allow_ai(who: str, now: float | None = None) -> None:
     """한도 안이면 한 번 센다. 넘으면 NoticeLimit."""
-    now = time.time() if now is None else now
-    day = time.strftime("%Y-%m-%d", time.gmtime(now))
-    with _ai_lock:
-        if _ai_day["key"] != day:
-            _ai_day.update(key=day, n=0)
-        if _ai_day["n"] >= AI_PER_DAY_ALL:
-            raise NoticeLimit("오늘 AI로 읽을 수 있는 공고를 다 썼어요. 내일 다시 하거나 규칙으로 읽어 주세요")
-        recent = [t for t in _ai_hits.get(who, []) if now - t < 3600]
-        if len(recent) >= AI_PER_HOUR:
-            raise NoticeLimit("AI로 공고를 너무 자주 읽었어요. 조금 뒤에 다시 해 주세요")
-        recent.append(now)
-        _ai_hits[who] = recent
-        _ai_day["n"] += 1
+    from .limits import take
+    take(_ai_lock, _ai_hits, _ai_day, who, time.time() if now is None else now, AI_PER_HOUR, AI_PER_DAY_ALL,
+         NoticeLimit("오늘 AI로 읽을 수 있는 공고를 다 썼어요. 내일 다시 하거나 규칙으로 읽어 주세요"),
+         NoticeLimit("AI로 공고를 너무 자주 읽었어요. 조금 뒤에 다시 해 주세요"))
 
 
 # ---------- 토큰 절약: 같은 공고는 다시 분석하지 않는다 ----------
@@ -192,6 +183,21 @@ def notice_hash(text: str) -> str:
 def embed(ex: NoticeExtract, h: str) -> str:
     data = base64.urlsafe_b64encode(json.dumps(ex.model_dump(), ensure_ascii=False, separators=(",", ":")).encode()).decode()
     return f"<!-- bento-notice:{h} {data} -->"
+
+
+def retime_description(desc: str, submit_iso: str) -> str:
+    """마일스톤 설명에 숨겨 둔 공고 분석 결과의 제출 마감을 새 날짜로 바꾼다 (다른 기기·매일 점검이 이 값을 읽는다).
+    숨겨 둔 결과가 없으면 설명을 그대로 돌려준다."""
+    m = EMBED.search(desc or "")
+    if not m:
+        return desc or ""
+    try:
+        ex = NoticeExtract.model_validate(json.loads(base64.urlsafe_b64decode(m.group(2))))
+    except (ValueError, json.JSONDecodeError):
+        return desc
+    from .rules import human
+    ex = ex.model_copy(update={"submit_deadline_iso": aware_iso(submit_iso), "submit_deadline": human(datetime.fromisoformat(aware_iso(submit_iso)))})
+    return desc[:m.start()] + embed(ex, m.group(1)) + desc[m.end():]
 
 
 def from_descriptions(descriptions: list[str], h: str | None = None) -> NoticeExtract | None:
@@ -238,12 +244,24 @@ def _iso(s: str | None) -> str | None:
         return None
 
 
+def unique_deliverables(delivs: list) -> list:
+    """이름이 같은 제출물은 처음 것만 남긴다 (빈칸·대소문자는 무시). '제출물: 발표 자료' 줄과 '발표 자료를 모두 제출' 줄이 함께 있는 공고."""
+    seen, out = set(), []
+    for d in delivs:
+        key = _norm(d.name).lower()
+        if key and key not in seen:
+            seen.add(key)
+            out.append(d)
+    return out
+
+
 def verify_quotes(ex: NoticeExtract, text: str) -> tuple[NoticeExtract, int]:
     """원문에 없는 인용이 붙은 항목은 버린다. 버린 개수를 함께 돌려준다."""
     src = _norm(text)
     facts = [f for f in ex.facts if f.quote.strip() and _norm(f.quote) in src]
     delivs = [d for d in ex.deliverables if d.quote.strip() and _norm(d.quote) in src]
     dropped = len(ex.facts) - len(facts) + len(ex.deliverables) - len(delivs)
+    delivs = unique_deliverables(delivs)  # 공고가 같은 제출물을 두 번 적어도 한 번만 (버린 개수에는 세지 않는다)
     clean = ex.model_copy(update={"facts": facts[:10], "deliverables": delivs[:10],
                                   "apply_deadline_iso": _iso(ex.apply_deadline_iso), "submit_deadline_iso": _iso(ex.submit_deadline_iso)})
     return clean, dropped
@@ -349,16 +367,23 @@ def _is_repo_item(name: str) -> bool:
     return bool(re.search(r"저장소|repo|github", name, re.I)) and not re.search(r"README", name, re.I)
 
 
+def no_mention(text: str) -> str:
+    """공고에서 가져온 글을 GitHub 이슈·마일스톤에 넣을 때 '@아이디'가 멘션이 되지 않게 한다.
+    공고의 '인스타그램 @학과계정' 같은 표기가 같은 아이디의 GitHub 사용자에게 알림을 보내던 것. 화면에는 똑같이 보인다."""
+    return re.sub(r"@(?=[A-Za-z0-9])", "@" + chr(0x200B), text or "")  # @ 뒤에 보이지 않는 빈칸(U+200B)
+
+
 def plan(ex: NoticeExtract, state: RepoState | None, milestone_title: str = "해커톤 제출", h: str | None = None, src: str | None = None) -> tuple[list, list[int]]:
     """공고를 저장소 일정으로 바꾸는 행동 목록. 이미 있는 관련 이슈는 새로 만들지 않고 연결한다.
 
     마일스톤 설명에 분석 결과를 숨겨 저장해서, 팀원이 같은 공고를 다시 분석하지 않아도 되게 한다.
     """
-    desc = f"{ex.title} 제출 · Bento가 공고에서 만든 마일스톤" + (f"\n\n{embed(ex, h)}" if h else "") + (f"\n<!-- bento-src:{src} -->" if safe_src(src) else "")
+    desc = f"{no_mention(ex.title)} 제출 · Bento가 공고에서 만든 마일스톤" + (f"\n\n{embed(ex, h)}" if h else "") + (f"\n<!-- bento-src:{src} -->" if safe_src(src) else "")
     actions: list = [CreateMilestone(title=milestone_title, due_on=_utc(ex.submit_deadline_iso), description=desc)]
     linked: list[int] = []
     existing = [i for i in (state.issues if state else []) if not is_suspicious(i.body)]
-    for d in ex.deliverables:
+    # 저장소에 저장해 둔 예전 분석 결과에 같은 제출물이 두 번 있어도, 같은 제목의 이슈를 두 번 만들려다 제안 전체가 실패하지 않게
+    for d in unique_deliverables(ex.deliverables):
         if _is_repo_item(d.name) or is_submit_act(d.name):
             continue
         kws = [k for k in KEYWORDS if k.lower() in d.name.lower()]
@@ -366,7 +391,7 @@ def plan(ex: NoticeExtract, state: RepoState | None, milestone_title: str = "해
         if found:
             linked += [i.number for i in found if i.number not in linked]
         else:
-            actions.append(CreateIssue(title=f"[제출물] {d.name}", body=f"공고 원문: \"{d.quote}\"", milestone_title=milestone_title))
+            actions.append(CreateIssue(title=f"[제출물] {d.name}", body=f"공고 원문: \"{no_mention(d.quote)}\"", milestone_title=milestone_title))
     if linked:
         actions.insert(1, SetMilestone(issues=linked, milestone_title=milestone_title))
     # 제출 버튼은 사람이 마지막에 직접 누르는 일이라 할 일(이슈)로 만들지 않는다. 마감은 마일스톤과 제출 점검이 챙긴다.
