@@ -170,17 +170,10 @@ def hwpx_text(raw: bytes) -> str:
 
 # ---------- 이미지·PDF: AI가 옮겨 적기 ----------
 def _allow(who: str, now: float) -> None:
-    day = time.strftime("%Y-%m-%d", time.gmtime(now))
-    with _lock:
-        if _day["key"] != day:
-            _day.update(key=day, n=0)
-        if _day["n"] >= PER_DAY_ALL:
-            raise AttachError("오늘 쓸 수 있는 파일 읽기를 다 썼어요. 공고 글을 붙여넣어 주세요", 429)
-        recent = [t for t in _hits.get(who, []) if now - t < 3600]
-        if len(recent) >= PER_HOUR:
-            raise AttachError("파일을 너무 자주 올렸어요. 조금 뒤에 다시 해 주세요", 429)
-        _hits[who] = recent + [now]
-        _day["n"] += 1
+    from .limits import take
+    take(_lock, _hits, _day, who, now, PER_HOUR, PER_DAY_ALL,
+         AttachError("오늘 쓸 수 있는 파일 읽기를 다 썼어요. 공고 글을 붙여넣어 주세요", 429),
+         AttachError("파일을 너무 자주 올렸어요. 조금 뒤에 다시 해 주세요", 429))
 
 
 def transcribe(kind: str, mime: str, raw: bytes, who: str = "anon", client=None) -> str:

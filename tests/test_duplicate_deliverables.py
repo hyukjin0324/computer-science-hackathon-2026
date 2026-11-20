@@ -44,3 +44,35 @@ def test_plan_dedupes_even_old_saved_analysis():
     actions, _ = nm.plan(ex, build_state(main._demo))
     titles = [a.title for a in actions if a.type == "create_issue"]
     assert titles == ["[제출물] 발표 자료", "[제출물] 시연 영상"]
+
+
+def test_mentions_in_notice_do_not_ping_github_users():
+    """공고 속 '@아이디'가 만들어진 이슈 본문에서 멘션이 되지 않는다 (모르는 GitHub 사용자에게 알림이 가던 것)."""
+    import re
+    text = "2026 AI 해커톤 (문의 @knu_cse)\n제출 마감: 2026년 12월 10일 18:00\n제출물: 발표 자료(@torvalds 양식 참고), 시연 영상"
+    r = client.post("/api/notice", json={"text": text}).json()
+    assert client.post("/api/execute", json={"token": r["plan"]["token"]}).json()["ok"]
+    bodies = [i["body"] for i in main._demo.d["issues"] if i["title"].startswith("[제출물]")]
+    descs = [m["description"] for m in main._demo.d["milestones"] if m["title"] == "해커톤 제출"]
+    for t in bodies + descs:
+        assert not re.search(r"(?<![\w])@[A-Za-z0-9]", t), t  # GitHub 멘션 모양이 남지 않는다
+    assert any("torvalds" in b for b in bodies)  # 글자는 그대로 보인다
+
+
+def test_rate_limit_helper_counts_per_person_and_per_day():
+    import threading
+
+    from app.limits import take
+
+    class E(Exception):
+        pass
+    hits, day, lock = {}, {"key": "", "n": 0}, threading.Lock()
+    t0 = 1_800_000_000.0
+    take(lock, hits, day, "a", t0, 2, 3, E("day"), E("hour"))
+    take(lock, hits, day, "a", t0 + 1, 2, 3, E("day"), E("hour"))
+    with pytest.raises(E, match="hour"):
+        take(lock, hits, day, "a", t0 + 2, 2, 3, E("day"), E("hour"))  # 한 사람 1시간 한도
+    take(lock, hits, day, "b", t0 + 3, 2, 3, E("day"), E("hour"))
+    with pytest.raises(E, match="day"):
+        take(lock, hits, day, "c", t0 + 4, 2, 3, E("day"), E("hour"))  # 서버 전체 하루 한도
+    take(lock, hits, day, "a", t0 + 3601 + 86400, 2, 3, E("day"), E("hour"))  # 다음 날·1시간 뒤에는 다시 된다

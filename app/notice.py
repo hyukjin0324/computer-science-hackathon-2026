@@ -144,19 +144,10 @@ _ai_day = {"key": "", "n": 0}
 
 def allow_ai(who: str, now: float | None = None) -> None:
     """한도 안이면 한 번 센다. 넘으면 NoticeLimit."""
-    now = time.time() if now is None else now
-    day = time.strftime("%Y-%m-%d", time.gmtime(now))
-    with _ai_lock:
-        if _ai_day["key"] != day:
-            _ai_day.update(key=day, n=0)
-        if _ai_day["n"] >= AI_PER_DAY_ALL:
-            raise NoticeLimit("오늘 AI로 읽을 수 있는 공고를 다 썼어요. 내일 다시 하거나 규칙으로 읽어 주세요")
-        recent = [t for t in _ai_hits.get(who, []) if now - t < 3600]
-        if len(recent) >= AI_PER_HOUR:
-            raise NoticeLimit("AI로 공고를 너무 자주 읽었어요. 조금 뒤에 다시 해 주세요")
-        recent.append(now)
-        _ai_hits[who] = recent
-        _ai_day["n"] += 1
+    from .limits import take
+    take(_ai_lock, _ai_hits, _ai_day, who, time.time() if now is None else now, AI_PER_HOUR, AI_PER_DAY_ALL,
+         NoticeLimit("오늘 AI로 읽을 수 있는 공고를 다 썼어요. 내일 다시 하거나 규칙으로 읽어 주세요"),
+         NoticeLimit("AI로 공고를 너무 자주 읽었어요. 조금 뒤에 다시 해 주세요"))
 
 
 # ---------- 토큰 절약: 같은 공고는 다시 분석하지 않는다 ----------
@@ -361,12 +352,18 @@ def _is_repo_item(name: str) -> bool:
     return bool(re.search(r"저장소|repo|github", name, re.I)) and not re.search(r"README", name, re.I)
 
 
+def no_mention(text: str) -> str:
+    """공고에서 가져온 글을 GitHub 이슈·마일스톤에 넣을 때 '@아이디'가 멘션이 되지 않게 한다.
+    공고의 '인스타그램 @학과계정' 같은 표기가 같은 아이디의 GitHub 사용자에게 알림을 보내던 것. 화면에는 똑같이 보인다."""
+    return re.sub(r"@(?=[A-Za-z0-9])", "@" + chr(0x200B), text or "")  # @ 뒤에 보이지 않는 빈칸(U+200B)
+
+
 def plan(ex: NoticeExtract, state: RepoState | None, milestone_title: str = "해커톤 제출", h: str | None = None, src: str | None = None) -> tuple[list, list[int]]:
     """공고를 저장소 일정으로 바꾸는 행동 목록. 이미 있는 관련 이슈는 새로 만들지 않고 연결한다.
 
     마일스톤 설명에 분석 결과를 숨겨 저장해서, 팀원이 같은 공고를 다시 분석하지 않아도 되게 한다.
     """
-    desc = f"{ex.title} 제출 · Bento가 공고에서 만든 마일스톤" + (f"\n\n{embed(ex, h)}" if h else "") + (f"\n<!-- bento-src:{src} -->" if safe_src(src) else "")
+    desc = f"{no_mention(ex.title)} 제출 · Bento가 공고에서 만든 마일스톤" + (f"\n\n{embed(ex, h)}" if h else "") + (f"\n<!-- bento-src:{src} -->" if safe_src(src) else "")
     actions: list = [CreateMilestone(title=milestone_title, due_on=_utc(ex.submit_deadline_iso), description=desc)]
     linked: list[int] = []
     existing = [i for i in (state.issues if state else []) if not is_suspicious(i.body)]
@@ -379,7 +376,7 @@ def plan(ex: NoticeExtract, state: RepoState | None, milestone_title: str = "해
         if found:
             linked += [i.number for i in found if i.number not in linked]
         else:
-            actions.append(CreateIssue(title=f"[제출물] {d.name}", body=f"공고 원문: \"{d.quote}\"", milestone_title=milestone_title))
+            actions.append(CreateIssue(title=f"[제출물] {d.name}", body=f"공고 원문: \"{no_mention(d.quote)}\"", milestone_title=milestone_title))
     if linked:
         actions.insert(1, SetMilestone(issues=linked, milestone_title=milestone_title))
     # 제출 버튼은 사람이 마지막에 직접 누르는 일이라 할 일(이슈)로 만들지 않는다. 마감은 마일스톤과 제출 점검이 챙긴다.
