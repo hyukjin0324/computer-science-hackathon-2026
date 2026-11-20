@@ -9,6 +9,7 @@
 """
 
 import re
+import shlex
 from datetime import datetime, timedelta
 
 from .actions import Comment, CreateIssue, is_suspicious
@@ -48,7 +49,7 @@ def watch(state: RepoState) -> list[dict]:
                       "why": (f"{who} 님의 마지막 커밋 '{main.get('message', '')}' 뒤로 CI가 실패해요. " if who else "") + "모두의 브랜치가 막히니 먼저 고쳐야 해요",
                       "evidence": [{"label": "실패한 커밋", "url": main.get("url") or f"{gh_url}/commits/{branch}"}],
                       "handoff": [{"label": "CI 기록 보기", "url": f"{main.get('url', gh_url)}/checks" if main.get("url") else f"{gh_url}/actions"},
-                                  {"label": "최신 main 받기", "command": f"git checkout {branch} && git pull origin {branch}"}],
+                                  {"label": "최신 main 받기", "command": f"git checkout {shlex.quote(branch)} && git pull origin {shlex.quote(branch)}"}],
                       "options": [{"label": "'빌드 고치기' 할 일 만들기" + (f" ({who} 님 담당)" if who in state.members else ""), "recommended": True, "sub": "GitHub 이슈", "actions": acts}]})
 
     # 2. 비밀키가 올라감 (값은 절대 보여 주지 않는다)
@@ -64,7 +65,7 @@ def watch(state: RepoState) -> list[dict]:
                              "먼저 그 키를 발급한 곳에서 폐기하고 새로 받아 주세요",
                       "evidence": [{"label": l["path"], "url": l.get("url") or f"{gh_url}/blob/{branch}/{l['path']}"} for l in leaks[:3]],
                       "handoff": [{"label": "1. 키 폐기하고 새로 발급받기", "url": "https://docs.github.com/ko/code-security/secret-scanning/working-with-secret-scanning-and-push-protection"},
-                                  ({"label": "2. 비밀 파일을 저장소에서 빼기", "command": " && ".join(f"git rm --cached '{p}'" for p in tree.get("secrets", [])[:3])} if tree.get("secrets") else None),
+                                  ({"label": "2. 비밀 파일을 저장소에서 빼기", "command": " && ".join(f"git rm --cached {shlex.quote(p)}" for p in tree.get("secrets", [])[:3])} if tree.get("secrets") else None),
                                   ({"label": "2. 코드에 적힌 키는 지우고 환경 변수(.env)로 옮기기", "url": (sig.get("keys") or [{}])[0].get("url") or gh_url} if sig.get("keys") else None),
                                   {"label": "3. 다시 안 올라가게", "command": "echo '.env*' >> .gitignore && echo '!.env.example' >> .gitignore"}],
                       "options": []})  # 공개 저장소에 '키가 여기 있다'고 적지 않도록 댓글·이슈는 만들지 않는다
@@ -73,7 +74,7 @@ def watch(state: RepoState) -> list[dict]:
     if tree.get("big") or tree.get("junk"):
         parts = [f"{b['path'].split('/')[-1]} ({_mb(b['size'])})" for b in tree.get("big", [])[:2]] + [f"{j}/ 폴더" for j in tree.get("junk", [])[:2]]
         cmds = [f"git rm -r --cached {j} && echo '{j}/' >> .gitignore" for j in tree.get("junk", [])[:2]]
-        cmds += [f"git rm --cached '{b['path']}'" for b in tree.get("big", [])[:2]]
+        cmds += [f"git rm --cached {shlex.quote(b['path'])}" for b in tree.get("big", [])[:2]]  # 파일 이름에 따옴표·세미콜론이 있어도 명령이 되지 않게
         items.append({"id": "bigfile", "sev": "정리", "who": lead, "age": 0, "title": f"저장소에 무거운 파일이 있어요 · {', '.join(parts)}",
                       "why": "저장소가 무거워지고 100MB가 넘으면 푸시가 막혀요. 영상·데이터는 드라이브 링크로, 설치 폴더는 .gitignore로 빼요",
                       "evidence": [{"label": b["path"], "url": f"{gh_url}/blob/{branch}/{b['path']}"} for b in tree.get("big", [])[:2]] or [{"label": "저장소 파일", "url": gh_url}],
@@ -146,7 +147,7 @@ def watch(state: RepoState) -> list[dict]:
                       "title": f"PR #{p.number} 수정 요청에 {int(hours(at, now))}시간째 답이 없어요",
                       "why": f"{', '.join(p.changes_by)} 님이 고쳐 달라고 했는데 그 뒤로 새 커밋이 없어요",
                       "evidence": [{"label": f"PR #{p.number}", "url": p.url}],
-                      "handoff": [{"label": "리뷰 내용 보기", "url": f"{p.url}/files"}, {"label": "브랜치 받기", "command": f"git fetch origin && git checkout {p.branch}"}],
+                      "handoff": [{"label": "리뷰 내용 보기", "url": f"{p.url}/files"}, {"label": "브랜치 받기", "command": f"git fetch origin && git checkout {shlex.quote(p.branch)}"}],
                       "options": [{"label": f"{p.author} 님께 상황 묻기", "recommended": True, "sub": "PR 댓글", "actions": [
                           Comment(number=p.number, body=f"@{p.author} 님, {', '.join(p.changes_by)} 님의 수정 요청이 남아 있어요. 고치기 어렵거나 생각이 다르면 리뷰에 답글로 남겨 주세요!")]}]})
 

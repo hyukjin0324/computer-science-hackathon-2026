@@ -1122,7 +1122,7 @@ def test_watch_secret_never_shows_value():
     blob = str(it)
     assert key not in blob and "backend/.env" in it["title"] and ".env.example" not in it["title"]
     cmds = " ".join(h.get("command", "") for h in it["handoff"] if h)
-    assert "git rm --cached 'backend/.env'" in cmds and "src/config.ts" not in cmds  # 키가 적힌 코드 파일은 지우지 않는다
+    assert "git rm --cached backend/.env" in cmds and "src/config.ts" not in cmds  # 키가 적힌 코드 파일은 지우지 않는다
     assert "GitHub 토큰" in it["why"] and it["options"] == []  # 공개 댓글로 알리지 않는다
     assert secret_file("a/.env.local") and not secret_file(".env.sample") and not secret_file("src/env.ts")
     assert key_kinds("-sk-ant-" + "x" * 30) == [] and key_kinds("+-----BEGIN PRIVATE KEY-----") == ["개인 키"]  # 지운 줄은 안 본다
