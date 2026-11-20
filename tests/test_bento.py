@@ -671,8 +671,9 @@ def test_discover_force_needs_login_or_code(monkeypatch):
     assert client.get("/api/discover?force=true", headers={"X-Bento-Code": "c0de"}).status_code == 200
 
 
-def test_discover_is_polite_and_cached():
+def test_discover_is_polite_and_cached(monkeypatch):
     import app.discover as dsc
+    monkeypatch.setattr(dsc, "_check_host", lambda url: None)  # 실제 DNS 조회를 하지 않는다 (CI에서 2초쯤 걸려 '10초 간격' 판정이 흔들렸다)
     calls = []
     dsc._LAST_HIT.clear()
     slept = []
