@@ -15,6 +15,13 @@ from .state import RepoState
 SEV_ORDER = {"긴급": 0, "주의": 1, "바로 가능": 2, "정리": 3, "확인": 4}
 
 
+def issue_link(i, verb: str = "확인하러 가기", limit: int = 16) -> dict:
+    """'이슈 #49'만으로는 뭘 하러 가는 버튼인지 모른다: 번호와 짧은 제목, 하러 가는 일을 같이 적는다."""
+    title = re.sub(r"^\[[^\]]*\]\s*", "", i.title).strip()
+    short = title if len(title) <= limit else title[:limit - 1] + "…"
+    return {"label": f"#{i.number} {short} {verb}".replace("  ", " "), "url": i.url}
+
+
 def _load(state: RepoState) -> Counter:
     """팀원별로 맡은 일(열린 이슈 담당 + 리뷰 요청) 수."""
     c = Counter({m: 0 for m in state.members})
@@ -91,8 +98,8 @@ def triage(state: RepoState, review_wait_hours: float = 24) -> list[dict]:
         if asked:
             sub += (" · " if sub else "") + f"제목에 담당이 적힌 {len(asked)}개({', '.join('#' + str(i.number) for i in asked[:3])}{'…' if len(asked) > 3 else ''})는 직접 정해 주세요"
         items.append({"id": "assign", "sev": "긴급" if _due_soon(state, unassigned) else "주의", "title": f"담당자 없는 이슈 {len(unassigned)}개",
-                      "why": ", ".join(f"#{i.number} {i.title}" for i in unassigned[:4]),
-                      "evidence": [{"label": f"이슈 #{i.number}", "url": i.url} for i in unassigned[:4]],
+                      "why": "맡은 사람이 없는 이슈예요. 아래 이슈를 눌러 내용을 확인하고, 괜찮으면 Bento가 나눠 드려요" + (f" (외 {len(unassigned) - 4}개)" if len(unassigned) > 4 else ""),
+                      "evidence": [issue_link(i) for i in unassigned[:4]],
                       "options": [{"label": "역할대로 나누기" if state.roles else "맡은 일이 적은 순서로 나누기", "recommended": True,
                                    "sub": sub, "actions": acts}] if pairs else []})
 
