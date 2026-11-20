@@ -93,12 +93,12 @@ app/demo.py         GitHub App 없이 돌아가는 데모 저장소
 api/index.py        Vercel 진입점
 ```
 
-기술: Python 3.11 · FastAPI · httpx · Anthropic SDK · 바닐라 JS (빌드 없음) · GitHub App · Vercel
+기술: Python 3.12 · FastAPI · httpx · Anthropic SDK · 바닐라 JS (빌드 없음) · GitHub App · Vercel
 
 ## 로컬 실행
 
 ```bash
-uv venv --python 3.11 .venv && uv pip install --python .venv/bin/python -r requirements.txt uvicorn pytest tzdata
+uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements.txt uvicorn pytest tzdata
 .venv/bin/python -m pytest -q
 .venv/bin/python -m uvicorn app.main:app --port 8787
 ```
