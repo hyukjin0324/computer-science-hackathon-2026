@@ -538,14 +538,12 @@ details.teamall summary { gap: 8px; } details.teamall summary .gsub { color: var
 .nm { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 /* 휴대폰 틀: 발표·촬영용. 노트북(마우스가 있는 큰 화면)에서 마이페이지의 스위치를 켠 때만 보인다. 기본은 꺼짐, 휴대폰·태블릿은 항상 전체 화면 */
 @media (min-width: 900px) and (min-height: 640px) and (hover: hover) and (pointer: fine) {
-  :root[data-frame="on"] { background: #E9EAEE; }
+  :root[data-frame="on"] { background: #E9EAEE; }  /* 다크 모드여도 틀 바깥은 그대로: 어두워지는 건 폰 화면 안뿐이다 */
   :root[data-frame="on"] body { background: transparent; padding-block: 30px; display: flex; align-items: center; justify-content: center; }  /* 틀 바깥 테두리(10px)를 빼고 위아래 20px씩, 창이 크면 세로 가운데 */
   :root[data-frame="on"] body .sheet-bg, :root[data-frame="on"] body .drawer-bg { margin: 0; }  /* 틀 안에서는 틀 자체가 화면 가장자리라, 좁은 화면용 바깥으로 내미는 여백이 안쪽 16px를 잘라 먹는다 */
   :root[data-frame="on"] body .drawer { padding-top: 26px; }  /* 둥근 모서리에 로고가 걸리지 않게 */
   :root[data-frame="on"] .phone { width: 393px; max-width: none; height: 852px; zoom: var(--phone-k, 1); background: var(--bg); border-radius: 40px; padding: 0 16px; overflow: hidden; box-shadow: 0 0 0 10px #17181C, 0 28px 70px rgb(23 24 28 / .28); }
 }
-@media (min-width: 900px) and (min-height: 640px) and (hover: hover) and (pointer: fine) and (prefers-color-scheme: dark) { :root:not([data-theme="light"])[data-frame="on"] { background: #111113; } }
-@media (min-width: 900px) and (min-height: 640px) and (hover: hover) and (pointer: fine) { :root[data-theme="dark"][data-frame="on"] { background: #111113; } }
 details.teamall { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-box); padding: 4px 14px; }
 details.teamall[open] { padding-bottom: 12px; } details.teamall summary { list-style: none; } details.teamall summary::-webkit-details-marker { display: none; }
 details.teamall summary::after { content: '›'; margin-left: auto; color: var(--muted); transition: transform .15s; } details.teamall[open] summary::after { transform: rotate(90deg); } details.teamall summary { cursor: pointer; font-size: var(--fs-body); font-weight: 700; min-height: 40px; display: flex; align-items: center; } details.teamall > a { margin-top: 8px; }
