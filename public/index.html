@@ -686,7 +686,8 @@ details.teamall summary::after { content: '›'; margin-left: auto; color: var(-
 .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 44px; text-align: left; }
 .switch .knob { width: 52px; height: 32px; border-radius: var(--r-pill); background: var(--line); position: relative; flex: none; transition: background .2s; }
 .switch .knob::after { content: ""; position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 1px 3px rgb(0 0 0 / .25); transition: left .2s; }
-.switch[aria-checked="true"] .knob { background: var(--green); }
+.switch[aria-checked="true"] .knob { background: var(--ink); }  /* 켜짐은 초록 대신 검정 (다크 모드에서는 흰색) */
+.switch[aria-checked="true"] .knob::after { background: var(--surface); }  /* 동그라미는 바탕색이라 어느 모드에서나 보인다 */
 .switch[aria-checked="true"] .knob::after { left: 23px; }
 /* 홈 맨 위 카드: 다른 카드와 같은 흰 카드. 라벨은 내용만 */
 .hero { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 16px; display: grid; grid-template-columns: 1fr; gap: 6px; }
@@ -3227,7 +3228,7 @@ function renderMe() {
     const frameOn = document.documentElement.dataset.frame === "on";
     const fk = h("span", "switch"); fk.setAttribute("aria-hidden", "true"); fk.setAttribute("aria-checked", String(frameOn)); fk.style.width = "auto"; fk.appendChild(h("span", "knob"));
     let fr; const flip = () => { const next = fr.getAttribute("aria-checked") !== "true"; if (next) document.documentElement.dataset.frame = "on"; else delete document.documentElement.dataset.frame; store.set("frame", next ? "on" : "off"); fr.setAttribute("aria-checked", String(next)); fk.setAttribute("aria-checked", String(next)); fitPhone(); };
-    fr = meRow("phone", "휴대폰 틀로 보기", "발표·촬영용: 노트북에서 휴대폰 화면처럼 보여 줌. 기본은 꺼짐", flip, fk); fr.setAttribute("role", "switch"); fr.setAttribute("aria-checked", String(frameOn)); g2.appendChild(fr);
+    fr = meRow("phone", "휴대폰 틀로 보기", "발표·촬영용 · 휴대폰 화면처럼 보여 줌", flip, fk);  /* 다크 모드 줄처럼 짧게 한 줄로 */ fr.setAttribute("role", "switch"); fr.setAttribute("aria-checked", String(frameOn)); g2.appendChild(fr);
   }
   const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
   if (!standalone && matchMedia("(pointer: coarse)").matches) {  // 휴대폰 브라우저로 열었을 때만: 주소창 없이 전체 화면으로 쓰는 방법
