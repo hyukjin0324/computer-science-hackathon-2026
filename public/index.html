@@ -979,7 +979,7 @@ function openPicks() {
   const all = PICKS(); const find = (name) => all.find((x) => x[1].includes(name));
   sh.appendChild(rows([["trophy", "대회 찾기", find("새 대회 고르기")[2], find("새 대회 고르기")[3]]]));
   sh.appendChild(h("hr", "tsep"));
-  sh.appendChild(rows([["list", "오늘 할 일 정리", find("할 일 정리")[2], find("할 일 정리")[3]], ["cal", "마감까지 계획 짜기", find("계획 짜기")[2], find("계획 짜기")[3]], ["search", "진행 점검·다시 계획", find("진행 점검")[2], find("진행 점검")[3]], ["send", "제출 전 점검", find("제출 전")[2], find("제출 전")[3]]]));
+  sh.appendChild(rows([["list", "오늘 할 일 정리", find("할 일 정리")[2], find("할 일 정리")[3]], ["cal", "마감까지 계획 짜기", find("계획 짜기")[2], find("계획 짜기")[3]], ["search", "진행 점검·다시 계획", find("진행 점검")[2], find("진행 점검")[3]], ["send", "제출 전 점검", find("제출 전")[2], find("제출 전")[3]], ["trophy", "심사 기준으로 채점", find("심사 기준")[2], find("심사 기준")[3]]]));
   document.querySelector(".phone").appendChild(bg); tiles.querySelector("button").focus();
 }
 function intro() {
@@ -1665,13 +1665,17 @@ function resumeChat() {
   else {
     where = `협업 중${subD != null && subD >= 0 ? ` · 제출 마감 D-${subD}` : ""}`;
     if (lastProgress && lastProgress.findings && lastProgress.findings.length) next = ["늦어진 일 보기", () => { me("늦어진 일 보여 줘"); progressCard(lastProgress, true); }];
-    else if (subD != null && subD >= 0 && subD <= 3) next = ["제출 전 점검하기", submit];
+    else if (subD != null && subD >= 0 && subD <= 3) next = ["제출 전 점검하기", submit, ["심사 기준으로 채점", () => criteriaScore()]];  // 마감이 가까우면 점검 옆에 채점도
     else if (!hasPlan() && ex.submit_deadline_iso) next = ["마감까지 계획 짜기", planFlow];
     else next = ["오늘 할 일 정리", today];
   }
   const c = h("div", "task resume"); const hd = h("div", "task-h"); hd.appendChild(h("b", null, `이어서 하기 · ${projName()}`)); c.appendChild(hd);
   c.appendChild(h("div", "note", where));
-  if (next) { const b = h("button", "btn primary", next[0]); b.type = "button"; b.onclick = () => { b.disabled = true; showTab("chat"); next[1](); }; c.appendChild(b); }
+  if (next) {
+    const rb = h("div", "row-btns"); const b = h("button", "btn primary", next[0]); b.type = "button"; b.onclick = () => { b.disabled = true; showTab("chat"); next[1](); }; rb.appendChild(b);
+    if (next[2]) { const b2 = h("button", "btn", next[2][0]); b2.type = "button"; b2.onclick = () => { b2.disabled = true; showTab("chat"); next[2][1](); }; rb.appendChild(b2); }
+    c.appendChild(rb);
+  }
   box.appendChild(c); scroll();
 }
 function stageOf() {
