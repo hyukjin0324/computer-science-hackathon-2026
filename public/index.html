@@ -2668,6 +2668,7 @@ async function freeChat(t) {
   catch (e) { bot(e.message || "AI가 답하지 못했어요."); chip("할 수 있는 일 보기", openPicks); return; }
   if (!r || !r.ai) return dunno();
   chatHist.push({ role: "user", text: t.slice(0, 500) }, { role: "assistant", text: r.reply }); chatHist = chatHist.slice(-12);
+  if (r.kind === "do" && r.action && FREE_ACTIONS[r.action]) { FREE_ACTIONS[r.action](); return; }  // 요청은 설명 없이 바로 그 기능을 보여 준다
   bot(r.reply);
   if (r.action && FREE_ACTIONS[r.action]) chip(r.label || "이어서 하기", FREE_ACTIONS[r.action]); else chip("할 수 있는 일 보기", openPicks);
 }
