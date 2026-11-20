@@ -1927,9 +1927,13 @@ def test_plan_issue_tells_where_it_lives_and_to_close_it():
 def test_milestone_date_survives_github_converting_to_pacific_time():
     """GitHub는 보낸 시각을 태평양 시간 날짜로 저장한다. 00:00Z로 보내면 하루 전 날짜가 되므로 정오로 보낸다."""
     from datetime import datetime as dt
-    from zoneinfo import ZoneInfo
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
     from app.notice import _utc
     from app.state import ms_due
+    try:
+        ZoneInfo("America/Los_Angeles")
+    except ZoneInfoNotFoundError:
+        pytest.skip("이 컴퓨터에 시간대 정보가 없어요 (Windows). `pip install tzdata` 후 다시 돌려 주세요")
     for day in ("2026-11-20", "2026-03-09", "2026-07-01"):  # 겨울·서머타임 전후
         sent = _utc(f"{day}T23:00:00+09:00")
         saved = dt.fromisoformat(sent.replace("Z", "+00:00")).astimezone(ZoneInfo("America/Los_Angeles")).date().isoformat()
@@ -2083,3 +2087,36 @@ def test_notice_source_address_is_saved_in_the_milestone_only_when_safe():
     assert source_url([actions[0].description]) == "https://example.com/n?id=1"
     actions, _ = plan(SAMPLE_EXTRACT, None, h="0123456789abcdef", src="http://insecure.example.com")
     assert source_url([actions[0].description]) is None
+
+
+# ---------- 실행 직전 다시 확인은 캐시를 쓰지 않는다 · 캘린더 되돌리기 ----------
+def test_execute_reads_github_fresh_even_when_state_is_cached(monkeypatch):
+    """홈이 15초 캐시를 쓰더라도, 승인 실행 직전에는 GitHub를 새로 읽어 그사이 바뀐 것을 잡는다."""
+    import app.coord as coord
+    monkeypatch.setattr(main, "settings", main.settings.__class__(**{**main.settings.__dict__, "app_id": "1", "private_key": "k"}))
+    monkeypatch.setattr(main, "gh_for", lambda repo: main._demo)
+    for f, v in (("acquire", lambda gh, now=None: None), ("release", lambda gh: None), ("recent", lambda gh: []), ("mark_done", lambda gh, key: None)):
+        monkeypatch.setattr(coord, f, v)
+    main._STATE_CACHE.clear()
+    p = _option("review")  # 승인 대기를 읽으면서 상태가 캐시에 들어간다
+    pr14 = next(x for x in main._demo.d["prs"] if x["number"] == 14)
+    pr14["requested_reviewers"].append({"login": "hajun"})  # 그사이 다른 팀원이 GitHub에서 직접 리뷰어를 지정
+    r = client.post("/api/execute", json={"token": p["token"]})
+    assert r.status_code == 409 and r.json()["detail"]["stale"]  # 캐시된 상태로 실행하지 않는다
+    main._STATE_CACHE.clear()
+
+
+def _cal_milestone(title):
+    m = main._demo.create_milestone(title, "2026-11-24T12:00:00Z", "")
+    return [main._demo.create_issue(f"[계획] 일 {k}", "", [], m["number"])["number"] for k in range(2)]
+
+
+def test_calendar_undo_reopens_only_issues_the_calendar_closed():
+    nums = _cal_milestone("계획 · 테스트 단계")
+    main._demo.update_issue(nums[0], state="closed")  # 캘린더가 아닌 다른 이유로 닫힌 이슈
+    r = client.post("/api/plan/done", json={"milestone": "계획 · 테스트 단계"}).json()
+    assert r["closed"] == [nums[1]]
+    back = client.post("/api/plan/done", json={"milestone": "계획 · 테스트 단계", "reopen": nums}).json()
+    assert back["reopened"] == [nums[1]]  # 캘린더로 닫은 것만 다시 연다
+    again = client.post("/api/plan/done", json={"milestone": "계획 · 테스트 단계", "reopen": nums}).json()
+    assert again["reopened"] == []  # 이미 되돌린 것을 또 열지 않는다

@@ -98,12 +98,14 @@ api/index.py        Vercel 진입점
 ## 로컬 실행
 
 ```bash
-uv venv --python 3.11 .venv && uv pip install --python .venv/bin/python -r requirements.txt uvicorn pytest
+uv venv --python 3.11 .venv && uv pip install --python .venv/bin/python -r requirements.txt uvicorn pytest tzdata
 .venv/bin/python -m pytest -q
 .venv/bin/python -m uvicorn app.main:app --port 8787
 ```
 
 http://localhost:8787 을 열면 데모 저장소로 동작해요. GitHub App이나 AI 키 없이도 모든 화면을 볼 수 있어요.
+
+Windows에서는 경로가 `.venv\Scripts\python`이에요. `tzdata`는 Windows에 시간대 정보가 없어서 테스트(마일스톤 날짜를 미국 서부 시간으로 바꿔 보는 것)에 필요해요. 앱 실행에는 필요 없어요.
 
 ## 실제 GitHub 연결 (GitHub App 만들기)
 
