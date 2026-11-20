@@ -136,9 +136,11 @@ class DemoGitHub:
         self.log.append(f"issue #{n} {title}")
         return i
 
-    def update_milestone(self, number, due_on):
+    def update_milestone(self, number, due_on, description=None):
         m = next(x for x in self.d["milestones"] if x["number"] == number)
         m["due_on"] = due_on
+        if description is not None:
+            m["description"] = description
         self.log.append(f"milestone {m['title']} due {due_on}")
         return m
 

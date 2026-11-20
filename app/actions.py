@@ -88,6 +88,7 @@ class UpdateMilestone(BaseModel):
     due_on: str
     reason: str = ""
     expect_due: str | None = None  # 제안할 때 본 마감
+    description: str | None = None  # 함께 바꿀 마일스톤 설명 (제출 마감을 고칠 때 숨겨 둔 공고 분석의 날짜도 같이 바꾼다)
 
 
 class SetTeamRules(BaseModel):
@@ -373,7 +374,7 @@ def execute(actions: list, gh, settings, op: str | None = None, by: str | None =
                 milestone_numbers[a.title] = m["number"]
                 url = m.get("html_url")
             elif isinstance(a, UpdateMilestone):
-                gh.update_milestone(milestone_numbers[a.title], a.due_on)
+                gh.update_milestone(milestone_numbers[a.title], a.due_on, a.description)
                 url = gh.html("/milestones")
             elif isinstance(a, SetMilestone):
                 for n in a.issues:

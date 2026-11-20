@@ -570,6 +570,36 @@ def chat_free(body: ChatIn, request: Request, x_bento_code: str | None = Header(
         raise HTTPException(e.status, str(e)) from e
 
 
+class DeadlineIn(BaseModel):
+    repo: str | None = None
+    submit_deadline_iso: str
+
+
+@app.post("/api/notice/deadline")
+def move_submit_deadline(body: DeadlineIn):
+    """제출 마감을 고칠 때: 저장소의 '해커톤 제출' 마일스톤 마감과, 그 안에 숨겨 둔 공고 분석의 날짜를 함께 옮기는 제안.
+
+    전에는 한 번 정한 마감(직접 적은 날짜 포함)을 바꿀 길이 없어서, 오타가 나면 팀 전체 일정에 그대로 남았다.
+    팀 전체에 영향을 주는 변경이라 지금 규칙대로 제안한 사람이 아닌 팀원이나 팀장이 승인해야 실행된다.
+    """
+    try:
+        iso = notice_mod.aware_iso(body.submit_deadline_iso)
+        datetime.fromisoformat(iso)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(422, "날짜 형식이 맞지 않아요") from e
+    gh, st = state_for(body.repo)
+    ms = st.milestone("해커톤 제출")
+    if not ms:
+        return {"proposal": None, "message": "GitHub에 아직 제출 마감(마일스톤)이 없어서 이 기기에서만 바꿨어요"}
+    due = notice_mod._utc(iso)
+    if ms.due_on and ms.due_on[:10] == due[:10] and notice_mod.from_descriptions([ms.description]) and \
+            (notice_mod.from_descriptions([ms.description]).submit_deadline_iso or "") == iso:
+        return {"proposal": None, "message": "GitHub의 제출 마감도 이미 이 날짜예요"}
+    act = UpdateMilestone(title="해커톤 제출", due_on=due, reason="제출 마감을 고쳐요 · 팀원 기기와 매일 점검도 새 날짜를 써요",
+                          expect_due=ms.due_on, description=notice_mod.retime_description(ms.description, iso))
+    return {"proposal": _proposal(gh.repo, "제출 마감 고치기", [act], "deadline")}
+
+
 class RecheckIn(BaseModel):
     url: str
     base: dict | None = None  # 지난번에 읽은 값 {hash, apply_deadline_iso, submit_deadline_iso}

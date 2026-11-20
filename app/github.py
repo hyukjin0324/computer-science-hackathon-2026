@@ -212,8 +212,9 @@ class GitHub:
             payload["milestone"] = milestone
         return self.api("POST", self._r("/issues"), json=payload)
 
-    def update_milestone(self, number: int, due_on: str):
-        return self.api("PATCH", self._r(f"/milestones/{number}"), json={"due_on": due_on})
+    def update_milestone(self, number: int, due_on: str, description: str | None = None):
+        body = {"due_on": due_on} | ({"description": description} if description is not None else {})
+        return self.api("PATCH", self._r(f"/milestones/{number}"), json=body)
 
     def update_issue(self, n: int, **fields):
         return self.api("PATCH", self._r(f"/issues/{n}"), json=fields)

@@ -185,6 +185,21 @@ def embed(ex: NoticeExtract, h: str) -> str:
     return f"<!-- bento-notice:{h} {data} -->"
 
 
+def retime_description(desc: str, submit_iso: str) -> str:
+    """마일스톤 설명에 숨겨 둔 공고 분석 결과의 제출 마감을 새 날짜로 바꾼다 (다른 기기·매일 점검이 이 값을 읽는다).
+    숨겨 둔 결과가 없으면 설명을 그대로 돌려준다."""
+    m = EMBED.search(desc or "")
+    if not m:
+        return desc or ""
+    try:
+        ex = NoticeExtract.model_validate(json.loads(base64.urlsafe_b64decode(m.group(2))))
+    except (ValueError, json.JSONDecodeError):
+        return desc
+    from .rules import human
+    ex = ex.model_copy(update={"submit_deadline_iso": aware_iso(submit_iso), "submit_deadline": human(datetime.fromisoformat(aware_iso(submit_iso)))})
+    return desc[:m.start()] + embed(ex, m.group(1)) + desc[m.end():]
+
+
 def from_descriptions(descriptions: list[str], h: str | None = None) -> NoticeExtract | None:
     """마일스톤 설명에 숨겨 둔 분석 결과를 꺼낸다. h가 없으면 처음 찾은 것."""
     for d in descriptions:
