@@ -83,7 +83,8 @@ def _state_lock(key: str) -> threading.Lock:
     return _STATE_LOCKS.setdefault(key, threading.Lock())
 
 
-def state_for(repo: str | None):
+def state_for(repo: str | None, fresh: bool = False):
+    """저장소 상태. fresh=True면 저장해 둔 것을 쓰지 않고 GitHub에서 새로 읽는다 (승인 실행 직전 다시 확인할 때)."""
     gh = gh_for(repo)
     try:
         if not settings.live:  # 데모는 메모리라 바로 읽고, 테스트에서 상태를 바꿔 가며 본다
@@ -91,7 +92,7 @@ def state_for(repo: str | None):
         import copy
         with _state_lock(gh.repo):  # 같은 저장소를 동시에 읽는 요청은 한 번만 읽고 나눠 쓴다
             hit = _STATE_CACHE.get(gh.repo)
-            if not hit or time.time() - hit[0] > STATE_TTL:
+            if fresh or not hit or time.time() - hit[0] > STATE_TTL:
                 hit = (time.time(), build_state(gh))
                 _STATE_CACHE[gh.repo] = hit
         return gh, copy.deepcopy(hit[1])  # 판단 함수가 상태를 고쳐 쓰므로 복사본을 준다
@@ -733,6 +734,18 @@ def roles_set(body: RolesIn, request: Request, x_bento_code: str | None = Header
 FOOT_UNDO = "\n\n<sub>— 캘린더에서 누른 것을 Bento가 대신 남겼어요</sub>"
 
 
+CAL_CLOSED = "단계를 끝냈다고 표시해서 닫았어요"
+
+
+def _closed_by_calendar(gh, n: int) -> bool:
+    """이 이슈의 마지막 캘린더 기록이 '캘린더에서 닫음'인지 (그 뒤에 되돌렸거나, 캘린더가 아닌 다른 이유로 닫혔으면 아니다)."""
+    try:
+        marks = [c.get("body") or "" for c in gh.issue_comments(n) if FOOT_UNDO.strip() in (c.get("body") or "")]
+    except GitHubError:
+        return False
+    return bool(marks) and CAL_CLOSED in marks[-1]
+
+
 class StepDoneIn(BaseModel):
     repo: str | None = None
     milestone: str  # 끝낸 단계의 마일스톤 이름 ('계획 · …' 또는 '해커톤 제출')
@@ -753,6 +766,8 @@ def plan_done(body: StepDoneIn, request: Request, x_bento_code: str | None = Hea
                 issue = gh.issue(n)
                 if issue.get("state") != "closed" or (issue.get("milestone") or {}).get("title") != body.milestone or issue.get("pull_request"):
                     continue
+                if not _closed_by_calendar(gh, n):  # 캘린더로 닫은 이슈만 되돌린다 (다른 이유로 닫힌 이슈는 그대로)
+                    continue
                 gh.update_issue(n, state="open")
                 gh.comment(n, f"{actor}님이 캘린더에서 되돌려서 다시 열었어요.{FOOT_UNDO}")
                 done.append(n)
@@ -769,7 +784,7 @@ def plan_done(body: StepDoneIn, request: Request, x_bento_code: str | None = Hea
             skipped.append({"number": i.number, "why": "의심스러운 지시가 있어 건드리지 않았어요"})
             continue
         try:
-            gh.comment(i.number, f"{actor}님이 캘린더에서 '{body.milestone}' 단계를 끝냈다고 표시해서 닫았어요. 잘못 눌렀다면 이 이슈를 다시 열어 주세요.{FOOT_UNDO}")
+            gh.comment(i.number, f"{actor}님이 캘린더에서 '{body.milestone}' {CAL_CLOSED}. 잘못 눌렀다면 이 이슈를 다시 열어 주세요.{FOOT_UNDO}")
             gh.update_issue(i.number, state="closed", state_reason="completed")
             closed.append(i.number)
         except GitHubError as e:
@@ -1078,7 +1093,7 @@ def _run(repo: str, actions: list, by: str | None = None, require_member: bool =
         try:
             if key[:10] in coord.recent(gh):  # 다른 서버에서 이미 실행한 제안
                 raise already
-            gh, st = state_for(data["repo"])  # 잠근 뒤에 저장소를 다시 읽는다
+            gh, st = state_for(data["repo"], fresh=True)  # 잠근 뒤에 저장소를 새로 읽는다 (15초 캐시를 쓰면 그사이 바뀐 것을 못 본다)
             errors = validate(actions, st)
             if errors:
                 stale = any(e.split(": ", 1)[-1].startswith(STALE) for e in errors)
