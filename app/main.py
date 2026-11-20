@@ -29,7 +29,7 @@ from .demo import DemoGitHub
 from .fetch import FetchError, fetch_notice
 from .schedule import work_plan
 from .github import GitHub, GitHubError, installed_repos
-from .proposals import ProposalError, sign, verify
+from .proposals import MAX_AGE, ProposalError, sign, verify
 from .state import build_state
 from .triage import triage
 
@@ -1022,9 +1022,11 @@ def run_proposal(body: ExecuteIn, request: Request, x_bento_code: str | None = H
     else:
         _check_code(x_bento_code)
     try:
-        data = verify(body.token, settings.signing_key)
+        data = verify(body.token, settings.signing_key, max_age=APPROVE_MAX_AGE)
     except ProposalError as e:
         raise HTTPException(400, str(e)) from e
+    if time.time() - data.get("iat", 0) > MAX_AGE and not _open_request_for(data["repo"], body.token):
+        raise HTTPException(400, "오래된 제안이에요. 상황을 다시 확인해 주세요")  # 승인 요청으로 올린 것만 3일까지, 나머지는 지금처럼 6시간
     actions = ActionList.validate_python(data["actions"])
     for idx, text in body.edits.items():  # 사람이 고칠 수 있는 건 글뿐
         if 0 <= idx < len(actions) and (field := EDITABLE.get(actions[idx].type)):
@@ -1098,8 +1100,25 @@ def approval_request(body: RequestIn, request: Request, x_bento_code: str | None
     return {"issue": n.get("number"), "url": n.get("html_url"), "already": False}
 
 
+APPROVE_MAX_AGE = 3 * 24 * 3600  # 다른 팀원에게 보낸 승인 요청은 3일 동안 승인할 수 있다 (보통 제안은 6시간)
+
+
+def _open_request_for(repo: str, token: str) -> bool:
+    """이 제안이 아직 열려 있는 [승인 요청] 이슈로 올라가 있는지."""
+    key = _tok_key(token)
+    try:
+        return any((i.get("title") or "").startswith(APPROVE_PREFIX) and f"bento-approve:{key}" in (i.get("body") or "")
+                   for i in gh_for(repo).open_issues())
+    except Exception:  # noqa: BLE001 - 못 읽으면 오래된 제안으로 본다
+        return False
+
+
 def _approval_items(gh, st) -> list[dict]:
-    """GitHub에 올라온 승인 요청 → 승인 대기 항목 (제안한 사람 말고 다른 팀원·팀장이 승인)."""
+    """GitHub에 올라온 승인 요청 → 승인 대기 항목 (제안한 사람 말고 다른 팀원·팀장이 승인).
+
+    승인 요청은 3일 동안 승인할 수 있다. 전에는 보통 제안처럼 6시간이 지나면 목록에서 조용히 사라져서,
+    GitHub 이슈는 열려 있는데 승인할 방법이 없었다. 3일이 지나면 '오래된 승인 요청'으로 남겨 알린다.
+    """
     out = []
     for i in st.issues:
         if not i.title.startswith(APPROVE_PREFIX):
@@ -1107,15 +1126,21 @@ def _approval_items(gh, st) -> list[dict]:
         try:
             body = gh.issue(i.number).get("body") or ""
             m = re.search(r"bento-token:([A-Za-z0-9._\-=]+)", body)
-            data = verify(m.group(1), settings.signing_key) if m else None
+            data = verify(m.group(1), settings.signing_key, max_age=10 ** 9) if m else None  # 서명만 확인하고 나이는 아래에서 본다
         except (ProposalError, GitHubError, AttributeError):
             data = None
         if not data or data.get("repo") != gh.repo:
             continue
+        ev = [{"label": f"#{i.number} 승인 요청", "url": i.url}]
+        if time.time() - data.get("iat", 0) > APPROVE_MAX_AGE:
+            out.append({"id": f"approve-{i.number}", "sev": "확인", "title": f"오래된 승인 요청 · {data.get('summary', '')}",
+                        "why": "3일 넘게 승인되지 않아 더는 실행할 수 없어요. 필요하면 다시 제안하고, GitHub의 승인 요청 이슈는 닫아 주세요",
+                        "evidence": ev, "options": [], "handoff": [], "proposed_by": data.get("by"), "expired": True})
+            continue
         actions = ActionList.validate_python(data["actions"])
         out.append({"id": f"approve-{i.number}", "sev": "주의", "title": f"승인 요청 · {data.get('summary', '')}",
                     "why": f"{data.get('by') or '팀원'} 님이 제안했어요 · 제안한 사람이 아닌 팀원이나 팀장이 승인해요",
-                    "evidence": [{"label": f"#{i.number} 승인 요청", "url": i.url}], "options": [],
+                    "evidence": ev, "options": [],
                     "proposal": {"summary": data.get("summary", ""), "steps": _steps(actions, gh.repo), "token": m.group(1), "by": data.get("by"), "team_wide": True},
                     "proposed_by": data.get("by")})
     return out
