@@ -134,9 +134,11 @@ Windows에서는 경로가 `.venv\Scripts\python`이에요. `tzdata`는 Windows�
    - Metadata: Read-only
 4. Subscribe to events: Pull request, Pull request review, Issues, Issue comment, Check run
 5. 만든 뒤 Private key를 내려받고, 팀 저장소에 앱을 설치
-6. 환경 변수 설정 (`.env.example` 참고): `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `BENTO_REPO`, `BENTO_SIGNING_KEY`, `BENTO_ACCESS_CODE`, `ANTHROPIC_API_KEY`, `DISCORD_WEBHOOK_URL`(선택), `CRON_SECRET`(매일 알림용)
+6. 환경 변수 설정 (`.env.example` 참고): `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`(GitHub로 시작하기), `BENTO_REPO`, `BENTO_SIGNING_KEY`, `BENTO_ACCESS_CODE`, `ANTHROPIC_API_KEY`, `DISCORD_WEBHOOK_URL`(선택), `CRON_SECRET`(매일 알림용)
 
 배포 주소가 공개라면 `BENTO_ACCESS_CODE`를 꼭 설정하세요. 설정하지 않으면 주소를 아는 누구나 승인 버튼을 누를 수 있어요.
+
+**"GitHub로 시작하기"에서 GitHub 404 페이지가 뜰 때**: 앱 주인은 되는데 다른 팀원만 404면 GitHub 앱이 비공개라서예요. GitHub → Settings → Developer settings → GitHub Apps → 앱 → Advanced → Danger zone의 **Make public**을 눌러 주세요. 모두 404면 `GITHUB_CLIENT_ID`가 앱의 Client ID와 다른 거예요 (앱 설정 General에서 확인). Redirect URI(Callback URL)가 틀리면 404가 아니라 `redirect_uri` 오류가 떠요. 값을 바꾼 뒤에는 Vercel에서 다시 배포해야 반영돼요.
 
 ## 배포 (Vercel)
 
