@@ -90,7 +90,7 @@ def _team(lines: list[str]) -> tuple[int | None, int | None]:
             return 1, 1
         if not re.search(r"팀|인원|자격|구성|대상", l) or re.search(r"규모|\d+\s*팀\s*\(|약\s*\d+\s*명|총\s*\d+\s*명", l):
             continue
-        if m := re.search(r"(\d+)\s*[~\-–]\s*(\d+)\s*(?:인|명)", l):
+        if m := re.search(r"(\d+)\s*(?:인|명)?\s*[~\-–]\s*(\d+)\s*(?:인|명)", l):  # '2~4명', '2명 ~ 4명'
             return int(m.group(1)), int(m.group(2))
         lo = re.search(r"(\d+)\s*(?:인|명)\s*이상", l)
         hi = re.search(r"(?:최대\s*)?(\d+)\s*(?:인|명)\s*(?:이하|이내|까지)", l) or re.search(r"최대\s*(\d+)\s*(?:인|명)", l)

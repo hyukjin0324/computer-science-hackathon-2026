@@ -68,7 +68,7 @@ def rules(ex: NoticeExtract) -> dict:
     solo_ok = bool(re.search(r"개인\s*(?:또는|혹은|및|/|·|,)|개인\s*참가|(?<!\d)1\s*인\s*(?:또는|이상)|(?<!\d)1\s*(?:인|명)?\s*[~∼\-]\s*\d+\s*(?:인|명)", t))
     lo, hi = ex.team_min, ex.team_max
     if lo is None and hi is None:  # 붙여넣은 문장에서도 팀 인원을 읽는다
-        if m := re.search(r"(\d+)\s*[~∼\-]\s*(\d+)\s*(?:인|명)", t):
+        if m := re.search(r"(\d+)\s*(?:인|명)?\s*[~∼\-]\s*(\d+)\s*(?:인|명)", t):  # '2~4명', '2명 ~ 4명'
             lo, hi = int(m.group(1)), int(m.group(2))
         elif m := re.search(r"(?:최대\s*(\d+)\s*(?:인|명)|(\d+)\s*(?:인|명)\s*이하)", t):
             lo, hi = 1, int(m.group(1) or m.group(2))
