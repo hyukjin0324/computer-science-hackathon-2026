@@ -5,7 +5,7 @@ AI가 무엇을 제안하든 여기서 코드가 다시 검사한 뒤에만 실�
 """
 
 import re
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Literal, Union
 
 import httpx
@@ -248,13 +248,16 @@ def validate(actions: list, state: RepoState) -> list[str]:
     return errors
 
 
+def _milestone_date(iso: str) -> date:
+    """GitHub 마일스톤은 날짜만 남긴다. 정오와 자정 UTC는 같은 날짜 표기다."""
+    d = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    return d.date() if iso.endswith(("T00:00:00Z", "T12:00:00Z")) else d.astimezone(timezone(timedelta(hours=9))).date()
+
+
 def _ms_day(iso: str | None) -> str:
-    """마일스톤 마감은 GitHub에 날짜만 남는다(보내는 값은 그 날짜의 12:00Z, 예전 값은 00:00Z). 시각처럼 보이는 09:00 대신 날짜만 보여 준다."""
     if not iso:
         return "날짜 미정"
-    from datetime import datetime, timedelta, timezone
-    d = datetime.fromisoformat(iso.replace("Z", "+00:00"))
-    day = d.date() if iso.endswith(("T00:00:00Z", "T12:00:00Z")) else d.astimezone(timezone(timedelta(hours=9))).date()
+    day = _milestone_date(iso)
     return f"{day.month}월 {day.day}일({'월화수목금토일'[day.weekday()]})"
 
 
@@ -264,7 +267,6 @@ def _real_time(a) -> str:
         from .notice import from_descriptions
         ex = from_descriptions([a.description])
         if ex and ex.submit_deadline_iso:
-            from datetime import datetime, timedelta, timezone
             d = datetime.fromisoformat(ex.submit_deadline_iso).astimezone(timezone(timedelta(hours=9)))
             return f" · 실제 마감 {d:%H:%M}"
     except Exception:  # noqa: BLE001 - 시각을 못 읽어도 날짜는 보여 준다
@@ -275,7 +277,6 @@ def _real_time(a) -> str:
 def _kst(iso: str | None) -> str:
     if not iso:
         return "날짜 미정"
-    from datetime import datetime, timedelta, timezone
     d = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(timezone(timedelta(hours=9)))
     return f"{d.month}월 {d.day}일 {d:%H:%M} (한국 시간)"
 
@@ -313,6 +314,37 @@ def label(a, discord: bool) -> tuple[str, str]:
     if isinstance(a, TeamMessage):
         return ("디스코드 팀 채널에 메시지", "") if discord else ("팀 메시지 (메신저 미연결)", "디스코드를 연결하기 전까지는 보내지 않고 복사만 할 수 있어요")
     return "알 수 없는 행동", ""
+
+
+def approval_preview(a) -> dict[str, str] | None:
+    """승인할 때 확인할 요약과 실제로 바뀌는 값. 실행에는 서명한 행동을 그대로 쓴다."""
+    if isinstance(a, UpdateMilestone):
+        new = _milestone_date(a.due_on)
+        try:
+            old = _milestone_date(a.expect_due) if a.expect_due else None
+        except ValueError:
+            old = None
+        if old and old.year != new.year:
+            change = f"{old:%Y/%m/%d} → {new:%Y/%m/%d}"
+        elif old:
+            change = f"{old.month}/{old.day} → {new.month}/{new.day}"
+        else:
+            change = f"{new.month}/{new.day}"
+        return {"title": f"‘{a.title}’ 마감 옮기기", "change": change}
+    if isinstance(a, (AssignIssue, ReassignIssue)):
+        previous = a.expect_assignees
+        users = list(dict.fromkeys([*(previous or []), *a.users])) if isinstance(a, AssignIssue) else a.users
+        target = ", ".join("@" + user for user in users) or "담당 없음"
+        if previous is not None:
+            before = ", ".join("@" + user for user in previous) or "담당 없음"
+            target = f"{before} → {target}"
+        return {"title": f"#{a.issue} 담당자 지정" if isinstance(a, AssignIssue) else f"#{a.issue} 담당자 변경", "change": target}
+    if isinstance(a, RequestReviewers):
+        reviewers = ", ".join("@" + user for user in a.users)
+        return {"title": f"PR #{a.pr} 리뷰 요청", "change": f"{reviewers} 추가"}
+    if isinstance(a, CloseIssue):
+        return {"title": f"이슈 #{a.issue} 닫기", "change": "열림 → 닫힘"}
+    return None
 
 
 def _posted(gh, n: int, marker: str) -> bool:
