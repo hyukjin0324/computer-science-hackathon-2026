@@ -407,8 +407,8 @@ def analyze_notice(body: NoticeIn, request: Request, x_bento_code: str | None = 
         except HTTPException:
             pass
 
-    def guard():  # AI를 실제로 부를 때만: 로그인(또는 팀 접근 코드) 확인 + 횟수 제한. 캐시·규칙으로 읽을 때는 묻지 않는다
-        _check_code(x_bento_code, request)
+    def guard():  # AI를 실제로 부를 때만: 로그인(또는 팀 접근 코드)·팀원 확인 + 횟수 제한. 캐시·규칙으로 읽을 때는 묻지 않는다
+        _check_ai(x_bento_code, request)
         u = current_user(request) if settings.login_enabled else None
         notice_mod.allow_ai((u or {}).get("login") or (request.client.host if request.client else "anon"))
 
@@ -446,6 +446,37 @@ def _check_code(code: str | None, request: Request | None = None) -> None:
         raise HTTPException(401, "팀 접근 코드가 맞지 않아요")
 
 
+_AI_MEMBER: dict[str, tuple[float, bool]] = {}  # 로그인 아이디 → (확인한 시각, Bento가 설치된 저장소의 팀원인지)
+AI_MEMBER_TTL = 600
+
+
+def _is_team_member(login: str) -> bool:
+    """Bento가 설치된 저장소 중 하나라도 팀원이면 True. GitHub를 못 읽으면 False(기억하지 않아서 다음에 다시 본다)."""
+    hit = _AI_MEMBER.get(login)
+    if hit and time.time() - hit[0] < AI_MEMBER_TTL:
+        return hit[1]
+    try:
+        ok = any(login in gh_for(r).members() for r in installed_repos(settings))
+    except Exception:  # noqa: BLE001
+        return False
+    _AI_MEMBER[login] = (time.time(), ok)
+    return ok
+
+
+def _check_ai(code: str | None, request: Request) -> None:
+    """AI를 쓰는 기능: 로그인(또는 팀 접근 코드) + 로그인을 켠 실제 서버에서는 Bento가 설치된 저장소의 팀원만.
+
+    GitHub 계정만 있으면 누구나 로그인할 수 있어서, 팀 밖 사람이 하루 AI 한도(서버 전체)를 다 써 버리면
+    정작 팀은 그날 AI를 못 썼다.
+    """
+    _check_code(code, request)
+    if not (settings.login_enabled and settings.live):
+        return
+    u = current_user(request)
+    if u and not _is_team_member(u["login"]):
+        raise HTTPException(403, "Bento를 설치한 저장소의 팀원만 AI 기능을 쓸 수 있어요")
+
+
 class FetchIn(BaseModel):
     url: str
     title: str | None = None  # 이미 아는 대회 이름 (웹 검색할 때 쓴다)
@@ -468,7 +499,12 @@ def fetch_url(body: FetchIn, request: Request, x_bento_code: str | None = Header
     except FetchError as e:
         raise HTTPException(422, str(e)) from e
     body_text = (page.get("text") or "").replace(page.get("title") or "", "").strip()
-    if len(body_text) < THIN and not body.no_ai and websearch.allowed(page.get("url") or body.url) and websearch.ready():
+    try:
+        ai_ok = True
+        _check_ai(x_bento_code, request)
+    except HTTPException:
+        ai_ok = False  # 팀원이 아니면 웹 검색 없이 읽은 만큼만 돌려준다
+    if ai_ok and len(body_text) < THIN and not body.no_ai and websearch.allowed(page.get("url") or body.url) and websearch.ready():
         u = current_user(request) if settings.login_enabled else None
         who = (u or {}).get("login") or (request.client.host if request.client else "anon")
         try:
@@ -506,7 +542,7 @@ def notice_file(body: FileIn, request: Request, x_bento_code: str | None = Heade
     try:
         ai = attach.kind_of(body.name, body.mime) in ("pdf", "image")
         if ai:
-            _check_code(x_bento_code, request)
+            _check_ai(x_bento_code, request)
         u = current_user(request) if settings.login_enabled else None
         who = (u or {}).get("login") or (request.client.host if request.client else "anon")
         return attach.read_file(body.name, body.mime, raw, who=who, ai_ready=ai and websearch.ready())
@@ -524,7 +560,7 @@ class ChatIn(BaseModel):
 def chat_free(body: ChatIn, request: Request, x_bento_code: str | None = Header(default=None)):
     """정해진 낱말로 못 알아들은 말에 짧게 답하고, 맞는 Bento 기능 하나를 고른다. 실행은 하지 않는다."""
     from . import chat as chat_mod
-    _check_code(x_bento_code, request)
+    _check_ai(x_bento_code, request)
     u = current_user(request) if settings.login_enabled else None
     who = (u or {}).get("login") or (request.client.host if request.client else "anon")
     try:
