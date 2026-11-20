@@ -785,8 +785,12 @@ class TickIn(BaseModel):
 
 
 @app.post("/api/lazy/tick")
-def lazy_tick_api(body: TickIn):
-    """앱을 열 때마다 부른다. 팀이 켠 규칙과 시간 조건이 맞을 때만 움직인다."""
+def lazy_tick_api(body: TickIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    """앱을 열 때마다 부른다. 팀이 켠 규칙과 시간 조건이 맞을 때만 움직인다.
+
+    GitHub에 댓글을 달거나 실행하므로 로그인(또는 팀 접근 코드)이 있어야 한다. 화면은 실패하면 조용히 넘어간다.
+    """
+    _check_code(x_bento_code, request)
     return lazy_tick(body.repo)
 
 
@@ -1154,10 +1158,16 @@ class SubmitIn(BaseModel):
 
 
 @app.post("/api/submit-check")
-def submit_check(body: SubmitIn):
-    """제출 직전 확인: 자동 확인(근거 포함) · 사람 확인 목록 · 팀원 확인 상태."""
-    gh, st = state_for(body.repo)
+def submit_check(body: SubmitIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    """제출 직전 확인: 자동 확인(근거 포함) · 사람 확인 목록 · 팀원 확인 상태.
+
+    사용자가 적은 링크는 서버가 대신 열어 보므로, 링크가 있을 때만 로그인이나 팀 접근 코드를 확인한다
+    (공고 링크 열기와 같은 기준. 링크 없이 저장소만 보는 점검은 그대로).
+    """
     links = {k: v.strip() for k, v in body.links.items() if k in ("deploy", "video", "slides") and v and v.strip().startswith(("http://", "https://"))}
+    if links:
+        _check_code(x_bento_code, request)
+    gh, st = state_for(body.repo)
     try:
         out = sub_mod.run_checks(gh, st, body.deliverables, body.deadline_iso, links)
     except GitHubError as e:
