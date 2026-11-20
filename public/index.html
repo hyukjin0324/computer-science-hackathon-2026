@@ -1311,7 +1311,7 @@ function startPath(d) {
       li.appendChild(h("i", null, state === "done" ? "✓" : String(i + 1)));
       const body = h("div"); body.appendChild(h("b", null, st.name));
       if (state === "now" && !frozen) {
-        const acts = h("div", "path-acts");
+        const acts = h("div", "path-acts"); let tail = null;  // tail: 버튼 줄 아래에 붙일 것 (3번의 설치된 저장소 목록)
         if (st.k === "apply") {
           body.appendChild(h("small", null, ex.apply_deadline_iso ? `신청 마감 ${dtxt(ex.apply_deadline_iso)} · 참가 자격은 Bento가 확인하고, 신청은 직접 해요` : "참가 자격은 Bento가 확인하고, 신청은 직접 해요"));
           const b = h("button", "btn primary", "신청하기"); b.type = "button"; b.onclick = () => { b.disabled = true; me("신청할래"); applyFlow(ex); }; acts.appendChild(b);
@@ -1325,12 +1325,18 @@ function startPath(d) {
         } else if (st.k === "app") {
           if (H.install_url) {
             body.appendChild(h("small", null, d.existingRepo
-              ? "설치 화면에서 'Only select repositories'로 연결할 저장소를 고르면, Bento로 돌아와 바로 연결돼요. 이미 Bento가 설치된 저장소면 설치 없이 바로 연결하면 돼요."
+              ? "설치 화면에서 'Only select repositories'로 연결할 저장소를 고르면, Bento로 돌아와 바로 연결돼요. 이미 Bento가 설치된 저장소면 아래 목록에서 바로 고르면 돼요."
               : "설치 화면에서 'Only select repositories'로 방금 만든 저장소를 고르면, Bento로 돌아와 바로 연결돼요."));
             const a = link("Bento 앱 설치", H.install_url); a.classList.add("primary");
             a.addEventListener("click", () => { store.set("connectAfterInstall", d.id); d.installed = Date.now(); saveDrafts(); setTimeout(render, 400); }); acts.appendChild(a);
-            const already = h("button", "btn", "이미 설치돼 있어요"); already.type = "button";  // 팀 저장소처럼 이미 Bento가 있는 저장소
-            already.onclick = () => { already.disabled = true; connectDraft(); }; acts.appendChild(already);
+            // 이미 Bento가 설치된 내 저장소는 설치 버튼 아래에 바로 보여 주고, 누르면 그 저장소에 연결
+            const list = h("div", "big"); list.appendChild(h("small", null, "이미 Bento가 설치된 내 저장소를 찾고 있어요…"));
+            loadProjects().then((ps) => {
+              list.innerHTML = "";
+              list.appendChild(h("small", null, ps.length ? "이미 Bento가 설치된 내 저장소 · 누르면 바로 연결돼요" : "아직 Bento가 설치된 내 저장소가 없어요. 위에서 설치하면 돌아와 바로 연결돼요."));
+              [...ps.filter((p) => !p.notice), ...ps.filter((p) => p.notice)].forEach((p) => pickRow(list, p.repo, projSub(p), () => connectTo(d, p.repo)));
+            }).catch(() => { list.innerHTML = ""; list.appendChild(h("small", null, "저장소 목록을 불러오지 못했어요.")); });
+            tail = list;
           } else {
             body.appendChild(h("small", null, "데모에서는 설치 없이 예시 저장소로 연결해 볼 수 있어요."));
             const b = h("button", "btn primary", "다음"); b.type = "button"; b.onclick = () => { d.installed = Date.now(); saveDrafts(); render(); }; acts.appendChild(b);
@@ -1339,7 +1345,7 @@ function startPath(d) {
           body.appendChild(h("small", null, "앱 설치 화면에서 돌아오면 자동으로 연결돼요. 안 됐으면 눌러 주세요."));
           const b = h("button", "btn primary", "저장소 연결하기"); b.type = "button"; b.onclick = () => { b.disabled = true; connectDraft(); }; acts.appendChild(b);
         }
-        body.appendChild(acts);
+        body.appendChild(acts); if (tail) body.appendChild(tail);
       } else if (state === "") body.appendChild(h("small", null, st.who === "직접" ? "직접" : `${st.who}에서`));
       li.appendChild(body); ol.appendChild(li);
     });
