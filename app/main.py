@@ -785,8 +785,12 @@ class TickIn(BaseModel):
 
 
 @app.post("/api/lazy/tick")
-def lazy_tick_api(body: TickIn):
-    """앱을 열 때마다 부른다. 팀이 켠 규칙과 시간 조건이 맞을 때만 움직인다."""
+def lazy_tick_api(body: TickIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    """앱을 열 때마다 부른다. 팀이 켠 규칙과 시간 조건이 맞을 때만 움직인다.
+
+    GitHub에 댓글을 달거나 실행하므로 로그인(또는 팀 접근 코드)이 있어야 한다. 화면은 실패하면 조용히 넘어간다.
+    """
+    _check_code(x_bento_code, request)
     return lazy_tick(body.repo)
 
 

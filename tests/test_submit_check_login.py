@@ -26,3 +26,25 @@ def test_submit_check_opens_typed_links_only_with_login_or_code(monkeypatch):
     assert r.status_code == 401 and opened == []  # 코드 없이는 남의 주소를 열지 않는다
     assert client.post("/api/submit-check", json=body, headers={"X-Bento-Code": "c0de"}).status_code == 200 and opened
     assert client.post("/api/submit-check", json={"deliverables": []}).status_code == 200  # 링크 없는 점검은 그대로
+
+
+def test_lazy_tick_needs_login_or_code(monkeypatch):
+    """'반대 없으면 실행'은 GitHub에 댓글을 달거나 실행하므로 아무나 부르지 못한다."""
+    monkeypatch.setattr(main, "settings", main.settings.__class__(**{**main.settings.__dict__, "access_code": "c0de"}))
+    assert client.post("/api/lazy/tick", json={}).status_code == 401
+    assert client.post("/api/lazy/tick", json={}, headers={"X-Bento-Code": "c0de"}).status_code == 200
+
+
+def test_fetch_stops_when_actual_connection_is_internal():
+    """검사 때와 연결 때 DNS 답이 다르면(DNS 바꿔치기) 실제로 연결된 서버 IP가 내부망인지 다시 보고 멈춘다."""
+    from types import SimpleNamespace
+
+    from app.fetch import FetchError, _check_peer
+
+    def resp(ip):
+        return SimpleNamespace(extensions={"network_stream": SimpleNamespace(get_extra_info=lambda k: (ip, 443) if k == "server_addr" else None)})
+    for bad in ("127.0.0.1", "10.0.0.5", "169.254.169.254", "::1"):
+        with pytest.raises(FetchError):
+            _check_peer(resp(bad))
+    _check_peer(resp("8.8.8.8"))  # 바깥 주소는 그대로
+    _check_peer(SimpleNamespace(extensions={}))  # 연결 정보를 알 수 없으면 넘어간다
