@@ -203,7 +203,8 @@ def test_application_collaboration_and_submission_lifecycle(page, app_url):
     picker = page.get_by_role("button").filter(has_text="team-matzip/knu-matzip")
     expect(picker).to_be_visible(timeout=10_000)
     picker.click()
-    expect(page.get_by_text("team-matzip/knu-matzip에 연결했어요. 신청을 마쳤으니 이제 협업 단계예요.")).to_be_visible(timeout=10_000)
+    connected = page.get_by_text("team-matzip/knu-matzip에 연결했어요. 신청을 마쳤으니 이제 협업 단계예요.")
+    expect(connected.last).to_be_visible(timeout=10_000)
     page.get_by_role("button", name="나중에", exact=True).click()
 
     page.get_by_role("button", name="홈", exact=True).click()
