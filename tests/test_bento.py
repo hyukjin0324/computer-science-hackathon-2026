@@ -705,8 +705,9 @@ def test_discover_api_and_agent_run_include_contests(monkeypatch):
 
 
 
-def test_serverless_does_not_sleep_but_defers_same_site():
+def test_serverless_does_not_sleep_but_defers_same_site(monkeypatch):
     import app.discover as dsc
+    monkeypatch.setattr(dsc, "_check_host", lambda url: None)  # 실제 DNS 없이 호출 간격만 확인한다
     dsc._LAST_HIT.clear()
     calls = []
     class R:
