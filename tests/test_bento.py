@@ -2202,3 +2202,15 @@ def test_chat_do_without_a_feature_or_unknown_kind_falls_back_to_ask():
     assert r["kind"] == "ask" and r["action"] == "none"
     r2 = chat_mod.ask("안녕", who="t_do3", client=_FakeChatClaude('{"kind": "zzz", "reply": "안녕하세요", "action": "none"}'))
     assert r2["kind"] == "ask"
+
+def test_when_only_unknown_title_owners_remain_still_offer_split_by_role():
+    # 제목이 '(담당: 발표)'처럼 팀원 아이디가 아니고 나눌 다른 이슈도 없으면, 제안이 없는 대신 '역할대로 나누기'를 준다 (글은 짧게, 제안은 하나)
+    d = main._demo.d
+    for i in d["issues"]:
+        i["assignees"] = [{"login": "jiwoo"}]
+    for n, ttl in ((70, "[발표] 발표 자료 (담당: 발표)"), (71, "[발표] 시연 영상 (담당: 발표 + C)")):
+        d["issues"].append({"number": n, "title": ttl, "user": {"login": "jiwoo"}, "assignees": [], "body": "", "created_at": "2026-11-20T00:00:00Z", "milestone": None, "html_url": f"x/{n}"})
+    it = next(i for i in client.get("/api/triage").json()["items"] if i["id"] == "assign")
+    assert len(it["options"]) == 1 and it["options"][0]["label"] in ("역할대로 나누기", "맡은 일이 적은 순서로 나누기")
+    assert {"#70", "#71"} <= {x.split(" ")[0] for x in it["options"][0]["sub"].split(" · ")}
+    assert "직접 정해 주세요" not in it["options"][0]["sub"]

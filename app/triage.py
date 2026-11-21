@@ -90,15 +90,23 @@ def triage(state: RepoState, review_wait_hours: float = 24) -> list[dict]:
             if who:
                 given[who] = given.get(who, 0) + 1
                 pairs.append((i, who))
+        fallback = False
+        if not pairs and asked:  # 나눌 게 '담당: 발표'처럼 누군지 모르는 제목뿐이면, 제안이 아예 없는 것보다 역할대로 나누는 제안을 준다 (승인 전에 고칠 수 있다)
+            for i in asked:
+                who = pick_by_role(state.members, state.roles, given, i.title)[0]
+                if who:
+                    given[who] = given.get(who, 0) + 1
+                    pairs.append((i, who))
+            fallback = bool(pairs)
         # 한두 개면 이유를 댓글로 남기고, 여러 개면 담당자 지정 알림만으로 충분하다 (댓글 폭탄 막기)
         acts = [AssignIssue(issue=i.number, users=[u], expect_assignees=list(i.assignees)) for i, u in pairs]
         if len(pairs) <= 3:
             acts += [Comment(number=i.number, body=f"@{u} 님, 이 일을 맡아 주실 수 있을까요? 어려우면 편하게 말씀해 주세요!") for i, u in pairs]
         sub = " · ".join(f"#{i.number} → {u}" for i, u in pairs[:4])
-        if asked:
+        if asked and not fallback:
             sub += (" · " if sub else "") + f"제목에 담당이 적힌 {len(asked)}개({', '.join('#' + str(i.number) for i in asked[:3])}{'…' if len(asked) > 3 else ''})는 직접 정해 주세요"
         items.append({"id": "assign", "sev": "긴급" if _due_soon(state, unassigned) else "주의", "title": f"담당자 없는 이슈 {len(unassigned)}개",
-                      "why": "맡은 사람이 없는 이슈예요. 아래 이슈를 눌러 내용을 확인하고, 괜찮으면 Bento가 나눠 드려요" + (f" (외 {len(unassigned) - 4}개)" if len(unassigned) > 4 else ""),
+                      "why": "맡은 사람이 없는 이슈예요. 역할에 맞게 나눠 드릴까요?" + (f" (외 {len(unassigned) - 4}개)" if len(unassigned) > 4 else ""),
                       "evidence": [issue_link(i) for i in unassigned[:4]],
                       "options": [{"label": "역할대로 나누기" if state.roles else "맡은 일이 적은 순서로 나누기", "recommended": True,
                                    "sub": sub, "actions": acts}] if pairs else []})
