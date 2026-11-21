@@ -23,6 +23,37 @@ LATE_PROGRESS = {
     "summary": "팀플 점검: 챙길 일이 있어요",
 }
 
+LIFECYCLE_EXTRACT = {
+    "title": "2026 컴퓨터학부 해커톤",
+    "facts": [{
+        "label": "참가 자격",
+        "value": "컴퓨터학부 재학생, 2~4인 팀",
+        "quote": "컴퓨터학부 재학생, 2~4인 팀",
+    }],
+    "team_min": 2,
+    "team_max": 4,
+    "apply_fields": ["팀명", "팀원", "아이디어 한 줄"],
+    "apply_deadline": "11월 18일(수) 23:59",
+    "apply_deadline_iso": "2026-11-18T23:59:00+09:00",
+    "submit_deadline": "11월 24일(화) 12:00",
+    "submit_deadline_iso": "2026-11-24T12:00:00+09:00",
+    "deliverables": [
+        {"name": "GitHub 저장소 링크(공개)", "quote": "GitHub 저장소 링크(공개)"},
+        {"name": "README에 실행 방법과 배포 링크", "quote": "README에 실행 방법과 배포 링크"},
+        {"name": "발표 자료 PDF", "quote": "발표 자료 PDF"},
+        {"name": "3분 이내 시연 영상", "quote": "3분 이내 시연 영상"},
+    ],
+}
+
+LIFECYCLE_NOTICE = """[체험용 예시 공고] 2026 컴퓨터학부 해커톤
+주제: 컴퓨터학부 학생에게 필요한 서비스
+참가 자격: 컴퓨터학부 재학생, 2~4인 팀
+신청: 11/18(수) 23:59까지 신청 폼 제출 (팀명, 팀원, 아이디어 한 줄)
+개발 기간: 11/11(수) 14:00 ~ 11/24(화) 12:00
+제출물: ① GitHub 저장소 링크(공개) ② README에 실행 방법과 배포 링크 ③ 발표 자료 PDF ④ 3분 이내 시연 영상
+제출: 11/24(화) 12:00까지 제출 폼으로 제출
+심사 기준: 문제 정의 30%, 완성도 30%, 창의성 20%, 발표 20%"""
+
 
 def open_app(page, app_url):
     page.goto(app_url, wait_until="domcontentloaded")
@@ -43,6 +74,59 @@ def mock_late_progress(page):
         + json.dumps(extract, ensure_ascii=False)
         + "));"
     )
+
+
+def seed_lifecycle_draft(page):
+    draft = {
+        "id": "e2e-lifecycle",
+        "title": LIFECYCLE_EXTRACT["title"],
+        "text": LIFECYCLE_NOTICE,
+        "noAi": True,
+        "extract": LIFECYCLE_EXTRACT,
+    }
+    page.add_init_script(
+        "const draft = " + json.dumps(draft, ensure_ascii=False) + ";"
+        "localStorage.setItem('bento:drafts', JSON.stringify([draft]));"
+        "localStorage.setItem('bento:cur', JSON.stringify({draft: draft.id}));"
+    )
+
+
+def mock_submission_checks(page):
+    requests = []
+    incomplete = [
+        {"name": "저장소 공개", "status": "ok", "detail": "누구나 볼 수 있어요", "evidence": []},
+        {"name": "README 실행 방법", "status": "ok", "detail": "실행 방법이 적혀 있어요", "evidence": []},
+        {"name": "발표 자료 링크 열림", "status": "fail", "detail": "링크가 아직 없어요", "evidence": []},
+        {"name": "시연 영상 링크 열림", "status": "fail", "detail": "링크가 아직 없어요", "evidence": []},
+    ]
+    complete = [{**row, "status": "ok", "detail": "열려요"} for row in incomplete]
+    human = [
+        {"id": "slides", "text": "발표 자료가 최신 버전이고 지금 기능과 맞아요"},
+        {"id": "video", "text": "시연 영상이 최신 기능을 보여 주고, 공개 범위가 '링크가 있는 사용자'예요"},
+        {"id": "agree", "text": "팀원 모두 이 버전으로 제출하는 데 동의했어요"},
+        {"id": "form", "text": "제출 폼의 팀명·대표자 정보가 맞아요"},
+    ]
+
+    def handle(route):
+        requests.append(route.request.post_data_json)
+        rows = incomplete if len(requests) == 1 else complete
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({
+                "rows": rows,
+                "head": {"sha": "c0ffee1234567", "short": "c0ffee1", "url": "https://example.test/commit", "branch": "main"},
+                "lock": None,
+                "human": human,
+                "ready": len(requests) > 1,
+                "deploy": "https://example.test",
+                "confirm": None,
+                "members": ["jiwoo", "doyoon"],
+            }, ensure_ascii=False),
+        )
+
+    page.route("**/api/submit-check", handle)
+    return requests
 
 
 def open_late_card(page, app_url):
@@ -97,6 +181,68 @@ def test_existing_repository_path_reaches_repository_picker(page, app_url):
     page.get_by_role("button", name="다음", exact=True).click()
     page.get_by_role("button", name="저장소 연결하기").click()
     expect(page.get_by_role("button").filter(has_text="team-matzip/knu-matzip")).to_be_visible(timeout=10_000)
+
+
+def test_application_collaboration_and_submission_lifecycle(page, app_url):
+    seed_lifecycle_draft(page)
+    submit_requests = mock_submission_checks(page)
+    open_app(page, app_url)
+
+    # 신청 준비 → 자격 확인 → 사람이 직접 신청했다는 완료 기록
+    page.get_by_role("button", name="신청 준비", exact=True).click()
+    expect(page.get_by_text("1단계 · 참가 자격 확인")).to_be_visible(timeout=10_000)
+    page.get_by_role("button", name="확인했어요", exact=True).click()
+    expect(page.get_by_role("button", name="신청했어요", exact=True)).to_be_visible()
+    page.get_by_role("button", name="신청했어요", exact=True).click()
+    expect(page.get_by_text("신청 완료로 기록했어요. 이제 팀 저장소를 준비해요.")).to_be_visible()
+
+    # 기존 저장소와 연결하면 신청 기록이 유지되고 협업 단계로 넘어간다.
+    page.get_by_role("button", name="이미 저장소가 있어요", exact=True).click()
+    page.get_by_role("button", name="다음", exact=True).click()
+    page.get_by_role("button", name="저장소 연결하기", exact=True).click()
+    picker = page.get_by_role("button").filter(has_text="team-matzip/knu-matzip")
+    expect(picker).to_be_visible(timeout=10_000)
+    picker.click()
+    expect(page.get_by_text("team-matzip/knu-matzip에 연결했어요. 신청을 마쳤으니 이제 협업 단계예요.")).to_be_visible(timeout=10_000)
+    page.get_by_role("button", name="나중에", exact=True).click()
+
+    page.get_by_role("button", name="홈", exact=True).click()
+    expect(page.locator('[aria-label^="지금 단계: 협업"]')).to_be_visible()
+    expect(page.get_by_role("heading", name="팀원 할 일")).to_be_visible()
+
+    # 공고에서 읽은 필수 제출물과 현재 제출물을 대조한다.
+    page.get_by_role("button", name=re.compile(r"^대화(?: \d+)?$")).click()
+    page.get_by_role("button", name="제출 전 점검하기", exact=True).click()
+    info_card = page.locator(".task").filter(has_text="1단계 · 제출 정보")
+    expect(info_card).to_be_visible()
+    info_card.get_by_role("button", name="제출 전 점검하기", exact=True).click()
+    expect(page.get_by_text("고칠 것 · 2개", exact=True)).to_be_visible(timeout=10_000)
+    expect(page.locator(".crow").filter(has_text="발표 자료 링크 열림")).to_be_visible()
+    expect(page.locator(".crow").filter(has_text="시연 영상 링크 열림")).to_be_visible()
+
+    assert [item["name"] for item in submit_requests[0]["deliverables"]] == [
+        "GitHub 저장소 링크(공개)",
+        "README에 실행 방법과 배포 링크",
+        "발표 자료 PDF",
+        "3분 이내 시연 영상",
+    ]
+
+    # 보완 뒤 다시 점검하면 사람 확인 → 직접 제출 → 완료 기록까지 열린다.
+    page.get_by_role("button", name="다시 점검하기", exact=True).click()
+    expect(page.get_by_text("Bento가 확인함 · 4개 통과 (근거 보기)")).to_be_visible(timeout=10_000)
+    visible_checks = page.locator(".chat-check input[type=checkbox]:visible")
+    expect(visible_checks).to_have_count(4)
+    for checkbox in visible_checks.all():
+        checkbox.check()
+    page.get_by_role("button", name="확인 완료", exact=True).click()
+    page.get_by_role("button", name="확인 없이 진행", exact=True).click()
+    page.get_by_role("button", name="완료 기록하기", exact=True).click()
+    page.get_by_role("button", name="제출 완료로 기록", exact=True).click()
+
+    expect(page.get_by_text("제출 완료로 기록했어요. 마감 알림을 멈출게요.")).to_be_visible()
+    page.get_by_role("button", name="홈", exact=True).click()
+    expect(page.locator('[aria-label^="지금 단계: 끝"]')).to_be_visible()
+    assert len(submit_requests) == 2
 
 
 def test_late_progress_opens_today_tasks(page, app_url):
