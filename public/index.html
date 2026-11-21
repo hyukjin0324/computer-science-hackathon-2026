@@ -1897,6 +1897,14 @@ function progressCard(r, auto) {
     };
     scroll(); return;
   }
+  // 늦었다는 발견만 있고 옮길 날짜·담당 제안은 없을 때(예: 전체 진도가 늦어요): 막다른 길이 되지 않게 다음 행동을 준다
+  if (r.findings.length) {
+    c.appendChild(h("div", "note", "늦어지고 있어요. 어떻게 할까요?"));
+    const rb = h("div", "row-btns");
+    const a1 = h("button", "btn primary", "오늘 할 일 보기"); a1.type = "button"; a1.onclick = () => { a1.disabled = a2.disabled = true; showTab("chat"); today(); };
+    const a2 = h("button", "btn", "계획 다시 짜기"); a2.type = "button"; a2.onclick = () => { a1.disabled = a2.disabled = true; showTab("chat"); me("계획 다시 짜 줘"); planFlow(); };
+    rb.append(a1, a2); c.appendChild(rb);
+  }
   scroll();
 }
 
