@@ -81,7 +81,7 @@ svg { display: block; }
 .found:not(.calm) .k .bento { background: #FFFFFF !important; }
 .proj { height: 40px; max-width: 100%; min-width: 0; flex: 0 1 auto; padding: 0 14px; border-radius: var(--r-pill); background: var(--surface); border: 1px solid var(--line); color: var(--ink); font-size: var(--fs-body); font-weight: 700; white-space: nowrap; overflow: hidden; display: inline-flex; align-items: center; gap: 6px; }
 .proj .pname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.proj .pdot { width: 9px; height: 9px; border-radius: 50%; background: var(--pop); flex: none; }
+.proj .pdot { width: 9px; height: 9px; border-radius: 50%; background: var(--blue); flex: none; }
 .proj small { color: var(--muted); font-weight: 500; }
 .sheet-bg { position: absolute; inset: 0; z-index: 100; background: rgb(23 24 28 / .45); display: flex; align-items: flex-end; margin: 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px))); }
 .sheet { width: 100%; max-height: 86%; overflow-y: auto; background: var(--surface); border-radius: var(--r-sheet) var(--r-sheet) 0 0; padding: 10px 20px max(22px, env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; box-shadow: 0 -8px 30px rgb(23 24 28 / .12); }
@@ -628,8 +628,9 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .phone.chat-keyboard .dock { padding-bottom: var(--chat-related-gap); }
 .phone.chat-keyboard .tabs { display: none; }
 @media (pointer: coarse) { .composer input { font-size: max(16px, var(--fs-body)); } }
-.tabs { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-sheet); padding: 4px; box-shadow: var(--shadow); }
-.tabs button { height: 54px; border-radius: var(--r-card); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; position: relative; color: var(--muted); font-size: var(--fs-caption); font-weight: 600; }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 5px 8px; box-shadow: var(--shadow); }
+.tabs button { height: 62px; border-radius: var(--r-pill); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; position: relative; color: var(--muted); font-size: var(--fs-body); font-weight: 600; }
+.tabs button svg { width: 28px; height: 28px; }
 .tabs button.sel { color: var(--ink); font-weight: 800; }
 .tabs button.sel svg { stroke-width: 2.4; }
 .badge { position: absolute; top: 4px; left: calc(50% + 6px); min-width: 20px; height: 20px; border-radius: var(--r-pill); background: var(--crit); color: #FFFFFF; font-size: var(--fs-caption); font-weight: 700; display: grid; place-items: center; padding: 0 5px; }
@@ -732,7 +733,8 @@ details.teamall summary::after { content: '›'; margin-left: auto; color: var(-
 .hero .lab2.crit { color: var(--crit); } .hero .lab2.pop { color: var(--pop-deep); } .hero .lab2.ok { color: var(--ok); }
 .hero b { font-size: var(--fs-section); line-height: 1.35; }
 .hero small { color: var(--muted); font-size: var(--fs-small); }
-.hero .acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.hero .acts { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.hero .acts > .btn { align-self: center; margin-inline: auto; height: 34px; padding-inline: 14px; font-size: 12px; }
 .arow.frow2 { grid-template-columns: var(--notice-mark) minmax(0, 1fr) auto; gap: var(--notice-gap); }
 .frow2 b { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .contest-mark { width: var(--notice-mark); height: var(--notice-mark); display: grid; place-items: center; border-radius: var(--r-badge); background: var(--info-soft); color: var(--info); }
@@ -985,7 +987,7 @@ function projKey() { return cur && cur.draft ? "d:" + cur.draft : "r:" + curRepo
 function projName() { const d = curDraft(); return d ? d.title : (extract && extract.title) || (curRepo() || "").split("/")[1] || "팀플"; }
 function setExtract(ex) { extract = ex; const d = curDraft(); if (d) { d.extract = ex; saveDrafts(); } else store.set("extract:" + projKey(), ex); renderCal(); }
 function renderHead() {
-  const d = curDraft(); const b = $("projBtn"); b.textContent = ""; const dot = h("span", "pdot"); dot.style.background = `var(${colorOf(projKey())})`; b.appendChild(dot); if (d) b.appendChild(h("small", null, "준비 중")); b.appendChild(h("span", "pname", projName() + " ▾"));
+  const d = curDraft(); const b = $("projBtn"); b.textContent = ""; const dot = h("span", "pdot"); dot.style.background = "var(--blue)"; b.appendChild(dot); if (d) b.appendChild(h("small", null, "준비 중")); b.appendChild(h("span", "pname", projName() + " ▾"));
   const pp = $("panelProj"); if (pp) pp.textContent = (d ? "준비 중 · " : "") + projName();
 }
 async function loadSaved() {  // 팀원이 이미 분석해 저장소에 저장한 공고가 있으면 다시 분석하지 않고 가져온다
@@ -1990,7 +1992,7 @@ function homeBoard(v, me2, items) {
     const leads = b ? (b.leads || []).filter(Boolean) : [];
     const sh = h("div", "sech"); sh.appendChild(h("h2", null, "팀장이 정할 일")); sh.appendChild(h("span", null, leads.length ? `팀장 ${leads.join(", ")}${leads.includes(me2) ? " (나)" : ""}` : "")); v.appendChild(sh);
     leadItems.filter((i) => i.id !== "assign").forEach((it) => v.appendChild(itemRow(it)));
-    if (unassigned.length) {
+    if (unassigned.length && b && (b.leads || []).includes(me2)) {
       const c = h("div", "card"); c.style.display = "flex"; c.style.flexDirection = "column"; c.style.gap = "8px";
       c.appendChild(h("b", null, `담당 없는 할 일 ${unassigned.length}개`));
       const FIRST_N = 3;  // 홈이 길어지지 않게 3개만 먼저
