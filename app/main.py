@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from . import notice as notice_mod
-from .actions import EDITABLE, STALE, ActionList, AssignIssue, CloseIssue, CreateIssue, CreateMilestone, TeamMessage, UpdateMilestone, execute, label, validate
+from .actions import EDITABLE, STALE, ActionList, AssignIssue, CloseIssue, CreateIssue, CreateMilestone, TeamMessage, UpdateMilestone, approval_preview, execute, label, validate
 from .forms import FormError, inspect_form
 from . import submission as sub_mod
 from . import progress as prog
@@ -141,7 +141,13 @@ def _discord_hook(repo: str | None) -> str | None:
 
 def _steps(actions: list, repo: str | None = None) -> list[dict]:
     disc = bool(_discord_hook(repo)) if any(a.type == "team_message" for a in actions) else bool(settings.discord_webhook)
-    return [{"label": label(a, disc)[0], "sub": label(a, disc)[1], "edit": EDITABLE.get(a.type), "text": getattr(a, EDITABLE.get(a.type, "_"), None)} for a in actions]
+    steps = []
+    for action in actions:
+        title, detail = label(action, disc)
+        editable = EDITABLE.get(action.type)
+        steps.append({"label": title, "sub": detail, "edit": editable, "text": getattr(action, editable, None) if editable else None,
+                      "preview": approval_preview(action)})
+    return steps
 
 
 def _proposal(repo: str, summary: str, actions: list, item_id: str | None = None) -> dict:

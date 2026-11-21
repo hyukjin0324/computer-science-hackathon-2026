@@ -27,6 +27,7 @@
   --chat-card-padding: 16px; --chat-card-gap: 12px; --chat-corner: 6px;
   --chat-bot-width: 82%; --chat-user-width: 80%; --chat-control-height: 44px;
   --chat-enter: 180ms; --chat-exit: 150ms; --chat-ease: cubic-bezier(.2, .7, .25, 1);
+  --approval-gap: 12px; --approval-row-height: 52px; --approval-button-height: 54px;
   --bg: #F7F7F8; --surface: #FFFFFF; --surface-2: #F0F1F3; --line: #E5E6E9;
   --ink: #17181C; --muted: #5B5F66; --pop: #FFC83D; --pop-ink: #17181C; --pop-soft: #FFF1C7; --pop-deep: #6B4E00;
   --primary: #17181C; --primary-ink: #FFFFFF; --green: #1E8A4C; --blue: #2F6FD6;
@@ -89,6 +90,42 @@ svg { display: block; }
 .sheet .task-h b { font-size: var(--fs-title); font-weight: 800; letter-spacing: -.4px; }
 .sheet h2 { margin: 0 0 4px; font-size: var(--fs-title); }
 .sheet .lab { margin-top: 8px; }
+.approval-sheet { overflow: hidden; }
+.approval-card { min-height: 0; }
+.approval-heading { min-width: 0; overflow-wrap: anywhere; }
+.approval-content { display: flex; flex-direction: column; gap: var(--approval-gap); min-height: 0; }
+.approval-sheet .approval-content { overflow-y: auto; overscroll-behavior: contain; }
+.approval-footer, .approval-card > .task-h { flex-shrink: 0; }
+.steps.approval-steps { gap: 0; border: 1px solid var(--line); border-radius: var(--r-box); }
+.steps.approval-steps > li { display: block; }
+.approval-steps li + li { border-top: 1px solid var(--line); }
+.approval-choice { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: center; gap: var(--approval-gap); min-height: var(--approval-row-height); padding: 10px 12px; }
+.approval-steps .approval-choice :is(.pick-cb, .dot) { margin: 0; }
+.approval-choice .dot { color: var(--muted); }
+.approval-step-text { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 3px 8px; min-width: 0; overflow-wrap: anywhere; }
+.approval-step-title { font-weight: 700; }
+.approval-change { color: var(--info); font-size: var(--fs-small); font-weight: 700; font-variant-numeric: tabular-nums; }
+.approval-step-text > :is(small, a) { flex-basis: 100%; }
+.approval-step-text a { color: var(--info); font-size: var(--fs-small); text-decoration: underline; }
+.approval-steps .off .approval-step-title, .approval-steps .off .approval-change { color: var(--muted); }
+.steps.approval-steps li.off > :is(label, div) { text-decoration: none; }
+.approval-steps .off .approval-step-title { text-decoration: line-through; }
+.approval-detail { border-top: 1px solid var(--line); }
+.approval-detail summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; cursor: pointer; list-style: none; font-weight: 700; }
+.approval-detail summary::-webkit-details-marker { display: none; }
+.approval-detail summary::after { content: ""; width: 7px; height: 7px; flex: none; margin-inline-end: 4px; border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+.approval-detail[open] summary::after { transform: rotate(225deg); }
+.approval-detail-content { display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; }
+.approval-detail-content label { display: grid; gap: 4px; }
+.approval-evidence-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.approval-footer { display: flex; flex-direction: column; gap: 8px; }
+.approval-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }  /* 취소·승인 버튼 같은 크기 (#107) */
+.approval-footer .btn { height: var(--approval-button-height); }
+.approval-footer .btn:only-child { align-self: stretch; }
+.approval-deferred { display: none; align-items: center; gap: 8px; flex-wrap: wrap; }
+.approval-card.deferred .approval-deferred { display: flex; }
+.approval-card.deferred > :is(.approval-content, .approval-footer) { display: none; }
+.approval-deferred .linkbtn { min-height: var(--chat-control-height); }
 .quick-sheet { animation: chat-reveal var(--chat-enter) var(--chat-ease); }
 .quick-sheet > .sheet { animation: chat-sheet var(--chat-enter) var(--chat-ease); }
 .quick-sheet.leaving { pointer-events: none; animation: chat-sheet-fade-out var(--chat-exit) ease-in both; }
@@ -123,6 +160,7 @@ details.history summary { cursor: pointer; text-align: center; font-size: var(--
 details.history summary::-webkit-details-marker { display: none; }
 details.history > .bub { margin-top: 8px; }
 .task.resume { border: 1.5px solid var(--ink); }
+#v-chat:has(> [data-journey="apply"]:not([inert])) > #resume[data-resume-apply] { display: none; }
 .stamp { text-align: center; font-size: var(--fs-caption); color: var(--muted); margin: 2px 0 4px; }
 .bub { background: var(--surface-2); border-radius: var(--chat-corner) var(--r-card) var(--r-card); padding: var(--chat-card-gap) var(--chat-card-padding); max-width: var(--chat-bot-width); white-space: pre-wrap; overflow-wrap: anywhere; align-self: flex-start; }
 .bub ul { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; white-space: normal; }
@@ -218,28 +256,24 @@ button.bigrow.chosen { box-shadow: inset 0 0 0 1.5px var(--ink); }
 details.more summary { cursor: pointer; font-size: var(--fs-small); color: var(--muted); min-height: 32px; display: flex; align-items: center; }
 .journey { background: var(--surface); border: 1.5px solid var(--ink); border-radius: var(--r-card); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
 .journey.pin { position: sticky; top: 0; z-index: 3; box-shadow: 0 6px 18px rgba(0,0,0,.08); }
-.journey-anchor { height: 1px; margin-block-end: calc(-1px - var(--chat-turn-gap)); pointer-events: none; }
-.journey-head { display: flex; align-items: center; gap: var(--chat-related-gap); min-width: 0; text-align: left; }
-.journey-head .j-h, .journey-head .j-now { flex: 1; min-width: 0; }
-.journey-head > svg { flex: none; width: 16px; height: 16px; }
-.journey-head[aria-expanded="true"] > svg { transform: rotate(180deg); }
-.journey .j-now { display: none; align-items: center; gap: var(--chat-related-gap); font-size: var(--fs-small); }
-.journey[data-collapsed] { min-height: var(--chat-control-height); justify-content: center; padding: 0 var(--chat-card-gap); border-radius: var(--r-box); }
-.journey[data-collapsed] .journey-head { min-height: 40px; }
-.journey[data-collapsed] > :not(.journey-head), .journey[data-collapsed] .j-h { display: none; }
-.journey[data-collapsed] .j-now { display: flex; }
-.journey:not([data-collapsed]) > :is(.j-steps, .note) { animation: chat-reveal var(--chat-enter) var(--chat-ease); }
-.j-now .j-now-step { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.j-now .j-now-deadline { flex: none; color: var(--muted); white-space: nowrap; }
 .journey .j-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .journey .j-h b { font-size: var(--fs-body); }
-.j-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
-.j-steps li { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; position: relative; }
-.j-steps li + li::before { content: ""; position: absolute; top: 14px; right: calc(50% + 16px); width: calc(100% - 26px); height: 2px; background: var(--line); }
-.j-steps li.done + li::before { background: var(--ok); }
-.j-steps i { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: var(--fs-small); font-weight: 800; background: var(--surface-2); color: var(--muted); }
-.j-steps li.done i { background: var(--ok-soft); color: var(--ok); } .j-steps li.now i { background: var(--pop); color: var(--pop-ink); box-shadow: 0 0 0 4px var(--pop-soft); }
-.j-steps span { display: flex; flex-direction: column; } .j-steps b { font-size: var(--fs-small); line-height: 1.3; } .j-steps small { font-size: var(--fs-caption); color: var(--muted); }
-.j-steps li.now b { color: var(--ink); } .j-steps li:not(.now):not(.done) b { color: var(--muted); }
+.journey-progress { min-height: 76px; justify-content: center; padding: 8px 12px; gap: 6px; border: 1px solid var(--muted); border-radius: var(--r-box); }
+.journey-progress .j-h b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-small); line-height: 18px; }
+.journey-meta { display: flex; flex: none; align-items: center; gap: 8px; color: var(--muted); font-size: var(--fs-caption); line-height: 16px; font-variant-numeric: tabular-nums; }
+.journey-count { font-weight: 700; }
+.journey-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+.journey-steps li { position: relative; display: grid; justify-items: center; gap: 4px; text-align: center; color: var(--muted); }
+.journey-steps li::before { content: ""; position: absolute; inset: 6px 0 auto; height: 3px; background: var(--line); }
+.journey-steps li:first-child::before { border-radius: var(--r-pill) 0 0 var(--r-pill); }
+.journey-steps li:last-child::before { border-radius: 0 var(--r-pill) var(--r-pill) 0; }
+.journey-steps li.now::before { background: var(--pop); }
+.journey-steps li.done::before { background: var(--ok); }
+.journey-dot { position: relative; display: grid; place-items: center; width: 14px; height: 14px; border: 2px solid var(--line); border-radius: 50%; background: var(--surface); }
+.journey-steps li.now .journey-dot { background: var(--pop); border-color: var(--pop-soft); }
+.journey-steps li.done .journey-dot { background: var(--ok-soft); border-color: var(--ok-soft); color: var(--ok); }
+.journey-dot svg { width: 10px; height: 10px; }
+.journey-steps b { font-size: var(--fs-caption); line-height: 16px; font-weight: 600; word-break: keep-all; }
+.journey-steps li.now b { color: var(--ink); font-weight: 800; }
 .task { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .task-h { display: flex; align-items: center; gap: 8px; }
 .task-h b { flex: 1; font-size: var(--fs-body); }
@@ -280,6 +314,8 @@ textarea { width: 100%; min-height: 80px; resize: vertical; border: 1px solid va
 .btn { height: 44px; padding: 0 18px; border-radius: var(--r-pill); background: var(--surface); border: 1px solid var(--line); font-weight: 600; font-size: var(--fs-body); display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: var(--ink); }
 .btn.primary { background: var(--primary); color: var(--primary-ink); border-color: transparent; font-weight: 700; }
 .btn.lg { height: 54px; font-size: var(--fs-body-l); justify-content: center; }
+.apply-actions { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--chat-related-gap); }
+.apply-actions .btn { justify-content: center; padding-inline: 8px; text-align: center; line-height: 1.25; }
 .btn:disabled { opacity: .5; cursor: default; }
 .note { font-size: var(--fs-small); color: var(--muted); }
 .big { display: flex; flex-direction: column; gap: 8px; }
@@ -371,11 +407,11 @@ textarea { width: 100%; min-height: 80px; resize: vertical; border: 1px solid va
 .dutycard .duty-sep + .btn.primary { margin-top: 34px !important; }
 .fold { margin: 4px 0; } .fold summary { font-size: var(--fs-small); color: var(--muted); cursor: pointer; padding: 4px 0; } .fold .row-btns { margin-top: 6px; }
 .crit-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; } .crit-h b { font-size: var(--fs-title); } .crit-h .big { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; } .crit-h .big small { font-size: var(--fs-body); color: var(--muted); font-weight: 600; }
-.crit { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); } .crit:first-of-type { border-top: 0; }
-.crit .row1 { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; } .crit .row1 span { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
-.crit .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; } .crit .bar i { display: block; height: 100%; background: var(--ink); border-radius: 4px; }
-.crit .tip { font-size: var(--fs-small); color: var(--ink); } .crit .tip b { color: var(--ok); font-variant-numeric: tabular-nums; }
-.crit details summary { font-size: var(--fs-small); color: var(--muted); cursor: pointer; } .crit details .crow { margin-top: 6px; }
+.criterion { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); } .criterion:first-of-type { border-top: 0; }
+.criterion .row1 { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; } .criterion .row1 span { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+.criterion .bar { height: 8px; border-radius: 4px; background: var(--line); overflow: hidden; } .criterion .bar i { display: block; height: 100%; background: var(--ink); border-radius: 4px; }
+.criterion .tip { font-size: var(--fs-small); color: var(--ink); } .criterion .tip b { color: var(--ok); font-variant-numeric: tabular-nums; }
+.criterion details summary { font-size: var(--fs-small); color: var(--muted); cursor: pointer; } .criterion details .crow { margin-top: 6px; }
 .crow { display: grid; grid-template-columns: 20px 1fr; gap: 8px; font-size: var(--fs-body); }
 .crow small { display: block; color: var(--muted); font-size: var(--fs-small); }
 .crow .ev { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 2px; }
@@ -785,7 +821,7 @@ body.onboarding .dock { display: none; }  /* 첫 화면 뒤로 아래 막대가 
 .work .work-scope li + li { margin-block-start: var(--chat-consecutive-gap); }
 @media (prefers-reduced-motion: reduce) {
   .quick-sheet, .quick-sheet > .sheet, .typing::after, .steps li.run .dot, .bub.think .mascot, .work .wt .mascot,
-  .journey:not([data-collapsed]) > :is(.j-steps, .note), .stage:not([aria-disabled="true"]) > :not(h3) { animation: none; }
+  .stage:not([aria-disabled="true"]) > :not(h3) { animation: none; }
   #v-chat :is(.chat-action, .check-confirm, .hcheck), .chat-check input, .chat-check input::after { transition: none; }
   #v-chat :is(.chat-action, .check-confirm):active:not(:disabled), #v-chat .hcheck:active { transform: none; }
 }
@@ -953,7 +989,11 @@ function renderHead() {
   const pp = $("panelProj"); if (pp) pp.textContent = (d ? "준비 중 · " : "") + projName();
 }
 async function loadSaved() {  // 팀원이 이미 분석해 저장소에 저장한 공고가 있으면 다시 분석하지 않고 가져온다
-  try { const s = await api("/notice/saved"); if (s.extract && !curDraft()) setExtract(s.extract); } catch (e) { /* 없으면 그냥 넘어감 */ }
+  const key = projKey();
+  try {
+    const s = await api("/notice/saved?repo=" + encodeURIComponent(curRepo()));
+    if (s.extract && projKey() === key && !extract) { setExtract(s.extract); renderHead(); }
+  } catch (e) { /* 없으면 그냥 넘어감 */ }
 }
 const ROOMS = {};  // 팀플 키 → 그 대화방의 화면 조각 (이 탭이 열려 있는 동안)
 let roomKey = null;
@@ -979,11 +1019,13 @@ function useProject(next, quiet) {
   const d = curDraft();
   extract = d ? d.extract || null : store.get("extract:" + projKey(), null);
   calState = null; lastTriage = null; lastProgress = null; lastBoard = null; renderHead(); renderCal(); renderMe(); renderHome();
-  if (!d) { loadCalState(); if (!extract) loadSaved(); if (booted) refreshHome(); }  // 다른 팀플로 바꾸면 할 일을 다시 읽는다 (안 그러면 '불러오는 중'에 머문다)
+  const savedNotice = !d && !extract ? loadSaved() : null;
+  if (!d) { loadCalState(); if (booted) refreshHome(); }  // 다른 팀플로 바꾸면 할 일을 다시 읽는다 (안 그러면 '불러오는 중'에 머문다)
   const toKey = projKey(); const fresh = fromKey && fromKey !== toKey && !ROOMS[toKey];
   switchRoom(fromKey, toKey); roomKey = toKey;
   if ($("resume") && (quiet || fresh)) resumeChat();
   if (!quiet) showTab("chat");
+  return savedNotice;
 }
 const tasks = store.get("tasks", []);
 const docs = store.get("docs", []);
@@ -1097,9 +1139,20 @@ function openPicks() {
   sh.appendChild(tiles);
   const rows = (items) => { const g = h("div", "trows"); items.forEach(([k, t, hint, fn]) => { const x = h("button", "trow"); x.type = "button"; x.title = hint; x.appendChild(pickIcon(k)); x.appendChild(h("b", null, t)); x.appendChild(h("span", "chev", "›")); x.onclick = go(fn); g.appendChild(x); }); return g; };
   const all = PICKS(); const find = (name) => all.find((x) => x[1].includes(name));
+  const projectRow = (query, requirements, label) => {
+    const [key, title, hint, action] = find(query);
+    const name = label || title;
+    return [key, name, hint, () => chooseProjectForAction(name, action, requirements)];
+  };
   sh.appendChild(rows([["trophy", "대회 찾기", find("새 대회 고르기")[2], find("새 대회 고르기")[3]]]));
   sh.appendChild(h("hr", "tsep"));
-  sh.appendChild(rows([["list", "오늘 할 일 정리", find("할 일 정리")[2], find("할 일 정리")[3]], ["cal", "마감까지 계획 짜기", find("계획 짜기")[2], find("계획 짜기")[3]], ["search", "진행 점검·다시 계획", find("진행 점검")[2], find("진행 점검")[3]], ["send", "제출 전 점검", find("제출 전")[2], find("제출 전")[3]], ["trophy", "심사 기준으로 채점", find("심사 기준")[2], find("심사 기준")[3]]]));
+  sh.appendChild(rows([
+    ["list", "오늘 할 일 정리", find("할 일 정리")[2], find("할 일 정리")[3]],
+    projectRow("계획 짜기"),
+    projectRow("진행 점검", { requiresRepo: true, requiresNotice: false }),
+    projectRow("제출 전", { requiresRepo: true }, "제출 전 점검"),
+    projectRow("심사 기준", { requiresRepo: true }),
+  ]));
   document.querySelector(".phone").appendChild(bg); tiles.querySelector("button").focus();
 }
 function intro() {
@@ -1126,96 +1179,217 @@ function intro() {
 }
 
 /* ---------- 승인 카드 ---------- */
-function approval(proposal, onDone) {
+function approval(proposal, onDone, context = {}) {
   setBadge(1);
-  // 승인은 아래에서 올라오는 시트로 묻는다. 닫으면(나중에) 카드가 대화에 남아 언제든 다시 승인할 수 있다.
-  const c = h("div", "task approval");  // approval: 시트와 대화 카드 모양을 같게
-  const bg = h("div", "sheet-bg"); const sh = h("div", "sheet"); sh.setAttribute("role", "dialog"); sh.setAttribute("aria-modal", "true"); sh.setAttribute("aria-label", proposal.summary); sh.appendChild(c); bg.appendChild(sh);
-  let inSheet = true;
-  const esc = (e) => { if (e.key === "Escape") toChat(); };
-  const toChat = () => { if (!inSheet) return; inSheet = false; document.removeEventListener("keydown", esc); bg.remove(); const lt = c.querySelector(".later"); if (lt) lt.remove(); add(c); };
-  bg.onclick = (e) => { if (e.target === bg) toChat(); }; document.addEventListener("keydown", esc);
-  document.querySelector(".phone").appendChild(bg);
-  const hd = h("div", "task-h"); hd.appendChild(h("b", null, proposal.summary)); const tg = h("span", "tag", ""); hd.appendChild(tg); c.appendChild(hd);  // tg는 처음엔 비워 둔다(숨김). 실행 중·완료·취소함 같은 상태만 보여 준다
+  const host = document.querySelector(".phone");
+  const c = h("div", "task approval-card");
+  const bg = h("div", "sheet-bg"), sh = h("div", "sheet approval-sheet");
+  sh.setAttribute("role", "dialog"); sh.setAttribute("aria-modal", "true"); sh.setAttribute("aria-label", proposal.summary);
+  bg.appendChild(sh);
+  let inSheet = false, locked = false, afterClose = null;
+  const hd = h("div", "task-h"), heading = h("b", "approval-heading", proposal.summary);
+  heading.tabIndex = -1;
+  const tg = h("span", "tag", "확인이 필요해요");
+  tg.setAttribute("role", "status");
+  hd.append(heading, tg); c.appendChild(hd);
+  const content = h("div", "approval-content");
+  const footer = h("div", "approval-footer");
+  const deferred = h("div", "approval-deferred");
+  const reopen = h("button", "btn", "승인 내용 보기"), cancel = h("button", "linkbtn", "제안 취소");
+  reopen.type = cancel.type = "button"; deferred.append(reopen, cancel);
+  c.append(content, footer, deferred);
+  const esc = (e) => { if (e.key === "Escape" && host.lastElementChild === bg) toChat(); };
+  const toChat = () => {
+    if (!inSheet) return;
+    const focusWasInside = sh.contains(document.activeElement);
+    inSheet = false;
+    document.removeEventListener("keydown", esc);
+    bg.remove();
+    c.classList.toggle("deferred", !locked);
+    add(c);
+    if (!locked) {
+      tg.textContent = "승인 대기";
+      if (focusWasInside) reopen.focus({ preventScroll: true });
+    } else if (focusWasInside) chat.focus({ preventScroll: true });
+    if (afterClose) { const finish = afterClose; afterClose = null; finish(); }
+  };
+  const showSheet = () => {
+    if (locked || inSheet) return;
+    inSheet = true;
+    c.classList.remove("deferred");
+    tg.textContent = "확인이 필요해요";
+    sh.appendChild(c); host.appendChild(bg);
+    document.addEventListener("keydown", esc);
+    heading.focus({ preventScroll: true });
+  };
+  bg.onclick = (e) => { if (e.target === bg) toChat(); };
+  reopen.onclick = showSheet;
+
   const multi = proposal.steps.length > 1;
-  const ol = h("ol", "steps"); const lis = []; const boxes = [];
+  const ol = h("ol", "steps approval-steps");
+  const milestones = new Map();
+  const editGroups = new Map();
   const edits = {};
   const depNote = h("div", "note"); depNote.hidden = true;
-  proposal.steps.forEach((s, i) => {
-    const li = h("li");
-    const id = "s" + Date.now() + "-" + i;
-    if (multi) {
-      const cb = h("input", "pick-cb"); cb.type = "checkbox"; cb.checked = true; cb.id = id; boxes.push(cb);
-      cb.onchange = () => {
-        li.classList.toggle("off", !cb.checked);
-        // 마일스톤 만들기를 빼면 그 마일스톤에 들어갈 일도 같이 뺀다
-        const ms = s.label.match(/^'(.+)' 마감일 만들기/);
-        if (ms && !cb.checked) {
-          let n = 0;
-          proposal.steps.forEach((o, j) => { if (j !== i && boxes[j].checked && ((o.sub || "").includes(`'${ms[1]}'에 넣어요`) || o.label.includes(`'${ms[1]}'에 묶기`))) { boxes[j].checked = false; lis[j].classList.add("off"); n++; } });
-          depNote.textContent = n ? `마감일을 빼면 거기 넣을 할 일 ${n}개도 같이 빠져요.` : ""; depNote.hidden = !n;
-        }
-        go.textContent = `승인하고 실행 (${boxes.filter((b) => b.checked).length})`;
-        go.disabled = !boxes.some((b) => b.checked);
-      };
-      li.appendChild(cb);
-    } else li.appendChild(h("span", "dot", ""));
-    const t = h(multi ? "label" : "div", null, s.label); if (multi) t.htmlFor = id; if (s.sub) t.appendChild(h("small", null, s.sub)); li.appendChild(t); ol.appendChild(li); lis.push(li);
+  const rows = proposal.steps.map((step, index) => {
+    const li = h("li"), row = h(multi ? "label" : "div", "approval-choice");
+    const mark = multi ? h("input", "pick-cb") : h("span", "dot", "✓");
+    if (multi) { mark.type = "checkbox"; mark.checked = true; }
+    else mark.setAttribute("aria-hidden", "true");
+    const tx = h("span", "approval-step-text");
+    const title = h("b", "approval-step-title", step.preview?.title || step.label);
+    tx.appendChild(title);
+    if (step.preview?.change) tx.appendChild(h("span", "approval-change", step.preview.change));
+    else if (step.sub) tx.appendChild(h("small", null, step.sub));
+    row.append(mark, tx); li.appendChild(row); ol.appendChild(li);
+    const milestone = step.label.match(/^'(.+)' 마감일 만들기/)?.[1];
+    if (milestone && multi) milestones.set(milestone, mark);
+    if (step.edit && step.text != null && !step.label.startsWith("할 일 추가")) {
+      const key = JSON.stringify([step.edit, step.text]);
+      if (!editGroups.has(key)) editGroups.set(key, { text: step.text, indexes: [], labels: [] });
+      const group = editGroups.get(key);
+      group.indexes.push(index); group.labels.push(step.label);
+    }
+    return { li, row, mark, tx, step, dependency: null };
   });
-  c.appendChild(ol); c.appendChild(depNote);
-  const tas = [];
-  proposal.steps.forEach((s, i) => {
-    if (!s.edit || s.text == null || s.label.startsWith("할 일 추가")) return;
-    const id = "e" + Date.now() + i; const lb = h("label", "lab", `${s.label} · 보내기 전에 고칠 수 있어요`); lb.htmlFor = id;
-    const ta = h("textarea"); ta.id = id; ta.value = s.text; ta.oninput = () => { edits[i] = ta.value; }; tas.push(ta);
-    c.appendChild(lb); c.appendChild(ta);
+  rows.forEach(({ step }, i) => {
+    for (const [title, checkbox] of milestones) {
+      if ((step.sub || "").includes(`'${title}'에 넣어요`) || step.label.includes(`'${title}'에 묶기`)) {
+        rows[i].dependency = checkbox; break;
+      }
+    }
   });
+  content.append(ol, depNote);
+  const disclosure = (title) => {
+    const details = h("details", "approval-detail"), body = h("div", "approval-detail-content");
+    details.append(h("summary", null, title), body); content.appendChild(details);
+    return { details, body };
+  };
+  const details = [
+    ...(context.reasons || []),
+    ...proposal.steps.filter((step) => step.preview?.change && step.sub).map((step) => `${step.preview.title} · ${step.sub}`)
+  ];
+  const references = (context.evidence || []).filter((entry) => entry.url);
+  if (details.length || references.length) {
+    const evidence = disclosure("근거 보기");
+    new Set(details.filter(Boolean)).forEach((line) => evidence.body.appendChild(h("div", "note", line)));
+    if (references.length) {
+      const links = h("div", "approval-evidence-links");
+      references.forEach((entry) => links.appendChild(link(entry.label, entry.url)));
+      evidence.body.appendChild(links);
+    }
+  }
+  const editDisclosure = editGroups.size ? disclosure("댓글·메시지 확인 및 수정") : null;
+  for (const group of editGroups.values()) {
+    group.label = h("label", null);
+    group.input = h("textarea");
+    group.input.value = group.text;
+    group.input.oninput = () => group.indexes.forEach((i) => { edits[i] = group.input.value; });
+    group.label.append(h("span", "lab", group.labels.join(" · ")), group.input);
+    editDisclosure.body.appendChild(group.label);
+  }
   if (proposal.steps.some((x) => /메신저 미연결/.test(x.label)) && !DISC.connected) {  // 팀 메시지를 보내려는 바로 그 순간에 연결을 권한다
     const dl = h("button", "linkbtn", "디스코드를 연결하면 복사 없이 바로 보내요 ›"); dl.type = "button"; dl.style.alignSelf = "flex-start";
-    dl.onclick = () => openDiscordConnect(() => snack("연결했어요. 승인하면 디스코드로 바로 가요")); c.appendChild(dl);
+    dl.onclick = () => openDiscordConnect(() => snack("연결했어요. 승인하면 디스코드로 바로 가요")); content.appendChild(dl);
   }
-  const note = h("div", "note apv-note", H.mode === "live" ? "확인을 누르면 GitHub에 바로 적용됨" : "데모라 실제 GitHub에는 남지 않음");
-  c.appendChild(note);
-  const rb = h("div", "row-btns"); rb.style.display = "grid"; rb.style.gridTemplateColumns = "1fr 1fr";  /* 취소·승인 버튼 같은 크기 */ const go = h("button", "btn primary lg", multi ? `승인하고 실행 (${proposal.steps.length})` : "승인하고 실행"); go.type = "button"; const no = h("button", "btn lg", "취소"); no.type = "button"; rb.appendChild(no); rb.appendChild(go); c.appendChild(rb);
-  const later = h("button", "btn later", "나중에 할게요"); later.type = "button"; later.style.alignSelf = "center"; later.style.border = "0"; later.style.color = "var(--muted)"; later.onclick = () => { toChat(); snack("대화에 남겨 뒀어요"); };  // '나중에 할게요'는 시트에서 뺐다 (바깥을 누르거나 Esc로 닫으면 대화에 남는다)
-  setTimeout(() => go.focus(), 50);
-  const lock = () => { if (later.isConnected) later.remove(); go.disabled = no.disabled = true; tas.forEach((t) => (t.disabled = true)); boxes.forEach((b) => (b.disabled = true)); };
-  // 실행이 시작되면 체크박스 자리를 진행 표시(빈칸 → 실행 중 → ✓)로 바꾼다
-  const toDots = () => boxes.forEach((b, i) => { const d = h("span", "dot", b.checked ? "" : "–"); b.replaceWith(d); if (!b.checked) lis[i].lastChild.appendChild(h("small", null, "건너뜀")); });
-  no.onclick = () => { lock(); setBadge(-1); tg.textContent = "취소함"; tg.className = "tag skip"; c.classList.add("folded"); toChat(); bot("알겠어요. 취소했어요."); if (onDone) onDone(false); };  // 취소한 시트는 제목 한 줄만 남긴다
+  const note = h("div", "note", H.mode === "live" ? "승인하면 선택한 항목이 실행돼요." : "데모라 실제 GitHub에는 남지 않아요.");
+  const actions = h("div", "approval-actions");
+  const go = h("button", "btn primary lg"), later = h("button", "btn lg", "나중에");
+  go.type = later.type = "button";
+  later.onclick = () => { toChat(); snack("대화에 남겨 뒀어요"); };
+  actions.append(later, go); footer.append(note, actions);
+  const isPicked = (i) => !multi || rows[i].mark.checked;
+  const syncSelection = () => {
+    let skippedDependencies = 0;
+    rows.forEach(({ mark, li, dependency }, i) => {
+      if (!multi) return;
+      mark.disabled = !!dependency && !dependency.checked;
+      if (mark.disabled) { mark.checked = false; skippedDependencies++; }
+      li.classList.toggle("off", !isPicked(i));
+    });
+    depNote.textContent = `마감일을 빼면 거기 넣을 할 일 ${skippedDependencies}개도 같이 빠져요.`;
+    depNote.hidden = !skippedDependencies;
+    const count = rows.filter((_, i) => isPicked(i)).length;
+    go.textContent = `승인하고 실행 (${count})`;
+    go.disabled = !count;
+    for (const group of editGroups.values()) group.label.hidden = !group.indexes.some(isPicked);
+    if (editDisclosure) editDisclosure.details.hidden = [...editGroups.values()].every((group) => group.label.hidden);
+  };
+  if (multi) rows.forEach(({ mark }) => { mark.onchange = syncSelection; });
+  syncSelection();
+  const lock = () => {
+    locked = true;
+    go.disabled = later.disabled = reopen.disabled = cancel.disabled = true;
+    if (multi) rows.forEach(({ mark }) => { mark.disabled = true; });
+    for (const group of editGroups.values()) group.input.disabled = true;
+  };
+  cancel.onclick = () => {
+    if (locked) return;
+    lock(); setBadge(-1);
+    tg.textContent = "취소함"; tg.className = "tag skip";
+    c.classList.remove("deferred"); c.classList.add("folded");
+    chat.focus({ preventScroll: true });
+    bot("제안을 취소했어요.");
+    if (onDone) onDone(false);
+  };
   go.onclick = async () => {
-    const skip = boxes.map((b, i) => (b.checked ? -1 : i)).filter((i) => i >= 0);
-    lock(); toDots(); tg.textContent = "실행 중";
-    lis.forEach((li, i) => { if (!skip.includes(i)) li.className = "run"; });
+    if (locked || go.disabled) return;
+    const skip = [];
+    lock(); tg.textContent = "실행 중";
+    rows.forEach((row, i) => {
+      const picked = isPicked(i);
+      if (multi) {
+        const result = h("div", "approval-choice"), dot = h("span", "dot", picked ? "" : "–");
+        result.append(dot, row.tx); row.row.replaceWith(result); row.mark = dot;
+      } else row.mark.textContent = "";
+      if (picked) row.li.classList.add("run");
+      else { skip.push(i); row.tx.appendChild(h("small", null, "건너뜀")); }
+    });
+    let r;
     try {
-      let r;
       for (let tries = 0; ; tries++) {  // 다른 팀원의 승인이 실행 중이면 잠깐 기다렸다가 다시 시도
         try { r = await api("/execute", { method: "POST", body: JSON.stringify({ token: proposal.token, edits, skip }) }); break; }
         catch (e2) { if (!e2.busy || tries >= 3) throw e2; tg.textContent = "다른 팀원 실행 대기 중"; await wait(2000); tg.textContent = "실행 중"; }
       }
-      setBadge(-1);
-      r.results.forEach((res) => { const li = lis[res.index ?? 0]; if (!li) return; li.className = res.ok ? "ok" : ""; li.querySelector(".dot").textContent = res.ok ? "✓" : "!"; if (res.note || res.error) li.lastChild.appendChild(h("small", null, res.note || res.error)); if (res.url) { const a = h("a", null, " 열기 ↗"); a.href = res.url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.style.color = "var(--blue)"; li.lastChild.firstChild.after(a); } });
-      lis.forEach((li) => { if (li.className === "run") li.className = ""; });
-      tg.textContent = r.ok ? "완료" : "중간에 멈춤"; tg.className = "tag" + (r.ok ? " done" : "");
-      note.hidden = true;  // 끝났으니 '확인을 누르면 적용돼요' 안내는 뺀다
-      if (inSheet) { const cl = h("button", "btn primary lg", "확인"); cl.type = "button"; cl.onclick = () => toChat(); rb.replaceWith(cl); cl.focus(); await new Promise((res) => { const iv = setInterval(() => { if (!inSheet) { clearInterval(iv); res(); } }, 120); }); cl.remove(); }  // 시트를 닫으면 '확인'은 할 일이 없으니 대화에 남기지 않는다
-      lastTriage = null; refreshHome();
+    } catch (e) {
+      rows.forEach(({ li }) => li.classList.remove("run"));
+      footer.remove(); setBadge(-1);
+      toChat();
+      tg.className = "tag skip";
+      if (e.stale) { tg.textContent = "먼저 처리됨"; bot(`다른 팀원이 먼저 처리해서 실행하지 않았어요. 같은 일을 두 번 하거나 덮어쓰지 않으려고요.${e.errors && e.errors.length ? "\n· " + e.errors.map((x) => x.replace(/^\d+번 행동: /, "")).join("\n· ") : ""}`); lastTriage = null; lastProgress = null; refreshHome(); chip("새 상태로 다시 보기", today); if (onDone) onDone(false); return; }
+      if (e.needSecond) { tg.textContent = "다른 팀원 승인 필요"; askSecond(proposal, e.leads); return; }
+      if (e.status === 401 && e.login) { tg.textContent = "로그인 필요"; bot("승인하려면 GitHub로 로그인해 주세요. 누가 승인했는지 GitHub에 남아요."); add(ghBtn("GitHub로 로그인", true)); return; }
+      if (e.status === 401) { tg.textContent = "접근 코드 필요"; askCode(() => approval(proposal, onDone, context)); return; }
+      tg.textContent = "실행 안 함"; fail(e);
+      if (onDone) onDone(false);
+      return;
+    }
+    setBadge(-1);
+    r.results.forEach((res) => {
+      const row = rows[res.index ?? 0]; if (!row) return;
+      row.li.className = res.ok ? "ok" : ""; row.mark.textContent = res.ok ? "✓" : "!";
+      if (res.note || res.error) row.tx.appendChild(h("small", null, res.note || res.error));
+      if (res.url) {
+        const a = h("a", null, "결과 열기 ↗"); a.href = res.url; a.target = "_blank"; a.rel = "noopener noreferrer";
+        row.tx.appendChild(a);
+      }
+    });
+    rows.forEach(({ li }) => li.classList.remove("run"));
+    tg.textContent = r.ok ? "완료" : "중간에 멈춤"; tg.className = "tag" + (r.ok ? " done" : "");
+    const finish = () => {
+      footer.remove(); lastTriage = null; refreshHome();
       tasks.unshift({ title: proposal.summary, status: r.ok ? "완료" : "중간에 멈춤", detail: r.results.map((x) => (x.ok ? "✓ " : "✕ ") + x.label).join("\n"), at: Date.now() }); saveLists();
       bot(r.ok ? "끝났어요. 한 일은 보관함에 기록해 뒀어요." : "중간에 멈췄어요. 어디까지 했는지 카드에 표시해 뒀어요.");
-      const skipped = r.results.find((x) => x.skipped);
-      if (skipped) { const t = proposal.steps.find((s) => s.edit === "text"); if (t) add(copyBtn("팀 메시지 복사", () => edits[proposal.steps.indexOf(t)] || t.text)); }
+      const skipped = r.results.find((x) => x.skipped && proposal.steps[x.index ?? 0]?.edit === "text");
+      if (skipped) { const index = skipped.index ?? 0; add(copyBtn("팀 메시지 복사", () => edits[index] ?? proposal.steps[index].text)); }
       if (onDone) onDone(r.ok);
-    } catch (e) {
-      lis.forEach((li) => (li.className = ""));
-      toChat();
-      if (e.stale) { setBadge(-1); tg.textContent = "먼저 처리됨"; tg.className = "tag skip"; bot(`다른 팀원이 먼저 처리해서 실행하지 않았어요. 같은 일을 두 번 하거나 덮어쓰지 않으려고요.${e.errors && e.errors.length ? "\n· " + e.errors.map((x) => x.replace(/^\d+번 행동: /, "")).join("\n· ") : ""}`); lastTriage = null; lastProgress = null; refreshHome(); chip("새 상태로 다시 보기", today); if (onDone) onDone(false); return; }
-      if (e.needSecond) { setBadge(-1); tg.textContent = "다른 팀원 승인 필요"; tg.className = "tag skip"; askSecond(proposal, e.leads); return; }
-      if (e.status === 401 && e.login) { setBadge(-1); tg.textContent = "로그인 필요"; bot("승인하려면 GitHub로 로그인해 주세요. 누가 승인했는지 GitHub에 남아요."); add(ghBtn("GitHub로 로그인", true)); return; }
-      if (e.status === 401) { setBadge(-1); tg.textContent = "접근 코드 필요"; askCode(() => approval(proposal, onDone)); return; }
-      setBadge(-1); tg.textContent = "실행 안 함"; tg.className = "tag skip"; fail(e);
-      if (onDone) onDone(false);
-    }
+    };
+    if (inSheet) {
+      const close = h("button", "btn primary lg", "확인"); close.type = "button"; close.onclick = toChat;
+      footer.replaceChildren(close); afterClose = finish; close.focus();
+    } else finish();
   };
+  showSheet();
   scroll();
 }
 function askCode(retry) {
@@ -1328,7 +1502,8 @@ function noticeForm(target, draft, opts = {}) {
       } else if (!cur || cur.repo !== target || cur.draft) useProject({ repo: target }, true);
       if (target && pageUrl) store.set("noticeUrl:" + projKey(), { url: pageUrl, title: r.extract.title });
       setExtract(r.extract);
-      showExtract(r);
+      if (opts.onAnalyzed) { dismissChat(c); opts.onAnalyzed(); }
+      else showExtract(r);
     } catch (e) { fail(e); go.disabled = ta.disabled = fb.disabled = url.disabled = false; }
   };
   scroll(); url.focus();
@@ -1586,12 +1761,16 @@ function checkRepoDeadline() {  // 팀원이 GitHub에서 제출 마감을 옮�
 async function planFlow() {
   me("마감까지 계획 짜 줘");
   if (!extract) { bot("먼저 공고를 분석해야 마감을 알 수 있어요."); chip("대회 공고 분석하기", notice); return; }
+  const key = projKey();
   if (!extract.submit_deadline_iso && noticeUrl()) {
     try { await thinking("공고에서 제출 마감을 다시 찾고 있어요", refreshExtract()); } catch (e) { /* 못 읽으면 직접 넣기로 */ }
+    if (key !== projKey()) return;
     if (extract.submit_deadline_iso) bot(`공고를 다시 읽어서 제출 마감(${extract.submit_deadline || dtxt(extract.submit_deadline_iso)})을 찾았어요.`);
   }
   if (!extract.submit_deadline_iso) return askDeadline();
-  let r; try { r = await thinking("마감에서 거꾸로 계획을 짜고 있어요", api("/schedule", { method: "POST", body: JSON.stringify({ extract }) })); } catch (e) { return fail(e); }
+  let r; try { r = await thinking("마감에서 거꾸로 계획을 짜고 있어요", api("/schedule", { method: "POST", body: JSON.stringify({ extract }) })); }
+  catch (e) { if (key === projKey()) fail(e); return; }
+  if (key !== projKey()) return;
   if (!r.steps.length) { bot("제출 마감이 없거나 이미 지나서 계획을 짤 수 없어요."); return; }
   bot(`${projName()}의 제출 마감에서 거꾸로 ${r.steps.length}단계로 나눴어요. 날짜는 바꿀 수 있어요. AI를 쓰지 않아서 토큰은 0이에요.`);
   const c = add(h("div", "task")); const hd = h("div", "task-h"); hd.appendChild(h("b", null, `${projName()} · 작업 계획`)); const tg = h("span", "tag skip", "초안"); hd.appendChild(tg); c.appendChild(hd);
@@ -1654,9 +1833,19 @@ async function progressCheck(auto) {
   let r;
   const req = api("/progress", { method: "POST", body: JSON.stringify({ repo: curRepo(), plan, deadline_iso: extract && extract.submit_deadline_iso, plan_start_iso: store.get("planAt:" + key, null) }) });
   try { r = await (auto ? req : working("진행을 점검하고 있어요", ["관찰 · 저장소와 계획 읽기", "판단 · 늦은 단계 찾기", "다시 계획 · 남은 시간에 맞추기"], req)); }
-  catch (e) { if (!auto) fail(e); return; }
+  catch (e) { if (!auto && key === projKey()) fail(e); return; }
+  if (key !== projKey()) return;
   lastProgress = r; lastChecked = new Date(); renderHome(); if ($("resume") && $("resume").childNodes.length) resumeChat();  // 늦어진 일이 있으면 다음 할 일도 바뀐다
-  if (!r.findings.length) { if (!auto) { bot(plan.length || extract ? "계획대로 가고 있어요. 늦은 단계가 없어요 ✓" : "아직 계획이 없어서 비교할 게 없어요."); if (!plan.length && extract) chip("마감까지 계획 짜기", planFlow); } return; }
+  if (!r.findings.length) {
+    if (!auto) {
+      bot(plan.length || extract ? "계획대로 가고 있어요. 늦은 단계가 없어요 ✓" : "아직 계획이 없어서 비교할 게 없어요.");
+      if (!plan.length) {
+        if (extract) chip("마감까지 계획 짜기", planFlow);
+        else chip("공고 추가하고 계획 짜기", () => addNoticeForAction(planFlow));
+      }
+    }
+    return;
+  }
   if (auto) { const h2 = hashText(r.summary); if (store.get("progressSeen:" + key, "") !== h2) { store.set("progressSeen:" + key, h2); $("homeBadge").hidden = false; $("homeBadge").textContent = "!"; } return; }
   progressCard(r, false);
 }
@@ -1686,7 +1875,7 @@ function progressCard(r, auto) {
     const rb = h("div", "row-btns"); const yes = h("button", "btn primary", "계획 다시 짜기"); yes.type = "button"; rb.appendChild(yes); c.appendChild(rb);
     yes.onclick = () => {
       yes.disabled = true; me("계획 다시 짜 줘"); showPlan(); scroll();
-      if (r.proposal) approval(r.proposal, done);
+      if (r.proposal) approval(r.proposal, done, { reasons: r.findings.map((f) => `${f.title} · ${f.why}`) });
       else if (r.moves.length) { const b = h("button", "btn primary", "이 계획으로 바꾸기"); b.type = "button"; b.onclick = () => { b.disabled = true; done(true); }; c.appendChild(b); }
     };
     scroll(); return;
@@ -1841,13 +2030,14 @@ function resumeChat() {
   // 지금 어디까지 왔는지 + 다음 할 일 하나
   const d = curDraft(); const st = stageOf(); const ex = extract || {};
   const appD = ddays(ex.apply_deadline_iso), subD = ddays(ex.submit_deadline_iso);
+  const startApplication = ["신청하기", () => { me("신청할래"); applyFlow(ex); }];
   let next = null, where = "";
   if (!extract && !d) { where = "아직 고른 대회가 없어요"; next = ["나갈 대회 고르기", () => discoverChat("새 대회 준비할래")]; }
   else if (d) {
     const applied = d.applied || store.get(doneKey("apply"), null);
-    if (needsApply(ex) && !applied) { where = `신청 전${appD != null && appD >= 0 ? ` · 신청 마감 D-${appD}` : ""}`; next = ["신청하기", () => { me("신청할래"); applyFlow(ex); }]; }
+    if (needsApply(ex) && !applied) { where = `신청 전${appD != null && appD >= 0 ? ` · 신청 마감 D-${appD}` : ""}`; next = startApplication; }
     else { where = "신청 완료 ✓ · 팀 저장소 준비 중"; next = ["다음 단계 보기", () => startPath(d)]; }
-  } else if (st === 0) { where = `저장소 연결됨 · 신청 전${appD != null && appD >= 0 ? ` · 신청 마감 D-${appD}` : ""}`; next = ["신청하기", () => { me("신청할래"); applyFlow(ex); }]; }
+  } else if (st === 0) { where = `저장소 연결됨 · 신청 전${appD != null && appD >= 0 ? ` · 신청 마감 D-${appD}` : ""}`; next = startApplication; }
   else if (st >= 3) { where = "제출을 마쳤어요 ✓"; next = ["새 대회 고르기", () => discoverChat("새 대회 준비할래")]; }
   else {
     where = `협업 중${subD != null && subD >= 0 ? ` · 제출 마감 D-${subD}` : ""}`;
@@ -1863,6 +2053,7 @@ function resumeChat() {
     if (next[2]) { const b2 = h("button", "btn", next[2][0]); b2.type = "button"; b2.onclick = () => { b2.disabled = true; showTab("chat"); next[2][1](); }; rb.appendChild(b2); }
     c.appendChild(rb);
   }
+  box.toggleAttribute("data-resume-apply", next === startApplication);
   box.appendChild(c); scroll();
 }
 function stageOf() {
@@ -2071,11 +2262,63 @@ function onboarding() {
 function dtxt(iso) { if (!iso) return ""; const n = new Date(); n.setHours(0, 0, 0, 0); const d = new Date(iso); d.setHours(0, 0, 0, 0); const k = Math.round((d - n) / 864e5); return k >= 0 ? `D-${k}` : `D+${-k}`; }
 function projSub(p) { if (p.error) return "저장소를 읽지 못했어요"; return [p.notice || "연결된 공고 없음", p.due ? `제출 ${dtxt(p.due)}` : "", p.total ? `제출물 ${p.done}/${p.total}` : ""].filter(Boolean).join(" · "); }
 function draftSub(d) { const ex = d.extract || {}; return [d.applied ? "신청 완료" : "신청 준비", ex.apply_deadline_iso ? `신청 ${dtxt(ex.apply_deadline_iso)}` : "", ex.submit_deadline_iso ? `제출 ${dtxt(ex.submit_deadline_iso)}` : ""].filter(Boolean).join(" · "); }
-async function loadProjects() {
+async function loadProjects({ selectDefault = true } = {}) {
   const r = await api("/projects"); projects = r.projects; if (r.install_url) H.install_url = r.install_url;
   // 로그인한 사람의 저장소만 받았는데 지금 보고 있는 저장소가 그 안에 없으면(배포한 사람의 기본 저장소 등) 내 저장소로 옮긴다
-  if (r.mine_only && r.default && !curDraft() && !projects.some((p) => p.repo === curRepo())) useProject({ repo: r.default }, true);
+  if (selectDefault && r.mine_only && r.default && !curDraft() && !projects.some((p) => p.repo === curRepo())) useProject({ repo: r.default }, true);
   return projects;
+}
+function addNoticeForAction(action) {
+  const draft = curDraft();
+  noticeForm(draft ? null : curRepo(), draft, { onAnalyzed: action });
+}
+async function chooseProjectForAction(label, action, { requiresRepo = false, requiresNotice = true } = {}) {
+  chat.querySelectorAll(".project-action:not([inert])").forEach(dismissChat);
+  const card = add(h("div", "task project-action"));
+  card.setAttribute("role", "group"); card.setAttribute("aria-label", `${label} 팀플 선택`);
+  const choices = h("div", "big");
+  const loading = h("div", "note", "팀플을 불러오는 중…");
+  loading.setAttribute("role", "status");
+  card.append(h("b", null, "어느 팀플에서 할까요?"), h("span", "note", label), loading, choices);
+
+  let linked = projects;
+  let failed = false;
+  try { linked = await loadProjects({ selectDefault: false }); } catch (e) { failed = true; }
+  if (!card.parentElement || card.inert) return;
+  loading.remove();
+
+  const select = (key, target) => async () => {
+    dismissChat(card);
+    const saved = key !== projKey() ? useProject(target, true) : !target.draft && !extract ? loadSaved() : null;
+    showTab("chat");
+    if (saved) await thinking("저장된 공고를 확인하고 있어요", saved);
+    if (key !== projKey()) return;
+    if (requiresNotice && !extract && !(requiresRepo && target.draft)) {
+      const missing = add(h("div", "task project-action"));
+      const upload = h("button", "btn primary", "이 팀플에 공고 추가");
+      upload.type = "button";
+      upload.onclick = () => { dismissChat(missing); addNoticeForAction(action); };
+      missing.append(h("div", "note", `'${projName()}'에 연결된 공고가 없어요.`), upload);
+      return;
+    }
+    await action();
+  };
+  const subtitle = (description, key) => [description, key === projKey() ? "현재 팀플" : ""].filter(Boolean).join(" · ");
+  if (linked.length) choices.appendChild(h("b", "bighead", "진행 중인 팀플"));
+  linked.forEach((p) => {
+    const key = "r:" + p.repo;
+    const notice = p.notice || store.get("extract:" + key, null)?.title;
+    pickRow(choices, p.repo.split("/").pop(), subtitle(projSub({ ...p, notice }), key), select(key, { repo: p.repo }));
+  });
+  if (drafts.length) choices.appendChild(h("b", "bighead", "준비 중인 대회"));
+  drafts.forEach((d) => {
+    const key = "d:" + d.id;
+    const description = requiresRepo ? "저장소 연결 필요" : draftSub(d);
+    pickRow(choices, d.title, subtitle(description, key), select(key, { draft: d.id }));
+  });
+  if (failed) pickRow(choices, "팀플 목록 다시 불러오기", "연결된 저장소를 읽지 못했어요", () => chooseProjectForAction(label, action, { requiresRepo, requiresNotice }));
+  else if (!linked.length && !drafts.length) pickRow(choices, "대회 찾기", "아직 팀플이 없어요", () => { dismissChat(card); discoverChat("새 대회 준비할래"); });
+  if (card.parentElement === chat) scroll();
 }
 let DISC = { connected: false, source: null };  // 이 팀의 디스코드 연결 (서버 기본 채널이거나 팀이 직접 연결한 것)
 async function loadDiscord() {
@@ -2226,7 +2469,7 @@ function openItem(it) {
     me(it.title); bot(`${it.proposed_by || "팀원"} 님이 보낸 승인 요청이에요. 내용을 보고 괜찮으면 승인해 주세요. 승인하면 GitHub에 '제안·승인한 사람'이 함께 남아요.`);
     const ev = h("div", "row-btns"); it.evidence.forEach((e) => ev.appendChild(link(e.label, e.url))); add(ev);
     if (it.proposed_by && it.proposed_by === meUser()) { bot("내가 보낸 요청이라 나는 승인할 수 없어요. 다른 팀원이나 팀장이 승인하면 실행돼요."); return; }
-    approval(it.proposal, (ok) => { if (ok) { lastTriage = null; refreshHome(); } }); return;
+    approval(it.proposal, (ok) => { if (ok) { lastTriage = null; refreshHome(); } }, { reasons: [it.why], evidence: it.evidence }); return;
   }
   me(it.title);
   const c = add(h("div", "task")); const hd = h("div", "task-h"); hd.appendChild(h("b", null, it.title)); hd.appendChild(h("span", "tag " + (itemTag(it)[1] === "crit" ? "" : "skip"), itemTag(it)[0])); c.appendChild(hd);
@@ -2253,7 +2496,7 @@ function openItem(it) {
     c.appendChild(h("div", "lab", hand.length ? "그다음, 필요하면 Bento가 대신 해요" : "Bento가 대신 할 수 있는 일"));
     const tiles = h("div", "big");
     it.options.forEach((o) => { const t = h("button", "bigrow"); t.type = "button"; t.style.gridTemplateColumns = "1fr auto"; const tx = h("span"); const b = h("b", null, o.label); if (o.recommended) { const tg = h("span", "sev ok", "추천"); tg.style.marginLeft = "6px"; b.appendChild(tg); } tx.appendChild(b); tx.appendChild(h("small", null, o.sub)); t.appendChild(tx); t.appendChild(h("span", "chev", "›"));
-      t.onclick = () => { tiles.querySelectorAll("button").forEach((x) => (x.disabled = true)); t.classList.add("chosen"); me(o.label); approval(o.proposal, (ok) => chip("다음 할 일 보기", today)); }; tiles.appendChild(t); });
+      t.onclick = () => { tiles.querySelectorAll("button").forEach((x) => (x.disabled = true)); t.classList.add("chosen"); me(o.label); approval(o.proposal, () => chip("다음 할 일 보기", today), { reasons: [it.why, o.sub], evidence: it.evidence }); }; tiles.appendChild(t); });
     c.appendChild(tiles);
   } else { const ok = h("button", "btn", "확인했어요"); ok.type = "button"; ok.onclick = () => { ok.disabled = true; chip("다음 할 일 보기", today); }; c.appendChild(ok); }
   scroll();
@@ -2264,7 +2507,10 @@ async function criteriaScore(text) {
   if (needRepo("심사 기준으로 채점해 줘")) return;
   if (text == null) me("심사 기준으로 채점해 줘");
   if (!extract) { bot("먼저 대회 공고를 분석해야 심사 기준을 알 수 있어요."); chip("대회 공고 분석하기", notice); return; }
-  let r; try { r = await thinking("심사 기준을 우리 저장소와 맞춰 보고 있어요", api("/criteria-score", { method: "POST", body: JSON.stringify({ repo: curRepo(), facts: extract.facts || [], text: text || null, links: info() }) })); } catch (e) { return fail(e); }
+  const key = projKey();
+  let r; try { r = await thinking("심사 기준을 우리 저장소와 맞춰 보고 있어요", api("/criteria-score", { method: "POST", body: JSON.stringify({ repo: curRepo(), facts: extract.facts || [], text: text || null, links: submissionLinks() }) })); }
+  catch (e) { if (key === projKey()) fail(e); return; }
+  if (key !== projKey()) return;
   if (!r.found) {
     bot("공고에서 심사 기준의 항목과 배점을 못 찾았어요. 공고의 심사 기준 문장을 붙여 넣어 주세요. 예: 기술 완성도 30, 창의성 25, 실용성 25, 발표 20");
     const c = add(h("div", "task")); const ta = h("textarea"); ta.setAttribute("aria-label", "심사 기준 문장"); ta.style.minHeight = "64px"; ta.placeholder = "항목 이름과 배점을 적어 주세요"; c.appendChild(ta);
@@ -2274,7 +2520,7 @@ async function criteriaScore(text) {
   const big = h("span", "big", String(r.points)); big.appendChild(h("small", null, ` / ${r.max}점`)); hd.appendChild(big); c.appendChild(hd);
   c.appendChild(h("div", "note", r.note)); if (r.quote) c.appendChild(h("div", "note", "공고 원문: " + r.quote.slice(0, 120)));
   r.criteria.forEach((k) => {
-    const w = h("div", "crit"); const r1 = h("div", "row1"); r1.appendChild(h("div", null, k.name));
+    const w = h("div", "criterion"); const r1 = h("div", "row1"); r1.appendChild(h("div", null, k.name));
     r1.appendChild(h("span", null, k.points == null ? `${k.weight}점 · 사람이 판단` : `${k.points} / ${k.weight}점`)); w.appendChild(r1);
     if (k.points != null) { const bar = h("div", "bar"); const i = h("i"); i.style.width = Math.round((k.points / k.weight) * 100) + "%"; bar.appendChild(i); w.appendChild(bar); }
     k.tips.slice(0, 2).forEach((t) => { const d = h("div", "tip"); d.appendChild(h("b", null, `+${t.worth}점 `)); d.appendChild(document.createTextNode(t.fix)); w.appendChild(d); });
@@ -2291,9 +2537,9 @@ async function submit() {
   if (needRepo("제출 전에 점검해 줘")) return;
   me("제출 전에 점검해 줘");
   if (!extract) { bot("먼저 대회 공고를 분석해야 제출물을 알 수 있어요."); chip("대회 공고 분석하기", notice); return; }
-  journey("submit");
+  const journeyState = journey("submit");
   bot("Bento가 확인할 수 있는 건 전부 확인하고 근거를 붙여요. 다른 팀원 확인과 실제 제출 버튼은 사람이 해요.");
-  infoCard("submit", () => runSubmitCheck());
+  infoCard("submit", () => runSubmitCheck(journeyState));
 }
 
 /* ---------- 신청·제출 공통: 정보 · 확인 카드 · 폼 · 증거 ---------- */
@@ -2301,13 +2547,19 @@ const INFO_FIELDS = {
   submit: [["team", "팀명"], ["idea", "한 줄 소개"], ["deploy", "배포 링크 (비우면 README에서 찾아요)"], ["video", "시연 영상 링크"], ["slides", "발표 자료 링크"]],
 };
 function info() { return store.get("info:" + projKey(), {}); }
+function submissionLinks() {
+  const { deploy, video, slides } = info() || {};
+  return Object.fromEntries(Object.entries({ deploy, video, slides }).filter(([, value]) => typeof value === "string" && value.trim()));
+}
 async function refreshExtract(url) {
   // 공고를 다시 읽어서 지금 분석에 비어 있는 칸만 채운다 (이미 있는 값은 그대로)
-  url = url || noticeUrl(); if (!url || !extract) return null;
-  const f = await api("/notice/fetch", { method: "POST", body: JSON.stringify({ url, title: extract.title || null }) });
+  const key = projKey(), cur0 = extract;
+  url = url || noticeUrl(); if (!url || !cur0) return null;
+  const f = await api("/notice/fetch", { method: "POST", body: JSON.stringify({ url, title: cur0.title || null }) });
   if (f.searched) store.set("noticeSrc:" + url, f.sources || []);
   const r2 = await api("/notice", { method: "POST", body: JSON.stringify({ text: (f.title ? f.title + "\n" : "") + f.text, repo: null, new_project: true }) });
-  const n = r2.extract, cur0 = extract, have = new Set((cur0.facts || []).map((x) => x.label));
+  if (key !== projKey() || cur0 !== extract) return null;
+  const n = r2.extract, have = new Set((cur0.facts || []).map((x) => x.label));
   const pick = (k) => (cur0[k] == null || cur0[k] === "" ? n[k] : cur0[k]);
   const merged = { ...cur0, source_url: url,
     facts: [...(cur0.facts || []), ...(n.facts || []).filter((x) => !have.has(x.label))],
@@ -2366,14 +2618,14 @@ function eligBox(card, membersInput, saved, title) {
   const qs = h("div", "qs"), verdict = h("div", "verdict");
   const summary = h("b", "elig-summary"); summary.setAttribute("aria-live", "polite");
   const results = h("div", "elig-results"); verdict.append(summary, results); box.append(qs, verdict); card.appendChild(box);
-  const ans = { ...saved }; let locked = false, timer = 0, lastFails = 0;
+  const ans = { ...saved }; let locked = false, timer = 0;
   const memberCount = () => (membersInput ? membersInput.value.split(",").map((x) => x.trim()).filter(Boolean).length : 0);
   const refresh = async () => {
     let r; try { r = await api("/eligibility", { method: "POST", body: JSON.stringify({ extract, answers: ans, source_url: noticeUrl() }) }); } catch (e) { summary.textContent = "판정을 불러오지 못했어요"; results.replaceChildren(); return; }
     if (!qs.childNodes.length) { drawQs(r.questions); if (locked) qs.querySelectorAll("button, input, select").forEach((x) => (x.disabled = true)); }  // 확인을 끝낸 뒤 다시 그린 칸은 눌러도 안 바뀌니 잠가 둔다
     const sourcesOpen = results.querySelector(".notice-evidence-sources")?.open;
     results.replaceChildren();
-    const bad = r.rows.filter((x) => x.status === "fail").length; lastFails = bad;
+    const bad = r.rows.filter((x) => x.status === "fail").length;
     const src = noticeUrl();
     const srcs = store.get("noticeSrc:" + (src || ""), null);
     const searched = !!srcs?.length;
@@ -2443,7 +2695,7 @@ function eligBox(card, membersInput, saved, title) {
     qs.appendChild(w);
   });
   refresh();
-  return { answers: () => ({ ...ans }), fails: () => lastFails, lock: () => { locked = true; box.querySelectorAll("button").forEach((b) => (b.disabled = true)); } };
+  return { answers: () => ({ ...ans }), lock: () => { locked = true; box.querySelectorAll("button").forEach((b) => (b.disabled = true)); } };
 }
 function prefillInfo() {
   // 이미 아는 값으로 채워 두기: 팀명 = 저장소 이름, 팀원 = 저장소 팀원 (없으면 로그인한 나)
@@ -2517,80 +2769,72 @@ function checkCard(title, r, onHuman) {
   } else setTimeout(finished);
   return { card: c, checked };
 }
-const JOURNEY = {};
-function journey(kind) {
-  // 신청·제출을 한 장의 단계 카드로: 지금 어디인지, 누가 하는 일인지
-  const steps = kind === "apply"
-    ? [["자격 확인", "Bento"], ["신청 페이지에서 신청", "직접"], ["신청했어요", "직접"]]
-    : [["제출 정보", "Bento가 채워요"], ["제출물 점검", "Bento"], ["팀원 확인", "팀원"], ["직접 제출", "직접"], ["완료 기록", "직접"]];
-  document.querySelectorAll(".journey.pin").forEach((x) => x.classList.remove("pin"));
-  const ex = extract || {}; const dd = ddays(kind === "apply" ? ex.apply_deadline_iso : ex.submit_deadline_iso);
-  const mark = add(h("div", "journey-anchor")); mark.setAttribute("aria-hidden", "true");
-  const c = add(h("div", "journey pin")); c.setAttribute("role", "group"); c.setAttribute("aria-label", kind === "apply" ? "신청 단계" : "제출 단계");
-  c.dataset.journey = kind;
-  const toggle = h("button", "journey-head"); toggle.type = "button"; toggle.setAttribute("aria-expanded", "true");
-  const collapse = (closed) => { c.toggleAttribute("data-collapsed", closed); toggle.setAttribute("aria-expanded", String(!closed)); };
-  toggle.onclick = () => collapse(!c.hasAttribute("data-collapsed"));
-  // 위에 붙었는지는 카드 바로 위 표시(mark)가 붙는 자리보다 위로 올라갔는지로 본다.
-  // 접으면 카드가 짧아져 스크롤 위치가 밀리므로(특히 맨 아래), 펼치는 기준은 접힌 만큼 더 내려와야 한다 → 접힘↔펼침이 빠르게 반복되지 않는다.
-  let shrink = 0;
-  const stick = () => {
-    if (!c.parentElement || !c.classList.contains("pin")) {
-      c.classList.remove("stuck"); chat.removeEventListener("scroll", stick); return;
-    }
-    if (c.parentElement !== chat) return;
-    const pinTop = parseFloat(getComputedStyle(c).top) || 0;
-    const y = mark.getBoundingClientRect().bottom - chat.getBoundingClientRect().top;
-    if (!c.classList.contains("stuck")) {
-      if (y < pinTop - 4) { const h0 = c.offsetHeight; c.classList.add("stuck"); collapse(true); shrink = Math.max(0, h0 - c.offsetHeight); }
-    } else if (y > pinTop + shrink + 24) { c.classList.remove("stuck"); collapse(false); }
+function journey(kind, ex = extract || {}) {
+  chat.querySelectorAll(".journey.pin").forEach((card) => card.classList.remove("pin"));
+  const isApply = kind === "apply";
+  const name = isApply ? "신청" : "제출";
+  const labels = isApply ? ["자격 확인", "공식 신청", "신청 완료"] : ["제출 정보", "제출 점검", "팀원 확인", "직접 제출", "완료 기록"];
+  const title = h("b", null, ex.title ? `${name} · ${ex.title}` : name);
+  const count = h("span", "journey-count");
+  const meta = h("span", "journey-meta");
+  const days = isApply ? null : ddays(ex.submit_deadline_iso);
+  if (days != null) {
+    const deadline = days > 0 ? `D-${days}` : days === 0 ? "오늘 마감" : "마감 지남";
+    meta.appendChild(h("span", null, deadline));
+  }
+  meta.appendChild(count);
+  const head = h("div", "j-h"); head.append(title, meta);
+  const list = h("ol", "journey-steps");
+  const steps = labels.map((label) => {
+    const item = h("li");
+    const dot = h("span", "journey-dot"); dot.setAttribute("aria-hidden", "true");
+    dot.innerHTML = lineIcon("check");
+    item.append(dot, h("b", null, label));
+    list.appendChild(item);
+    return { item, check: dot.firstElementChild };
+  });
+  const card = h("div", "journey journey-progress pin");
+  card.dataset.journey = kind;
+  card.setAttribute("role", "group"); card.setAttribute("aria-label", `${name} 단계`);
+  card.append(head, list);
+
+  const set = (step) => {
+    if (step >= steps.length) { card.classList.remove("pin"); dismissChat(card); return; }
+    count.textContent = `${step + 1}/${steps.length}`;
+    steps.forEach(({ item, check }, index) => {
+      item.classList.toggle("done", index < step);
+      item.classList.toggle("now", index === step);
+      if (index === step) item.setAttribute("aria-current", "step");
+      else item.removeAttribute("aria-current");
+      check.toggleAttribute("hidden", index >= step);
+    });
   };
-  chat.addEventListener("scroll", stick, { passive: true });
-  const hd = h("span", "j-h"); hd.appendChild(h("b", null, `${kind === "apply" ? "신청하기" : "제출하기"}${ex.title ? " · " + ex.title : ""}`)); const st = h("span", "tag"); hd.appendChild(st);
-  const now = h("span", "j-now");
-  const current = h("span", "tag"), currentStep = h("b", "j-now-step"), deadline = h("span", "j-now-deadline");
-  now.append(current, currentStep, deadline); toggle.append(hd, now);
-  toggle.insertAdjacentHTML("beforeend", '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>');
-  c.appendChild(toggle);
-  const ol = h("ol", "j-steps"); const lis = steps.map(([n, who], i) => { const li = h("li"); li.appendChild(h("i", null, String(i + 1))); const t = h("span"); t.appendChild(h("b", null, n)); t.appendChild(h("small", null, who)); li.appendChild(t); ol.appendChild(li); return li; }); c.appendChild(ol);
-  const note = h("div", "note"); c.appendChild(note);
-  deadline.textContent = dd == null ? "" : dd > 0 ? `마감 D-${dd}` : dd === 0 ? "오늘 마감" : "마감 지남";
-  deadline.hidden = !deadline.textContent;
-  const set = (n) => {
-    lis.forEach((li, i) => { li.className = i < n ? "done" : i === n ? "now" : ""; li.firstChild.textContent = i < n ? "✓" : String(i + 1); if (i === n) li.setAttribute("aria-current", "step"); else li.removeAttribute("aria-current"); });
-    const end = n >= steps.length; st.className = "tag" + (end ? " done" : ""); st.textContent = end ? "완료" : `${n + 1}/${steps.length}`;
-    note.textContent = end ? `${kind === "apply" ? "신청" : "제출"}을 마쳤어요.${kind === "apply" ? (curDraft() ? " 다음은 팀 저장소예요." : " 이제 협업 단계예요.") : ""}` : `지금: ${steps[n][0]} · ${steps[n][1] === "직접" ? "이 단계는 직접 해 주세요" : steps[n][1] === "팀원" ? "다른 팀원이 확인해요" : "Bento가 해요"}${dd != null && dd >= 0 ? ` · 마감 D-${dd}` : ""}`;
-    if (end) { c.classList.remove("pin", "stuck"); chat.removeEventListener("scroll", stick); mark.remove(); dismissChat(c); }
-    else {
-      current.textContent = `${kind === "apply" ? "신청" : "제출"} ${st.textContent}`;
-      currentStep.textContent = kind === "apply" && n === 1 ? "신청 페이지" : steps[n][0];
-    }
-  };
-  set(0); JOURNEY[kind] = { set, n: steps.length }; return JOURNEY[kind];
+  set(0); add(card);
+  return { set, n: steps.length };
 }
 function stage(parent, title, enabled) { const s2 = h("div", "stage"); s2.appendChild(h("h3", null, title)); s2.setAttribute("aria-disabled", String(!enabled)); parent.appendChild(s2); return s2; }
 
-async function runSubmitCheck() {
-  const v = info();
-  const J = JOURNEY.submit || journey("submit"); J.set(1);
+async function runSubmitCheck(journeyState) {
+  journeyState.set(1);
+  const retryCheck = () => runSubmitCheck(journeyState);
   let r;
   try {
-    r = await working("제출물을 직접 확인하고 있어요", ["저장소 공개·README 읽기", "링크 직접 열어 보기", "마감·팀원 확인 대조"], api("/submit-check", { method: "POST", body: JSON.stringify({ repo: curRepo(), deliverables: extract.deliverables, deadline_iso: extract.submit_deadline_iso, links: { deploy: v.deploy || "", video: v.video || "", slides: v.slides || "" } }) }));
+    r = await working("제출물을 직접 확인하고 있어요", ["저장소 공개·README 읽기", "링크 직접 열어 보기", "마감·팀원 확인 대조"], api("/submit-check", { method: "POST", body: JSON.stringify({ repo: curRepo(), deliverables: extract.deliverables, deadline_iso: extract.submit_deadline_iso, links: submissionLinks() }) }));
   } catch (e) {
-    fail(e); chip("다시 점검하기", runSubmitCheck); return;
+    fail(e); chip("다시 점검하기", retryCheck); return;
   }
   let reviewDone = false, teamDone = false, proofOpen = false;
   const updateStages = () => {
     s1.setAttribute("aria-disabled", String(!reviewDone || teamDone));
     s2.setAttribute("aria-disabled", String(!reviewDone || !teamDone || proofOpen));
     s3.setAttribute("aria-disabled", String(!reviewDone || !teamDone || !proofOpen));
-    J.set(!reviewDone ? 1 : !teamDone ? 2 : proofOpen ? 4 : 3);
+    journeyState.set(!reviewDone ? 1 : !teamDone ? 2 : proofOpen ? 4 : 3);
   };
   const cc = checkCard("2단계 · 제출물 점검", r, (ok) => { reviewDone = ok; updateStages(); });
   cc.card.appendChild(h("div", "note", `기준 버전: ${r.head.branch} 브랜치 커밋 ${r.head.short}`));
   if (!r.ready) {
     const retry = h("button", "btn", "다시 점검하기"); retry.type = "button";
-    retry.onclick = () => { retry.disabled = true; dismissChat(cc.card); runSubmitCheck(); };
+    retry.onclick = () => { retry.disabled = true; dismissChat(cc.card); retryCheck(); };
     cc.card.appendChild(retry);
   }
   const solo = r.members.length <= 1;
@@ -2607,16 +2851,29 @@ async function runSubmitCheck() {
   };
   if (fresh) {
     const who = conf.confirmed_by;
-    s1.appendChild(h("div", "note", who.length ? `✓ ${who.join(", ")}님이 이 버전(${conf.lock.slice(0, 7)})을 확인했어요` : `확인 요청을 보냈어요. 아직 확인한 팀원이 없어요.`));
+    const confirmation = (members) => `✓ ${members.join(", ")}님이 이 버전(${conf.lock.slice(0, 7)})을 확인했어요`;
+    const status = h("div", "note", who.length ? confirmation(who) : "확인 요청을 보냈어요. 아직 확인한 팀원이 없어요.");
+    status.setAttribute("role", "status"); s1.appendChild(status);
     s1.appendChild(evidence([{ label: `#${conf.issue} 확인 요청`, url: conf.url }]));
-    const rb = h("div", "row-btns"); const re2 = h("button", "btn", "확인 상태 다시 보기"); re2.type = "button"; re2.onclick = async () => { re2.disabled = true; try { const st = await api(`/submit/status?issue=${conf.issue}`); if (st.changed) { bot("확인 요청 뒤에 저장소가 바뀌었어요. 점검을 다시 할게요."); return runSubmitCheck(); } if (st.confirmed_by.length) { bot(`${st.confirmed_by.join(", ")}님이 확인했어요. 이제 폼을 열어 제출하면 돼요.`); open2(); } else bot("아직 확인한 팀원이 없어요. 팀 채팅으로 한 번 더 알려 주세요."); } catch (e) { fail(e); } re2.disabled = false; }; rb.appendChild(re2);
+    const rb = h("div", "row-btns"); const re2 = h("button", "btn", "확인 상태 다시 보기"); re2.type = "button";
+    re2.onclick = async () => {
+      re2.disabled = true;
+      try {
+        const st = await api(`/submit/status?issue=${conf.issue}`);
+        if (st.changed) { bot("확인 요청 뒤에 저장소가 바뀌었어요. 점검을 다시 할게요."); dismissChat(cc.card); return retryCheck(); }
+        if (st.confirmed_by.length) { status.textContent = confirmation(st.confirmed_by); open2(); }
+        else status.textContent = "아직 확인한 팀원이 없어요. 팀 채팅으로 한 번 더 알려 주세요.";
+      } catch (e) { fail(e); }
+      finally { re2.disabled = false; }
+    };
+    rb.appendChild(re2);
     s1.appendChild(rb); if (who.length) open2();
   } else {
     if (conf && !conf.closed) s1.appendChild(h("div", "note", "! 예전 버전으로 받은 확인이 있어요. 지금 버전으로 다시 받아야 해요."));
     s1.appendChild(h("div", "note", solo ? "혼자 하는 팀이라 이 단계는 건너뛰어도 돼요." : "팀원에게 지금 버전을 봐 달라고 부탁해요. 그 뒤에 코드가 바뀌면 Bento가 알려요."));
     const rb = h("div", "row-btns"); const ask = h("button", "btn primary", "확인 요청 보내기"); ask.type = "button"; rb.appendChild(ask);
     const skip = h("button", "btn", solo ? "건너뛰기" : "확인 없이 진행"); skip.type = "button"; rb.appendChild(skip); s1.appendChild(rb);
-    ask.onclick = async () => { ask.disabled = true; let p; try { p = await api("/submit/confirm", { method: "POST", body: JSON.stringify({ repo: curRepo(), title: extract.title, head_sha: r.head.sha, checklist: cc.checked() }) }); } catch (e) { ask.disabled = false; return fail(e); } bot("팀원 확인 요청을 보낼게요. 다른 팀원이 GitHub 이슈에 👍를 누르면 확인된 거예요."); approval(p.proposal, (ok) => { if (ok) chip("확인 상태 보기", runSubmitCheck); else ask.disabled = false; }); };
+    ask.onclick = async () => { ask.disabled = true; let p; try { p = await api("/submit/confirm", { method: "POST", body: JSON.stringify({ repo: curRepo(), title: extract.title, head_sha: r.head.sha, checklist: cc.checked() }) }); } catch (e) { ask.disabled = false; return fail(e); } bot("팀원 확인 요청을 보낼게요. 다른 팀원이 GitHub 이슈에 👍를 누르면 확인된 거예요."); approval(p.proposal, (ok) => { if (ok) chip("확인 상태 보기", retryCheck); else ask.disabled = false; }); };
     skip.onclick = () => { skip.disabled = true; if (!solo) bot("다른 팀원 확인 없이 진행해요. 제출은 되돌리기 어려우니 한 번 더 살펴봐 주세요."); open2(); };
   }
   s2.appendChild(h("div", "note", "제출 페이지에서 직접 제출해 주세요. 저장소 주소는 아래에서 복사할 수 있어요."));
@@ -2625,7 +2882,7 @@ async function runSubmitCheck() {
   const url = noticeUrl();
   if (url) { const a = link("공고·제출 페이지 열기", url); a.classList.add("primary"); a.addEventListener("click", openProof); s2.appendChild(a); }
   const record = h("button", url ? "link" : "btn primary", url ? "이미 제출했어요" : "완료 기록하기"); record.type = "button"; record.onclick = openProof; s2.appendChild(record);
-  proofStage(s3, "submit", fresh ? conf.issue : null);
+  proofStage(s3, "submit", fresh ? conf.issue : null, journeyState);
   if (url) s3.appendChild(link("제출 페이지 다시 열기", url));
   chip("심사 기준으로 채점해 보기", () => criteriaScore());
   scroll();
@@ -2636,16 +2893,15 @@ async function applyFlow(ex) {
   ex = ex || extract; if (!ex) { bot("먼저 대회 공고를 분석해 주세요."); chip("대회 공고 분석하기", notice); return; }
   if (store.get(doneKey("apply"), null)) { bot("이미 신청 완료로 기록돼 있어요."); return; }
   if (chat.querySelector('[data-journey="apply"]:not([inert])')) return scroll();
-  const J = journey("apply");
-  bot("참가 자격이 되는지 먼저 볼게요. 신청은 신청 페이지에서 직접 해 주세요.");
+  const J = journey("apply", ex);
+  const guidance = add(h("div", "bub", "참가 자격이 되는지 먼저 볼게요. 신청은 신청 페이지에서 직접 해 주세요."));
   const c = add(h("div", "task"));
   const cnt = (prefillInfo().members || "").split(",").map((x) => x.trim()).filter(Boolean).length;
   const el = eligBox(c, null, { team: cnt || "", ...((info().elig) || {}) }, "1단계 · 참가 자격 확인");
   const go = h("button", "btn primary", "확인했어요"); go.type = "button"; c.appendChild(go);
-  go.onclick = async () => {
+  go.onclick = () => {
     go.disabled = true; const ans = el.answers(); el.lock(); store.set("info:" + projKey(), { ...info(), elig: ans });
-    const fails = el.fails(); if (fails) bot(`못 채운 조건이 ${fails}개 있어요. 그대로 신청하기 전에 주최 측에 한 번 확인해 보세요.`);
-    J.set(1); dismissChat(c); openStep();
+    J.set(1); dismissChat(guidance); dismissChat(c); openStep();
   };
   const openStep = () => {
     const c2 = add(h("div", "task")); c2.appendChild(h("b", null, "2단계 · 신청 페이지에서 직접 신청"));
@@ -2658,50 +2914,49 @@ async function applyFlow(ex) {
     c2.appendChild(h("div", "note", "실명·학번과 개인정보 동의는 신청 페이지에서 직접 입력해요."));
     const url = noticeUrl();
     const a = url ? link("신청 페이지 열기", url) : null;
-    const prompt = h("b", null, "신청을 마쳤나요?"); prompt.tabIndex = -1;
-    const actions = h("div", "row-btns");
-    const done = h("button", "btn primary", "신청했어요"); done.type = "button";
-    const later = h("button", "btn", "아직이에요"); later.type = "button"; later.hidden = !a;
-    actions.append(done, later);
-    const already = h("button", "link", "이미 신청했어요"); already.type = "button"; already.hidden = !a;
-    const showConfirmation = (opened) => {
-      if (a) a.hidden = already.hidden = opened;
-      prompt.hidden = actions.hidden = !opened;
-      J.set(opened ? 2 : 1);
-      (opened ? prompt : a).focus({ preventScroll: true }); scroll();
+    const actions = h("div", "apply-actions");
+    const done = h("button", a ? "btn" : "btn primary", "신청했어요"); done.type = "button";
+    const record = (proof) => {
+      if (done.disabled) return;
+      done.disabled = true; dismissChat(c2); markDone("apply", proof, J);
     };
-    if (a) { a.classList.add("primary"); a.addEventListener("click", () => showConfirmation(true)); c2.append(a, already); }
-    else c2.appendChild(h("div", "note", "공고에 나온 신청 방법대로 신청해 주세요."));
-    prompt.hidden = actions.hidden = !!a; c2.append(prompt, actions);
-    already.onclick = () => showConfirmation(true); later.onclick = () => showConfirmation(false);
-    const none = h("button", "link", "이 대회는 따로 신청이 없어요"); none.type = "button"; none.style.alignSelf = "flex-start";
-    const record = (proof) => { none.disabled = done.disabled = true; dismissChat(c2); markDone("apply", proof); };
     done.onclick = () => record("");
-    none.onclick = () => { setExtract({ ...extract, no_apply: true }); record("신청 없음"); }; c2.appendChild(none);
+    if (a) {
+      a.classList.add("primary");
+      a.addEventListener("click", () => J.set(2));
+      actions.append(a, done);
+    } else {
+      c2.appendChild(h("div", "note", "공고에 나온 신청 방법대로 신청해 주세요."));
+      const none = h("button", "btn", "별도 신청 없음"); none.type = "button";
+      none.onclick = () => { setExtract({ ...extract, no_apply: true }); record("신청 없음"); };
+      actions.append(done, none);
+    }
+    c2.appendChild(actions);
     (a || done).focus({ preventScroll: true }); scroll();
   };
 }
 
-function markDone(kind, proof) {
+function markDone(kind, proof, journeyState) {
   const at = Date.now(); store.set(doneKey(kind), { at, proof });
   const d = curDraft();
   if (kind === "apply") {
     if (d) { d.applied = at; saveDrafts(); }
     try { localStorage.removeItem("bento:applyTodo:" + projKey()); } catch (e) { /* 무시 */ }
   }
-  const J = JOURNEY[kind]; if (J) J.set(J.n);
+  if (journeyState) journeyState.set(journeyState.n);
   renderCal(); renderHome();
   if (kind === "submit") { bot("제출 완료로 기록했어요. 마감 알림을 멈출게요."); return; }
+  resumeChat();
   if (d) { bot("신청 완료로 기록했어요. 이제 팀 저장소를 준비해요."); startPath(d); }
   else { bot("신청 완료로 기록했어요. 이제 팀에서 할 일을 나눠요."); chip("할 일 나누기", afterTasks); }
 }
-function proofStage(box, kind, issue) {
+function proofStage(box, kind, issue, journeyState) {
   const done = store.get(doneKey(kind), null);
   if (done) { box.appendChild(h("div", "note", `✓ ${new Date(done.at).toLocaleString("ko-KR")}에 ${kind === "apply" ? "신청" : "제출"} 완료로 기록했어요 · ${done.proof}`)); return; }
   const id = `proof${Date.now()}`; const l = h("label", "lab", "접수 번호나 확인 메일 문구 (선택)"); l.htmlFor = id; const i = h("input", "finput"); i.id = id; i.placeholder = "예: 접수번호 HK-0042 / '응답이 기록되었습니다'";
   const b = h("button", "btn primary", `${kind === "apply" ? "신청" : "제출"} 완료로 기록`); b.type = "button"; box.appendChild(l); box.appendChild(i); box.appendChild(b);
   box.appendChild(h("div", "note", issue ? "기록은 GitHub에 남아서 팀원 모두 볼 수 있어요." : "기록하면 마감 알림을 멈춰요."));
-  const mark = () => { dismissChat(box.closest(".task")); markDone(kind, i.value.trim()); };
+  const mark = () => { dismissChat(box.closest(".task")); markDone(kind, i.value.trim(), journeyState); };
   b.onclick = async () => {
     b.disabled = i.disabled = true;
     if (!issue) return mark();
@@ -2759,8 +3014,20 @@ $("msg").addEventListener("input", syncComposer);
 const OFFTOPIC_MSG = "저는 대회 준비를 돕는 AI라 이 요청은 도와드리기 어려워요. 대회 찾기, 팀 일정·할 일 관리, 제출 준비와 관련된 질문을 해 주세요.";
 const OFFTOPIC_RX = /날씨|기온|미세먼지|주식|코인|비트코인|환율|로또|운세|농담|노래|영화|드라마|웹툰|뉴스|축구|야구|연애|레시피|맛집추천|번역해|심심/;
 const ONTOPIC_RX = /대회|공모전|해커톤|팀|마감|제출|계획|일정|신청|공고|이슈|PR|리뷰|깃허브|github|bento|벤토|할일|심사|채점/i;
+// Bento가 누구인지, 나는 누구인지: AI를 거치지 않고 정해진 말로 답한다 (서비스 소개이기도 하다)
+const ABOUT_BOT_MSG = "저는 Bento예요. 대회 준비를 돕는 AI입니다. 공고를 읽어 마감·자격·제출물을 정리하고, 마감에서 거꾸로 계획을 짜서 GitHub 할 일로 만들어요. 늦어지면 먼저 알려 드리고, 승인하신 일만 GitHub에서 대신 해요.";
+const ABOUT_BOT_RX = /(너|넌|너는|너의|네|니)(이름|누구|정체|뭐야|뭐하는|뭘해|뭐니)|이름이(뭐|뭔|어떻게)|누구(야|세요|니|냐|십니까)\??$|뭐하는(애|거|서비스|앱|ai)|무슨(서비스|앱)|뭘할수있|뭐할수있|무엇을할수|도와줄수있|자기소개|너를소개|너소개|사용법|어떻게(쓰는|써야|사용)|도움말|^(bento|벤토)(가|는)?(뭐|누구)|너ai|ai야|사람이야|봇이야/i;
+const ABOUT_ME_RX = /(나|내|제)(는|가|의)?(누구|이름|역할|뭐야)|내이름|내역할|제이름|제역할/;
+function aboutMe() {
+  const u = meUser();
+  if (!u) { bot("아직 누구인지 몰라요. GitHub로 로그인하면 이름과 역할을 알려 드려요."); if (H.login) chip("GitHub로 로그인", goLogin); return; }
+  const b = lastBoard, role = b && b.roles ? b.roles[u] : "", lead = b && (b.people || []).some((p) => p.login === u && p.lead);
+  bot(`${u} 님이에요.` + (lead ? " 팀장이고," : "") + (role ? ` 맡은 역할은 ${role}이에요.` : " 아직 정해진 역할이 없어요. 마이페이지에서 팀 역할을 정할 수 있어요."));
+}
 $("composer").addEventListener("submit", (e) => { e.preventDefault(); const input = $("msg"); const t = input.value.trim(); if (!t || $("todayBtn").disabled) return; input.value = ""; if (touchPointer.matches) input.blur(); showTab("chat"); const n = t.replace(/\s/g, "");
   if (/취소|그만|안할래|안해|하지마|멈춰|중단|포기|지워|삭제/.test(n)) return cancelFlow(t);  // 멈추는 말이 먼저
+  if (ABOUT_ME_RX.test(n)) { me(t); return aboutMe(); }  // '나는 누구야'가 먼저: 내 이름·역할
+  if (ABOUT_BOT_RX.test(n)) { me(t); bot(ABOUT_BOT_MSG); chip("할 수 있는 일 보기", openPicks); return; }  // '너 이름이 뭐야'·'뭐 하는 앱이야': 정해진 소개
   if (OFFTOPIC_RX.test(n) && !ONTOPIC_RX.test(n)) { me(t); bot(OFFTOPIC_MSG); chip("할 수 있는 일 보기", openPicks); return; }  // 날씨·잡담 같은 말은 AI도 기능도 거치지 않고 정해진 안내만 (키워드 규칙이 '오늘 날씨'를 오늘 할 일로 보내지 않게 가장 먼저)
   saidByUser = t; setTimeout(() => { saidByUser = null; }, 0);  // 바로 이어지는 첫 '내 말'에만 쓴다
   if (/마감/.test(n) && /고치|고칠|고쳐|바꾸|바꿀|바꿔|수정|변경/.test(n) && extract) return editDeadline();  // 제출 마감 고치기는 대화에서만 (홈 카드에는 두지 않는다)
@@ -2808,7 +3075,16 @@ let calSel = null, calState = null, calMonthOff = 0;  // calMonthOff: 이번 달
 function dayKey(d) { return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
 function planInRepo() { return !!(calState && calState.milestones && calState.milestones.some((m) => /^계획 · /.test(m.title))); }  // 계획은 이 기기에만 저장되므로, 저장소에 '계획 · …' 마일스톤이 있으면 다른 기기에서도 계획이 있는 것으로 본다
 function hasPlan() { return store.get("plan:" + projKey(), []).length > 0 || planInRepo(); }
-async function loadCalState() { if (curDraft()) { calState = null; return renderCal(); } try { calState = await api("/state"); } catch (e) { calState = null; } renderCal(); if (typeof resumeChat === "function") resumeChat(); if (booted) checkRepoDeadline(); }
+async function loadCalState() {
+  if (curDraft()) { calState = null; return renderCal(); }
+  const key = projKey();
+  let state = null;
+  try { state = await api("/state"); } catch (e) { /* 불러오지 못하면 저장된 일정만 표시 */ }
+  if (key !== projKey()) return;
+  calState = state;
+  renderCal(); resumeChat();
+  if (booted) checkRepoDeadline();
+}
 const PALETTE = ["--p0", "--p1", "--p2", "--p3", "--p4", "--p5"];
 function colorOf(key) {  // 팀플마다 색을 한 번 정하면 계속 같은 색
   const map = store.get("colors", {});
