@@ -119,7 +119,7 @@ svg { display: block; }
 .approval-detail-content label { display: grid; gap: 4px; }
 .approval-evidence-links { display: flex; flex-wrap: wrap; gap: 8px; }
 .approval-footer { display: flex; flex-direction: column; gap: 8px; }
-.approval-actions { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; }
+.approval-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }  /* 취소·승인 버튼 같은 크기 (#107) */
 .approval-footer .btn { height: var(--approval-button-height); }
 .approval-footer .btn:only-child { align-self: stretch; }
 .approval-deferred { display: none; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -193,16 +193,18 @@ details.history > .bub { margin-top: 8px; }
 
 .linkbtn { background: none; border: 0; padding: 4px 2px; font: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .linkbtn:hover, .linkbtn:focus-visible { background: var(--surface-2); border-radius: var(--r-pill); }
-.task.folded > :not(.task-h) { display: none; }  /* 취소한 승인: 제목·'취소함'만 대화에 남긴다 */
+.task.folded > :not(.task-h) { display: none !important; }  /* 취소한 승인: 제목·'취소함'만 대화에 남긴다 */
 .dcard .dpick { align-self: flex-start; padding: 6px 10px; margin-left: -10px; border-radius: var(--r-pill); font-size: var(--fs-small); font-weight: 700; transition: background .15s; }
 .dcard .dpick:hover, .dcard .dpick:focus-visible { background: var(--surface-2); text-decoration: none; }
 .dcard .dpick:active { transform: scale(.98); }
-.btn.danger { background: var(--crit); color: #FFFFFF; border-color: transparent; font-weight: 700; }
+.btn.danger { background: var(--primary); color: var(--primary-ink); border-color: transparent; font-weight: 700; }  /* 되돌릴 수 없는 확인 버튼도 빨강 대신 무채색 */
 .app.tap { width: 100%; text-align: left; border-radius: var(--r-box); transition: background-color .12s, transform .08s; }
 .app.tap:active { transform: scale(.985); }
 .arow small.why { display: block; margin-top: 4px; color: var(--muted); font-size: var(--fs-caption); }
-.app .conn { font-size: var(--fs-small); font-weight: 700; color: var(--blue); white-space: nowrap; }
-@media (hover: hover) { .app.tap:hover { background: var(--surface-2); } .btn.danger:not(:disabled):hover { background: color-mix(in srgb, var(--crit) 82%, var(--bg)); border-color: transparent; } }
+.app .conn { font-size: var(--fs-body); font-weight: 700; color: var(--ink); white-space: nowrap; }  /* 관리·연결 글씨는 무채색 */
+.app .ico.ico-sm { width: 22px; height: 22px; border-radius: 6px; font-size: 12px; justify-self: center; background: var(--surface-2); color: var(--muted); }
+.app .ico.ico-sm.on { background: var(--ink); color: var(--surface); }  /* 연결됨 체크도 무채색 */
+@media (hover: hover) { .app.tap:hover { background: var(--surface-2); } .btn.danger:not(:disabled):hover { background: color-mix(in srgb, var(--primary) 82%, var(--bg)); border-color: transparent; } }
 /* 누를 수 있는 것은 마우스를 올리면 살짝 달라진다 (터치 기기에서는 손을 뗀 뒤에도 남지 않도록 hover 기기에서만) */
 :root { --hov: color-mix(in srgb, var(--ink) 8%, transparent); }
 .btn, .bigrow, .arow, .askline, .chiptog, .day, .rowlink, details.teamall > summary, .dw-item, .dw-proj, .dw-del, .proj, .tabs button, .elig .opts2 button, .elig .stepper button { transition: background-color .12s, border-color .12s, opacity .12s, color .12s, transform .08s; }
@@ -275,6 +277,22 @@ details.more summary { cursor: pointer; font-size: var(--fs-small); color: var(-
 .task { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .task-h { display: flex; align-items: center; gap: 8px; }
 .task-h b { flex: 1; font-size: var(--fs-body); }
+.task-h .tag:empty { display: none; }  /* 상태가 없을 때는 꼬리표를 숨긴다 */
+/* 승인 카드(시트·대화 모두): 제목·할 일·안내를 가운데로 */
+.task.approval .task-h { justify-content: center; }
+.task.approval .task-h b { flex: none; text-align: center; }
+.task.approval .steps { align-self: stretch; }
+.task.approval .steps li { display: flex; justify-content: center; text-align: center; }
+.task.approval .steps li:not(.run) > .dot:empty { display: none; }  /* 앞 동그라미는 숨기고, 실행 중·✓ 표시는 그대로 */
+.task.approval .apv-note { text-align: center; }
+/* 확인 창(지우기·로그아웃·연결 끊기 등): 글은 가운데, 두 버튼은 같은 크기 */
+.sheet.confirm { text-align: center; }
+.sheet.confirm .row-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sheet.confirm .row-btns .btn { width: 100%; justify-content: center; }
+.task.approval:not(.folded) .task-h b { display: none; }  /* 위 제목은 숨기고 할 일 줄을 제목처럼 (접힌 카드에는 제목을 남긴다) */
+.task.approval:not(.folded) .task-h:has(.tag:empty) { display: none; }  /* 상태 꼬리표도 없으면 머리줄 통째로 숨김 */
+.task.approval .steps li > :last-child { font-weight: 700; }  /* 'Bento · 팀 규칙 바꾸기'를 굵게 */
+.task.approval .steps li small { font-weight: 400; }
 .tag { font-size: var(--fs-caption); font-weight: 700; padding: 3px 10px; border-radius: var(--r-pill); background: var(--pop-soft); color: var(--pop-deep); white-space: nowrap; }
 .tag.done { background: var(--ok-soft); color: var(--ok); } .tag.skip { background: var(--surface-2); color: var(--muted); }
 .steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -351,7 +369,42 @@ textarea { width: 100%; min-height: 80px; resize: vertical; border: 1px solid va
 .notice-evidence-sources summary::after { content: ""; width: 7px; height: 7px; flex: none; border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); margin-inline-end: 4px; }
 .notice-evidence-sources[open] summary::after { transform: rotate(225deg); }
 .notice-evidence-sources .ev { padding-inline-start: var(--notice-gap); }
-.rolerow { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); } .rolerow b { font-size: var(--fs-body); }
+.rolerow { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); }
+/* 팀 역할: 전체 간격을 넉넉하게 */
+.rolecard { padding: 22px 18px 24px; }
+.role-introcard { padding: 18px 18px; }
+.role-introcard .role-intro { font-size: var(--fs-small); color: var(--muted); gap: 8px; }
+.rolecard .rolerow:first-child { border-top: 0; padding-top: 8px; }  /* 카드 맨 위 팀원은 선 없이 */
+/* 당번 돌아가기: 순서 목록 + 주기 고르기 */
+.dutycard { padding: 22px 18px 24px; display: flex; flex-direction: column; }
+.dutycard .duty-list { display: flex; flex-direction: column; gap: 4px; }
+.dutycard .duty-list .app { padding: 12px 4px; }
+.dutycard .duty-list .app.later { opacity: .45; }  /* 지금 당번이 아닌 사람은 연하게 */
+.dutycard .duty-list .app.now b, .dutycard .duty-list .app.now span { font-weight: 700; }
+.dutycard .duty-q { text-align: center; font-size: var(--fs-body-l); font-weight: 700; color: var(--ink); }  /* '변경 주기'는 진하게 */
+.duty-period, .rulecard { padding-top: 24px; }
+.helpcard { padding: 6px 18px; }  /* 도움말: 단계별 */
+.helpcard .help-step { display: grid; grid-template-columns: 28px 1fr; gap: 14px; align-items: start; padding: 18px 0; }
+.helpcard .help-step + .help-step { border-top: 1px solid var(--line); }
+.helpcard .help-num { margin-top: 3px; width: 28px; height: 28px; border-radius: 50%; background: var(--surface-2); color: var(--ink); font-weight: 800; font-size: var(--fs-small); display: grid; place-items: center; }
+.helpcard .help-step b { display: block; font-size: var(--fs-body-l); font-weight: 700; color: var(--ink); line-height: 28px; }  /* 번호 동그라미(28px)와 같은 높이에 맞춤 */
+.helpcard .help-step small { display: block; margin-top: 4px; font-size: var(--fs-small); color: var(--muted); line-height: 1.55; }
+.interestcard { text-align: center; display: flex; flex-direction: column; gap: 12px; padding: 28px 16px; }
+.interestcard .chips { justify-content: center; gap: 10px 8px; margin-top: 6px; }  /* 안내 글 아래를 조금 더 띄움 */
+.rulecard .rule-boxes { display: flex; justify-content: center; gap: 28px; margin-top: 14px; }  /* 체크 항목 두 개를 가운데 나란히 */
+.dutycard .hseg { align-self: center; margin-top: 12px; }
+.dutycard .duty-who { display: inline-flex; align-items: center; gap: 8px; }
+.dutycard .duty-check { font-weight: 800; color: var(--ink); }  /* 지금 당번 표시 */
+.dutycard .duty-shuffle { display: flex; align-self: center; margin-top: 18px; }
+
+.rolecard .rolerow { gap: 16px; padding: 30px 0; }  /* 팀원 사이 위아래 넉넉하게 */
+.rolecard .chips { gap: 10px 8px; margin-top: 0; }
+/* '역할 저장': 위 역할 칩(검은 알약)과 헷갈리지 않게 구분선 아래 가운데, 넓은 네모 버튼으로 */
+.rolecard .rolerow:last-of-type { border-bottom: 1px solid var(--line); }
+.rolecard .btn.primary, .dutycard .btn.primary { display: flex; align-items: center; justify-content: center; width: 56%; height: 44px; margin: 44px auto 0 !important; border-radius: var(--r-box); font-size: var(--fs-body); background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); }  /* 덜 튀는 연한 회색 버튼 */
+.rolecard .btn.primary:not(:disabled):hover, .dutycard .btn.primary:not(:disabled):hover { background: color-mix(in srgb, var(--ink) 8%, var(--surface-2)); border-color: var(--line); box-shadow: none; }
+.dutycard .duty-sep { height: 1px; background: var(--line); margin-top: 34px; }  /* 저장 버튼 위 구분선 */
+.dutycard .duty-sep + .btn.primary { margin-top: 34px !important; }
 .fold { margin: 4px 0; } .fold summary { font-size: var(--fs-small); color: var(--muted); cursor: pointer; padding: 4px 0; } .fold .row-btns { margin-top: 6px; }
 .crit-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; } .crit-h b { font-size: var(--fs-title); } .crit-h .big { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; } .crit-h .big small { font-size: var(--fs-body); color: var(--muted); font-weight: 600; }
 .criterion { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); } .criterion:first-of-type { border-top: 0; }
@@ -427,19 +480,26 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .dday .big-d { font-family: var(--f-logo); font-size: var(--fs-display); font-weight: 800; line-height: 1; color: var(--ink); letter-spacing: -1px; }
 .dday-top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .dday-top span { color: var(--muted); font-size: var(--fs-body); }
+.dday { gap: 10px; padding-left: 20px; }  /* 카드는 그대로, 안의 글자만 살짝 오른쪽으로 */
+.dday-label { color: var(--muted); font-size: var(--fs-small); font-weight: 600; }
+.dday-row { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.dday .big-d.nodate { font-size: var(--fs-title-l); letter-spacing: -.5px; white-space: nowrap; flex: none; }  /* '마감 기한 미정'은 D-숫자보다 작게 */
+.dday-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dday-info b { font-size: var(--fs-body-l); font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dday-info span { color: var(--muted); font-size: var(--fs-small); }
 .month { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px 12px; }
 .month b { font-size: var(--fs-body-l); }
 .week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
 .dow { text-align: center; font-size: var(--fs-caption); color: var(--muted); padding-bottom: 2px; }
 .day { height: 54px; border-radius: var(--r-box); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-variant-numeric: tabular-nums; font-size: var(--fs-body); }
 .day.past { color: var(--muted); }
-.day.today { background: var(--surface-2); font-weight: 700; }
-.day.sel { background: var(--pop); color: var(--pop-ink); font-weight: 700; }
-.day .dots { display: flex; gap: 3px; height: 6px; }
-.day .dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); }
+.day.out { opacity: .35; }  /* 이번 달이 아닌 앞뒤 날짜는 연하게 */
+.day.today { box-shadow: inset 0 0 0 1.5px var(--ink); font-weight: 700; }  /* 오늘은 네모 테두리 */
+.day.sel { background: var(--surface-2); color: var(--ink); font-weight: 700; }  /* 고른 날은 연한 회색 */
+.day .dots { display: flex; gap: 3px; height: 8px; align-items: center; }
+.day .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
 .day .dots i.c-due { background: var(--crit); } .day .dots i.c-issue { background: var(--pop); } .day .dots i.c-meet { background: var(--blue); }
-.day.sel .dots i { background: var(--pop-ink); }
-.day .dots i.sq { border-radius: 1px; width: 6px; height: 6px; }
+.day .dots i.sq { border-radius: 2px; width: 8px; height: 8px; }
 #calBody { display: flex; flex-direction: column; gap: 16px; }  /* 칩·D-day 카드·달력·목록 사이를 같은 간격으로 (전에는 칩과 카드가 붙어 있었다) */
 .pfilter { display: flex; gap: 6px; flex-wrap: wrap; }
 .pfilter button { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: var(--r-pill); background: var(--surface); border: 1px solid var(--line); font-size: var(--fs-small); font-weight: 600; max-width: 100%; }
@@ -454,6 +514,35 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .urlrow input { min-width: 0; height: 44px; border-radius: var(--r-badge); border: 1px solid var(--line); background: var(--bg); color: var(--ink); padding: 0 12px; font: inherit; }
 .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: var(--fs-caption); color: var(--muted); }
 .legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; background: var(--c); }
+.legend .lg-item { display: inline-flex; align-items: center; gap: 5px; }
+.legend .lg-item::before { content: none; }
+.legend .lg-item i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.legend .lg-item i.sq { border-radius: 1.5px; width: 7.5px; height: 7.5px; }
+.calcard, .evtcard { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 18px 16px; display: flex; flex-direction: column; gap: 10px; }
+.calcard .month { flex-wrap: nowrap; }
+.calcard .month b { flex: 1; text-align: center; font-size: var(--fs-title); font-weight: 700; }
+.calcard .legend { margin-top: -2px; font-size: 10.5px; gap: 10px; justify-content: flex-end; }  /* 범례 글자는 작게, 오른쪽 정렬 */
+.calcard .dow { color: color-mix(in srgb, var(--ink) 45%, var(--muted)); }  /* 요일은 회색보다 살짝 진하게 */
+.calcard .navarrow { width: 36px; height: 36px; flex: none; display: grid; place-items: center; font-size: 28px; line-height: 1; border-radius: 50%; color: var(--ink); }
+.calcard .navarrow:hover { background: var(--surface-2); }
+.evtcard { gap: 4px; padding-bottom: 6px; }
+.evtcard .listhead { margin: 0 0 6px; align-items: center; }
+.evtcard .listhead b { font-size: var(--fs-title); font-weight: 700; }
+.lh-right { display: inline-flex; align-items: center; gap: 10px; }
+.lh-count { color: var(--muted); font-size: var(--fs-small); }
+.evtcard .listhead button { color: var(--ink); }  /* '전체 보기'는 파랑 대신 무채색 */
+.evtcard .evts { gap: 0; }
+.evtcard .evts > .note { margin-top: -6px; padding-bottom: 10px; }  /* '일정이 없어요.'를 제목 쪽으로 올리고 아래 여백 확보 */
+.evtcard .evt { background: none; border: 0; border-radius: 0; border-top: 1px solid var(--line); }
+.evtcard .evt:first-child { border-top: 0; }
+.evtcard .evt > button { padding: 16px 0; }
+.evtcard .evt .what { min-width: 0; }
+.evtcard .evt .what small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.evtcard .evt .acts2 { padding: 0 0 14px; }
+.evtcard .evt .when { padding-left: 3px; } .evtcard .evt .when b { margin-left: -3px; }  /* 날짜는 그대로, 아래 시간만 살짝 오른쪽으로 */
+.evtcard .evt > button .chev { font-size: 24px; line-height: 1; width: 20px; text-align: center; transition: transform .15s; }  /* 펼치기 화살표 크게 */
+.evtcard .evt.open > button .chev { transform: rotate(90deg); }  /* 펼치면 › → ⌄ */
+.evtcard .evt .acts2 .bigrow .chev { font-size: 24px; line-height: 1; }  /* 펼친 안의 버튼 화살표도 같은 크기로 */
 .listhead { display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px; }
 .listhead b { font-size: var(--fs-body-l); }
 .listhead button { color: var(--blue); font-size: var(--fs-small); font-weight: 600; }
@@ -465,6 +554,11 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .evt .bar2 { width: 4px; align-self: stretch; border-radius: 4px; background: var(--c); }
 .evt .what b { display: block; font-size: var(--fs-body); }
 .evt .what small { color: var(--muted); font-size: var(--fs-small); }
+.evt.done > button { grid-template-columns: 48px 4px 1fr auto auto; }  /* 완료 배지 자리 */
+.evt.done .when, .evt.done .when b, .evt.done .what b { color: var(--muted); }
+.evt.done .when, .evt.done .what { opacity: .6; }  /* 끝낸 일정은 날짜·제목·설명을 함께 연하게 (배지는 그대로) */
+.evt.done .what b { text-decoration: line-through; }  /* 끝낸 일정은 회색 + 가운데 줄 */
+.evt .done-tag { font-size: var(--fs-caption); font-weight: 700; padding: 3px 9px; border-radius: var(--r-pill); background: var(--crit-soft); color: var(--crit); white-space: nowrap; }
 .evt .acts2 { display: none; padding: 0 14px 14px; flex-direction: column; gap: 8px; }
 .evt.open .acts2 { display: flex; }
 .evt .acts2 .bigrow { grid-template-columns: 1fr auto; min-height: 56px; }
@@ -495,8 +589,16 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .rowlink { color: var(--ink); }
 .rowlink b { font-weight: 500; font-size: var(--fs-body); } .rowlink small { display: block; color: var(--muted); font-size: var(--fs-small); }
 .rowlink .val { color: var(--muted); font-size: var(--fs-body); display: flex; align-items: center; gap: 6px; }
+.card.permcard { display: flex; flex-direction: column; gap: 10px; }
+.card.permcard > b { font-size: var(--fs-body-l); font-weight: 700; }
+.perm-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; font-size: var(--fs-body); color: var(--ink); }
+.perm-list li { display: grid; grid-template-columns: 18px 1fr; gap: 6px; align-items: baseline; }
+.perm-list .pm { color: var(--muted); font-weight: 700; text-align: center; }  /* ✓ ✕ • 표시는 무채색 */
+.rowlink.me-acct b { font-size: var(--fs-body-l); font-weight: 600; }  /* 계정 이름은 조금 크게 */
+.rowlink > .chev { font-size: 24px; line-height: 1; width: 20px; text-align: center; transition: transform .15s; }  /* 화살표 크게 */
+.rowlink:active > .chev { transform: rotate(90deg); }  /* 눌러서 들어갈 때 › → ⌄ */
 .group { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 0 16px; }
-.glabel { color: var(--muted); font-size: var(--fs-body); margin: 12px 4px 0; }
+.glabel { color: var(--muted); font-size: var(--fs-body); margin: 18px 4px -5px; }  /* 소제목은 아래 묶음 쪽에 붙게 (위 22→28px, 아래 10→5px) */
 .perm { display: none; font-size: var(--fs-small); color: var(--muted); padding: 0 0 14px 40px; }
 .perm.open { display: block; }
 .perm b { color: var(--ink); font-weight: 600; }
@@ -507,6 +609,10 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .dock { position: absolute; left: 0; right: 0; bottom: 0; padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
 #v-chat:not([hidden]) ~ .dock { position: relative; flex: none; padding-top: var(--chat-related-gap); gap: var(--chat-related-gap); }
 .dock > * { pointer-events: auto; }
+/* 탭바 줄(탭바 + 아래·양옆 빈 공간)은 뒤 화면이 눌리지 않게 막는다. 탭 버튼은 그 위에 있어 그대로 눌린다 */
+.dock::before { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: calc(64px + max(12px, env(safe-area-inset-bottom, 0px))); pointer-events: auto; }
+.dock > .tabs { position: relative; z-index: 1; }
+.phone.chat-keyboard .dock::before { display: none; }  /* 키보드가 올라와 탭바가 숨으면 막지 않는다 */
 .toast { align-self: center; display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 6px 14px 6px 6px; font-size: var(--fs-small); max-width: 92%; box-shadow: var(--shadow); }
 .toast .bento { width: 24px; height: 24px; padding: 3px; gap: 2px; border-radius: 6px; }
 .toast span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -527,7 +633,8 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .tabs button.sel { color: var(--ink); font-weight: 800; }
 .tabs button.sel svg { stroke-width: 2.4; }
 .badge { position: absolute; top: 4px; left: calc(50% + 6px); min-width: 20px; height: 20px; border-radius: var(--r-pill); background: var(--crit); color: #FFFFFF; font-size: var(--fs-caption); font-weight: 700; display: grid; place-items: center; padding: 0 5px; }
-.snack { position: absolute; left: 50%; transform: translateX(-50%); top: 72px; background: var(--primary); color: var(--primary-ink); padding: 8px 14px; border-radius: var(--r-pill); font-size: var(--fs-small); z-index: 5; }
+.snack { position: absolute; left: 50%; transform: translateX(-50%); top: 72px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-box); padding: 12px 18px; box-shadow: var(--shadow); font-size: var(--fs-small); z-index: 5; white-space: nowrap; max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis; }  /* 모든 안내 알림은 밝은 네모 상자 */
+.snack.light { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r-box); padding: 12px 18px; box-shadow: var(--shadow); white-space: nowrap; }  /* 밝은 네모 상자 알림 */
 /* 오늘 (홈 브리핑) */
 .h-date { margin: 4px 0 0; font-size: var(--fs-body); color: var(--muted); font-weight: 500; }
 .h-title { margin: 2px 0 4px; font-size: var(--fs-title-l); line-height: 1.3; }
@@ -615,7 +722,8 @@ details.teamall summary::after { content: '›'; margin-left: auto; color: var(-
 .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 44px; text-align: left; }
 .switch .knob { width: 52px; height: 32px; border-radius: var(--r-pill); background: var(--line); position: relative; flex: none; transition: background .2s; }
 .switch .knob::after { content: ""; position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 1px 3px rgb(0 0 0 / .25); transition: left .2s; }
-.switch[aria-checked="true"] .knob { background: var(--green); }
+.switch[aria-checked="true"] .knob { background: var(--ink); }  /* 켜짐은 초록 대신 검정 (다크 모드에서는 흰색) */
+.switch[aria-checked="true"] .knob::after { background: var(--surface); }  /* 동그라미는 바탕색이라 어느 모드에서나 보인다 */
 .switch[aria-checked="true"] .knob::after { left: 23px; }
 /* 홈 맨 위 카드: 다른 카드와 같은 흰 카드. 라벨은 내용만 */
 .hero { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 16px; display: grid; grid-template-columns: 1fr; gap: 6px; }
@@ -650,6 +758,18 @@ details.teamall summary::after { content: '›'; margin-left: auto; color: var(-
 .drawer hr { border: 0; border-top: 1px solid var(--line); margin: 10px 4px; width: auto; }
 .dw-lab { font-size: var(--fs-small); color: var(--muted); margin: 10px 6px 4px; }
 .dw-row { display: flex; align-items: center; gap: 4px; }
+.dw-live .dw-hint { margin: 12px 4px 10px; line-height: 1.5; }  /* 진행 중인 팀플 상자와 안내 글 사이를 띄운다 */
+.dw-live .dw-hint + .btn { margin-bottom: 4px; }
+/* 마이페이지 팀플 목록: 전체 간격을 넉넉하게 */
+.projcard { padding: 18px 16px 20px; }
+.projcard .dw-lab { margin: 30px 4px 10px; font-size: var(--fs-body-l); font-weight: 700; color: var(--ink); }  /* 소제목은 크고 진하게, 위 구역과 넉넉히 띄움 */
+.projcard > div > .dw-lab:first-child { margin-top: 0; }
+.projcard .dw-row + .dw-row { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--line); }  /* 대회 사이에 연한 구분선 */
+.projcard .dw-proj { padding: 12px 12px; }
+.projcard .dw-live .dw-hint + .btn { display: flex; width: fit-content; margin: 0 auto 4px; }  /* 'Bento 설치' 버튼은 가운데 */
+/* '+ 새 대회 준비하기'는 버튼 대신 밑줄 친 글씨 링크처럼 */
+.projcard .btn.primary { display: block; width: fit-content; height: auto; min-height: 0; margin: 12px auto 0 !important; padding: 4px 2px; background: none; border: 0; box-shadow: none; color: var(--ink); font-weight: 600; font-size: var(--fs-body); text-decoration: underline; text-underline-offset: 3px; }
+.projcard .btn.primary:hover, .projcard .btn.primary:not(:disabled):hover { background: none !important; border-color: transparent !important; box-shadow: none !important; color: color-mix(in srgb, var(--muted) 60%, var(--surface)) !important; opacity: 1; }  /* 마우스를 올리면 글씨만 연한 회색으로 */
 .dw-proj { flex: 1; width: 100%; min-width: 0; display: grid; grid-template-columns: 12px 1fr; gap: 10px; align-items: center; text-align: left; padding: 10px 12px; border-radius: var(--r-box); color: var(--ink); }
 .dw-proj.on { background: var(--surface-2); }
 .dw-proj .pdot { width: 10px; height: 10px; border-radius: 50%; }
@@ -837,7 +957,7 @@ function avatar(login, size = 28) {
   return s;
 }
 function nameWithFace(login, label, size) { const w = h("span", "nm"); w.appendChild(avatar(login, size)); w.appendChild(h("b", null, label == null ? login : label)); return w; }
-function snack(t) { const s = h("div", "snack", t); document.querySelector(".phone").appendChild(s); setTimeout(() => s.remove(), 1800); }
+function snack(t, light) { const s = h("div", "snack" + (light ? " light" : ""), t); document.querySelector(".phone").appendChild(s); setTimeout(() => s.remove(), 1800); }  // light: 밝은 네모 상자 모양
 function chip(label, fn) {
   const b = h("button", "btn chat-action", label); b.type = "button";
   const arrow = h("span", null, "›"); arrow.setAttribute("aria-hidden", "true"); b.appendChild(arrow);
@@ -2206,14 +2326,14 @@ async function loadDiscord() {
   return DISC;
 }
 function openDiscordConnect(onDone) {
-  // 팀원이 디스코드 웹훅 주소를 붙여 넣으면 그 팀 전체가 쓴다. 주소는 서버에서 암호화해 팀 저장소에 저장한다
-  const bg = h("div", "sheet-bg"); bg.style.zIndex = "300"; const sh = h("div", "sheet"); sh.setAttribute("role", "dialog"); sh.setAttribute("aria-modal", "true"); sh.setAttribute("aria-label", "디스코드 팀 채널 연결"); bg.appendChild(sh);
+  // 팀원이 Discord 웹훅 주소를 붙여 넣으면 그 팀 전체가 쓴다. 주소는 서버에서 암호화해 팀 저장소에 저장한다
+  const bg = h("div", "sheet-bg"); bg.style.zIndex = "300"; const sh = h("div", "sheet"); sh.setAttribute("role", "dialog"); sh.setAttribute("aria-modal", "true"); sh.setAttribute("aria-label", "Discord 팀 채널 연결"); bg.appendChild(sh);
   const esc = (e) => { if (e.key === "Escape") close(); };
   const close = () => { bg.remove(); document.removeEventListener("keydown", esc); };
   bg.onclick = (e) => { if (e.target === bg) close(); }; document.addEventListener("keydown", esc);
-  sh.appendChild(h("h2", null, "디스코드 팀 채널을 연결할까요?"));
+  sh.appendChild(h("h2", null, "Discord 팀 채널을 연결할까요?"));
   const how = h("div", "note"); how.style.whiteSpace = "pre-line";
-  how.textContent = "연결하면 팀 메시지를 복사하지 않고 디스코드 채널로 바로 보내요. 보내기 전에는 늘 승인을 받아요.\n\n① 디스코드에서 채널 설정 → 연동 → 웹후크 → 새 웹후크\n② ‘웹후크 URL 복사’\n③ 아래에 붙여 넣기";
+  how.textContent = "연결하면 팀 메시지를 복사하지 않고 Discord 채널로 바로 보내요. 보내기 전에는 늘 승인을 받아요.\n\n① Discord에서 채널 설정 → 연동 → 웹후크 → 새 웹후크\n② ‘웹후크 URL 복사’\n③ 아래에 붙여 넣기";
   sh.appendChild(how);
   const lb = h("label", "lab", "웹후크 주소"); const id = "dh" + Date.now(); lb.htmlFor = id;
   const inp = h("input", "finput"); inp.id = id; inp.type = "password"; inp.autocomplete = "off"; inp.spellcheck = false; inp.placeholder = "https://discord.com/api/webhooks/…";
@@ -2229,7 +2349,7 @@ function openDiscordConnect(onDone) {
     if (!url) { err.textContent = "웹후크 주소를 붙여 넣어 주세요"; err.hidden = false; return inp.focus(); }
     ok.disabled = inp.disabled = true; ok.textContent = "확인하는 중…";
     try { await api("/discord/connect", { method: "POST", body: JSON.stringify({ repo: curRepo(), url }) }); } catch (e) { err.textContent = e.message || "연결하지 못했어요"; err.hidden = false; ok.disabled = inp.disabled = false; ok.textContent = "연결하기"; return inp.focus(); }
-    inp.value = ""; close(); await loadDiscord(); snack("디스코드를 연결했어요"); renderMe(); if (onDone) onDone();
+    inp.value = ""; close(); await loadDiscord(); snack("Discord를 연결했어요"); renderMe(); if (onDone) onDone();
   };
   inp.addEventListener("keydown", (e) => { if (e.key === "Enter") ok.click(); });
   rb.appendChild(no); rb.appendChild(ok); sh.appendChild(rb);
@@ -2237,7 +2357,7 @@ function openDiscordConnect(onDone) {
 }
 function confirmSheet({ title, body, ok, cancel = "취소", danger = false, onOk }) {
   // 되돌리기 어렵거나 연결·로그아웃처럼 큰 일은 누르자마자 하지 않고 한 번 묻는다. 기본 포커스는 안전한 '취소'
-  const bg = h("div", "sheet-bg"); bg.style.zIndex = "300"; const sh = h("div", "sheet"); sh.setAttribute("role", "alertdialog"); sh.setAttribute("aria-modal", "true"); sh.setAttribute("aria-label", title); bg.appendChild(sh);
+  const bg = h("div", "sheet-bg"); bg.style.zIndex = "300"; const sh = h("div", "sheet confirm"); sh.setAttribute("role", "alertdialog"); sh.setAttribute("aria-modal", "true"); sh.setAttribute("aria-label", title); bg.appendChild(sh);
   const esc = (e) => { if (e.key === "Escape") close(); };
   const close = () => { bg.remove(); document.removeEventListener("keydown", esc); };
   bg.onclick = (e) => { if (e.target === bg) close(); }; document.addEventListener("keydown", esc);
@@ -2256,15 +2376,15 @@ function openProjectSheet() {  // 위쪽 팀플 이름 버튼: 옆에서 서랍�
   sh.appendChild(h("h2", null, "팀플 바꾸기")); const box = h("div"); sh.appendChild(box);
   document.querySelector(".phone").appendChild(bg); fillProjectList(box, close).catch(() => {});
 }
-function fillProjectList(box, close) {  // 서랍·시트·마이페이지 팀플 목록이 같이 쓰는 목록 (진행 중인 팀플 + 준비 중인 대회)
+function fillProjectList(box, close, stay) {  // stay: 고른 뒤에도 지금 화면에 머문다 (마이페이지 팀플 목록)  // 서랍·시트·마이페이지 팀플 목록이 같이 쓰는 목록 (진행 중인 팀플 + 준비 중인 대회)
   const dw = box;
   const proj = (title, sub, color, on, fn) => { const b = h("button", "dw-proj" + (on ? " on" : "")); b.type = "button"; const dot = h("span", "pdot"); dot.style.background = `var(${color})`; b.appendChild(dot); const tx = h("span"); tx.appendChild(h("b", null, title)); tx.appendChild(h("small", null, sub)); b.appendChild(tx); b.onclick = () => { close(); if (!on) fn(); }; return b; };
   dw.appendChild(h("div", "dw-lab", "진행 중인 팀플"));
-  const live = h("div"); live.appendChild(h("div", "note", "불러오는 중…")); dw.appendChild(live);
+  const live = h("div", "dw-live"); live.appendChild(h("div", "note", "불러오는 중…")); dw.appendChild(live);
   dw.appendChild(h("div", "dw-lab", "준비 중인 대회"));
-  if (!drafts.length) dw.appendChild(h("div", "note", "아직 없어요. 홈에서 찾아온 대회를 골라 보세요."));
+  if (!drafts.length) dw.appendChild(h("div", "note", "아직 없음. 홈에서 찾아온 대회를 고르면 여기에 생김"));
   drafts.forEach((d) => {
-    const row = h("div", "dw-row"); row.appendChild(proj(d.title, draftSub(d), colorOf("d:" + d.id), !!(cur && cur.draft === d.id), () => useProject({ draft: d.id })));
+    const row = h("div", "dw-row"); row.appendChild(proj(d.title, draftSub(d), colorOf("d:" + d.id), !!(cur && cur.draft === d.id), () => useProject({ draft: d.id }, stay)));
     const del = h("button", "dw-del"); del.type = "button"; del.setAttribute("aria-label", `${d.title} 지우기`); del.innerHTML = icon("trash");
     del.onclick = () => { if (!del.dataset.sure) { del.dataset.sure = "1"; del.classList.add("sure"); del.setAttribute("aria-label", "한 번 더 누르면 지워요"); snack("한 번 더 누르면 지워요"); return; } drafts.splice(drafts.indexOf(d), 1); saveDrafts(); try { localStorage.removeItem("bento:plan:d:" + d.id); } catch (e) { /* 무시 */ } if (cur && cur.draft === d.id) useProject({ repo: curRepo() }, true); row.remove(); snack("지웠어요"); renderHome(); };
     row.appendChild(del); dw.appendChild(row);
@@ -2274,10 +2394,10 @@ function fillProjectList(box, close) {  // 서랍·시트·마이페이지 팀�
   return (async () => {
   try {
     await loadProjects(); live.innerHTML = "";
-    if (!projects.length) live.appendChild(h("div", "note", ME.logged_in ? "Bento 앱이 설치된 내 저장소가 아직 없어요." : "Bento 앱이 설치된 저장소가 없어요."));
-    projects.forEach((p) => live.appendChild(proj(p.repo.split("/")[1], projSub(p), colorOf("r:" + p.repo), !curDraft() && curRepo() === p.repo, () => useProject({ repo: p.repo }))));
+    if (!projects.length) live.appendChild(h("div", "note", ME.logged_in ? "Bento 앱이 설치된 내 저장소가 아직 없음" : "Bento 앱이 설치된 저장소가 없음"));
+    projects.forEach((p) => live.appendChild(proj(p.repo.split("/")[1], projSub(p), colorOf("r:" + p.repo), !curDraft() && curRepo() === p.repo, () => useProject({ repo: p.repo }, stay))));
     if (H.install_url) {  // 내 GitHub 저장소가 목록에 없으면: 그 저장소에 Bento 앱을 설치하면 여기에 생긴다 (전에는 이 화면에 방법이 없었다)
-      live.appendChild(h("div", "note", "내 저장소가 안 보이면, 그 저장소에 Bento 앱을 설치해 주세요. 설치하고 돌아오면 바로 연결돼요."));
+      live.appendChild(h("div", "note dw-hint", "내 저장소가 안 보이면, 그 저장소에 Bento 앱 설치 필요"));
       const ins = link("내 저장소에 Bento 설치", H.install_url); ins.target = "_self"; live.appendChild(ins);
     }
   } catch (e) { live.innerHTML = ""; live.appendChild(h("div", "note", e.message)); }
@@ -2951,7 +3071,7 @@ $("projBtn").onclick = openProjectSheet;
 $("fab").onclick = () => { showTab("chat"); today(); };
 
 /* ---------- 캘린더 ---------- */
-let calSel = null, calState = null;
+let calSel = null, calState = null, calMonthOff = 0;  // calMonthOff: 이번 달에서 몇 달 옮겨 보는지
 function dayKey(d) { return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
 function planInRepo() { return !!(calState && calState.milestones && calState.milestones.some((m) => /^계획 · /.test(m.title))); }  // 계획은 이 기기에만 저장되므로, 저장소에 '계획 · …' 마일스톤이 있으면 다른 기기에서도 계획이 있는 것으로 본다
 function hasPlan() { return store.get("plan:" + projKey(), []).length > 0 || planInRepo(); }
@@ -3025,53 +3145,91 @@ function inProject(p, fn) { return () => { if (p.key !== projKey()) useProject(p
 function renderCal() {
   const body = $("calBody"); if (!body) return; body.innerHTML = "";
   const projs = allProjects().filter((p) => p.extract || (p.plan && p.plan.length));
+  {  // 팀플 칩은 가장 가까운 남은 날짜(신청·제출 마감, 계획 단계) 순으로. 날짜가 없으면 맨 뒤
+    const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+    const next = (p) => { const ds = [p.extract && p.extract.apply_deadline_iso, p.extract && p.extract.submit_deadline_iso, ...(p.plan || []).filter((x) => x.kind === "step").map((x) => x.due)].map((x) => (x ? new Date(x) : null)).filter((d) => d && !isNaN(d) && d >= t0); return ds.length ? Math.min(...ds) : Infinity; };
+    projs.sort((a, b) => next(a) - next(b));
+  }
   const hide = new Set(store.get("calHide", []));
   const multi = projs.filter((p) => !hide.has(p.key)).length > 1;  // 팀플이 하나만 보이면 이름은 맨 위 칩에 한 번만 (카드·일정마다 되풀이하지 않는다)
+  const ev = events();
+  const now = new Date(); now.setHours(0, 0, 0, 0);
   if (projs.length) {
     const f = h("div", "pfilter"); f.setAttribute("aria-label", "보여 줄 팀플");
     projs.forEach((p) => { const b = h("button"); b.type = "button"; b.style.setProperty("--c", `var(${colorOf(p.key)})`); b.appendChild(h("span", null, (p.draft ? "준비 중 · " : "") + p.name)); b.setAttribute("aria-pressed", String(!hide.has(p.key)));
       b.onclick = () => { const hs = new Set(store.get("calHide", [])); hs.has(p.key) ? hs.delete(p.key) : hs.add(p.key); store.set("calHide", [...hs]); renderCal(); }; f.appendChild(b); });
     body.appendChild(f);
   }
-  const ev = events();
-  if (!ev.length) {
+  // 신청 마감·제출 마감을 모두 세고, 그중 가장 가까운 하나를 팀플 칩 아래 D-day 카드로 (완료한 마감은 제목에 ✓ 완료가 붙어 빠진다)
+  const near = ev.find((e) => (e.title === "신청 마감" || e.title === "제출 마감") && e.d >= now);
+  if (near) {
+    const dd = Math.round((new Date(near.d).setHours(0, 0, 0, 0) - now) / 864e5);
+    const when = `${near.d.getMonth() + 1}월 ${near.d.getDate()}일 ${"일월화수목금토"[near.d.getDay()]}요일 ${fmtTime(near.d)}`;
+    const card = h("div", "dday"); card.appendChild(h("div", "dday-label", "가장 가까운 마감"));
+    const row = h("div", "dday-row"); row.appendChild(h("span", "big-d", dd === 0 ? "D-day" : `D-${dd}`));
+    const info = h("div", "dday-info"); info.appendChild(h("b", null, near.p.name)); info.appendChild(h("span", null, `${when} · ${near.title.replace(" ", "")}`));
+    row.appendChild(info); card.appendChild(row); body.appendChild(card);
+  } else {
+    const vis = projs.filter((p) => !hide.has(p.key));
+    if (vis.length) {  // 보이는 팀플에 남은 신청·제출 마감이 없으면 D-day 대신 '마감 기한 미정'
+      const card = h("div", "dday"); card.appendChild(h("div", "dday-label", "가장 가까운 마감"));
+      const row = h("div", "dday-row"); row.appendChild(h("span", "big-d nodate", "마감 기한 미정"));
+      card.appendChild(row); body.appendChild(card);
+    }
+  }
+  if (!projs.length) {  // 팀플이 하나도 없을 때만 빈 화면 (팀플을 꺼서 일정이 없을 때도 달력은 그대로 둔다)
     const e = h("div", "empty");
     e.innerHTML = MASCOT(72, true);  // 빈 화면에도 Bento가 있다
     e.appendChild(h("b", null, projs.length ? "보여 줄 일정이 없어요" : "아직 일정이 없어요")); e.appendChild(h("span", null, projs.length ? "위에서 꺼 둔 팀플을 다시 켜 보세요." : "대회 공고를 분석하고 계획을 짜면 팀플마다 다른 색으로 여기 채워져요."));
     if (!projs.length) { const b = h("button", "btn primary", "대회 공고 분석하기"); b.type = "button"; b.style.marginTop = "8px"; b.onclick = () => { showTab("chat"); notice(); }; e.appendChild(b); }
     body.appendChild(e); return;
   }
-  const now = new Date(); now.setHours(0, 0, 0, 0);
-  const sub = ev.find((e) => e.title === "제출 마감" && e.d >= now);  // 완료한 제출은 D-day에서 뺀다
-  if (sub) { const dd = Math.ceil((new Date(sub.d).setHours(0, 0, 0, 0) - now) / 864e5); const card = h("div", "dday"); const top = h("div", "dday-top"); const big = h("span", "big-d", `D-${dd}`); top.appendChild(big); top.appendChild(h("span", null, `가장 가까운 제출 마감 · ${sub.sub}`)); card.appendChild(top); if (multi) card.appendChild(h("div", "note", sub.p.name)); body.appendChild(card); }
   if (extract && !hasPlan() && extract.submit_deadline_iso) {
     const t = h("button", "bigrow"); t.type = "button"; t.style.gridTemplateColumns = "1fr auto"; const tx = h("span"); tx.appendChild(h("b", null, `${projName()} 계획 짜기`)); tx.appendChild(h("small", null, "마감에서 거꾸로 할 일을 날짜별로 나눠 드려요")); t.appendChild(tx); t.appendChild(h("span", "chev", "›")); t.onclick = () => { showTab("chat"); planFlow(); }; body.appendChild(t);
   }
-  const start = new Date(now); start.setDate(now.getDate() - ((now.getDay() + 6) % 7));
-  const mh = h("div", "month"); mh.appendChild(h("b", null, `${start.getFullYear()}년 ${start.getMonth() + 1}월`)); const lg = h("div", "legend");
-  [["var(--muted)", "■ 마감"], ["var(--muted)", "● 할 일"]].forEach(([c, n]) => { const sp = h("span", null, n); sp.style.setProperty("--c", "transparent"); lg.appendChild(sp); }); mh.appendChild(lg); body.appendChild(mh);
+  // 달력 카드: 월 제목 + 오늘·이전·다음 버튼, 범례, 날짜 칸을 한 묶음으로
+  const first = new Date(now.getFullYear(), now.getMonth() + calMonthOff, 1), lead = (first.getDay() + 6) % 7;  // 월요일 시작
+  const start = new Date(first); start.setDate(1 - lead);
+  const cells = Math.ceil((lead + new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate()) / 7) * 7;  // 그 달이 다 들어가는 주 수만큼
+  const calCard = h("section", "calcard"); calCard.setAttribute("aria-label", "달력");
+  const mh = h("div", "month");  // ‹  2026년 11월  ›
+  const go = (n) => { calMonthOff = n; calSel = null; renderCal(); };
+  const pv = h("button", "navarrow", "‹"); pv.type = "button"; pv.setAttribute("aria-label", "이전 달"); pv.onclick = () => go(calMonthOff - 1); mh.appendChild(pv);
+  mh.appendChild(h("b", null, `${first.getFullYear()}년 ${first.getMonth() + 1}월`));
+  const nx = h("button", "navarrow", "›"); nx.type = "button"; nx.setAttribute("aria-label", "다음 달"); nx.onclick = () => go(calMonthOff + 1); mh.appendChild(nx);
+  calCard.appendChild(mh);
+  const lg = h("div", "legend");
+  [["sq", "마감"], ["", "할 일"]].forEach(([k, n]) => { const sp = h("span", "lg-item"); sp.appendChild(h("i", k || null)); sp.appendChild(document.createTextNode(n)); lg.appendChild(sp); }); calCard.appendChild(lg); body.appendChild(calCard);
   const wk = h("div", "week"); ["월", "화", "수", "목", "금", "토", "일"].forEach((d) => wk.appendChild(h("div", "dow", d)));
-  for (let k = 0; k < 35; k++) {
+  for (let k = 0; k < cells; k++) {
     const d = new Date(start); d.setDate(start.getDate() + k); const key = dayKey(d);
     const mine = ev.filter((e) => dayKey(e.d) === key);
-    const b = h("button", "day" + (d < now ? " past" : "") + (+d === +now ? " today" : "") + (calSel === key ? " sel" : "")); b.type = "button";
-    b.appendChild(h("span", null, d.getDate() === 1 ? `${d.getMonth() + 1}/1` : String(d.getDate()))); const dots = h("span", "dots");
-    mine.slice(0, 4).forEach((e) => { const i = h("i", e.kind === "due" ? "sq" : null); if (calSel !== key) i.style.background = `var(${e.c})`; dots.appendChild(i); }); b.appendChild(dots);
+    const b = h("button", "day" + (d.getMonth() !== first.getMonth() ? " out" : "") + (d < now ? " past" : "") + (+d === +now ? " today" : "") + (calSel === key ? " sel" : "")); b.type = "button";
+    b.appendChild(h("span", null, String(d.getDate()))); const dots = h("span", "dots");
+    mine.slice(0, 4).forEach((e) => { const i = h("i", e.kind === "due" ? "sq" : null); i.style.background = `var(${e.c})`; dots.appendChild(i); }); b.appendChild(dots);
     b.setAttribute("aria-label", `${d.getMonth() + 1}월 ${d.getDate()}일, 일정 ${mine.length}개` + (mine.length ? ": " + mine.map((e) => `${e.p.name} ${e.title}`).join(", ") : ""));
     b.onclick = () => { calSel = calSel === key ? null : key; renderCal(); }; wk.appendChild(b);
   }
-  body.appendChild(wk);
-  const lh = h("div", "listhead"); lh.appendChild(h("b", null, calSel ? `${calSel.split("-")[1]}월 ${calSel.split("-")[2]}일` : "다가오는 일정"));
-  if (calSel) { const all = h("button", null, "전체 보기"); all.type = "button"; all.onclick = () => { calSel = null; renderCal(); }; lh.appendChild(all); }
-  body.appendChild(lh);
-  const list = h("div", "evts"); const shown = ev.filter((e) => (calSel ? dayKey(e.d) === calSel : e.d >= now));
+  calCard.appendChild(wk);
+  // 일정 카드: 제목 + 개수, 일정은 카드 안에서 줄로 나눈다
+  const shown = ev.filter((e) => (calSel ? dayKey(e.d) === calSel : e.d >= now));
+  const evCard = h("section", "evtcard"); evCard.setAttribute("aria-label", "일정");
+  const lh = h("div", "listhead"); lh.appendChild(h("b", null, calSel ? `${+calSel.split("-")[1]}월 ${+calSel.split("-")[2]}일` : "다가오는 일정"));
+  const lr = h("span", "lh-right");
+  if (calSel) { const all = h("button", null, "전체 보기"); all.type = "button"; all.onclick = () => { calSel = null; renderCal(); }; lr.appendChild(all); }
+  lr.appendChild(h("span", "lh-count", `${shown.length}개`)); lh.appendChild(lr);
+  evCard.appendChild(lh);
+  const list = h("div", "evts");
   if (!shown.length) list.appendChild(h("div", "note", "일정이 없어요."));
   shown.forEach((e) => {
-    const box = h("div", "evt"); box.style.setProperty("--c", `var(${e.c})`);
+    const done = !!e.done || / ✓ 완료$/.test(e.title);  // 끝낸 단계·마감
+    const box = h("div", "evt" + (done ? " done" : "")); box.style.setProperty("--c", `var(${e.c})`);
     const b = h("button"); b.type = "button"; const w = h("span", "when"); w.appendChild(h("b", null, `${e.d.getMonth() + 1}/${e.d.getDate()}`)); w.appendChild(document.createTextNode(`${String(e.d.getHours()).padStart(2, "0")}:${String(e.d.getMinutes()).padStart(2, "0")}`)); b.appendChild(w);
-    b.appendChild(h("span", "bar2")); const what = h("span", "what"); const tt = h("b", null, e.title); what.appendChild(tt);
-    const sm = h("small", null, [multi ? (e.p.draft ? "준비 중 · " : "") + e.p.name : "", e.sub].filter(Boolean).join(" · ")); sm.style.whiteSpace = "pre-line"; what.appendChild(sm); b.appendChild(what); b.appendChild(h("span", "chev", "›"));
+    b.appendChild(h("span", "bar2")); const what = h("span", "what"); const tt = h("b", null, e.title.replace(/ ✓ 완료$/, "")); what.appendChild(tt);
+    const sm = h("small", null, `${e.p.name} · ${e.kind === "due" ? "마감" : "할 일"}`); what.appendChild(sm);  // 한 줄로: 팀플 · 종류
+    b.appendChild(what); if (done) b.appendChild(h("span", "done-tag", "완료")); b.appendChild(h("span", "chev", "›"));
     const acts = h("div", "acts2");
+    if (e.sub && e.kind !== "due") { const nt = h("div", "note", e.sub); nt.style.whiteSpace = "pre-line"; acts.appendChild(nt); }  // 단계 설명·이슈 목록은 펼치면 보인다 (마감의 원문 날짜는 왼쪽 날짜와 같아서 뺀다)
     const act = (label, s2, fn) => { const t = h("button", "bigrow"); t.type = "button"; const tx = h("span"); tx.appendChild(h("b", null, label)); tx.appendChild(h("small", null, s2)); t.appendChild(tx); t.appendChild(h("span", "chev", "›")); t.onclick = inProject(e.p, fn); acts.appendChild(t); };
     if (e.act === "submit") act("제출 전 점검하기", "제출물과 저장소를 대조해요", submit);
     if (e.act === "apply") act("신청 확인 시작", "참가 자격 확인 · 신청 페이지 열기", () => { me("신청 확인할래"); applyFlow(e.p.extract); });
@@ -3085,7 +3243,7 @@ function renderCal() {
     b.onclick = () => box.classList.toggle("open");
     box.appendChild(b); box.appendChild(acts); list.appendChild(box);
   });
-  body.appendChild(list);
+  evCard.appendChild(list); body.appendChild(evCard);
 }
 
 /* ---------- 보관함 ---------- */
@@ -3095,7 +3253,7 @@ function renderBox() {
   document.querySelectorAll(".seg button").forEach((b) => b.classList.toggle("sel", b.dataset.seg === seg));
   const body = $("boxBody"); body.innerHTML = "";
   const list = seg === "tasks" ? tasks : docs;
-  if (!list.length) { const e = h("div", "empty"); e.innerHTML = MASCOT(72, true); e.appendChild(h("b", null, seg === "tasks" ? "아직 맡긴 일이 없어요" : "아직 만든 문서가 없어요")); e.appendChild(h("span", null, seg === "tasks" ? "승인해서 실행한 일이 여기 쌓여요." : "신청서·제출 초안이 여기 모여요.")); body.appendChild(e); return; }
+  if (!list.length) { const e = h("div", "empty"); e.innerHTML = MASCOT(72, true); e.appendChild(h("b", null, seg === "tasks" ? "아직 맡긴 일 없음" : "아직 만든 문서 없음")); e.appendChild(h("span", null, seg === "tasks" ? "승인해서 실행한 일이 여기에 쌓임" : "신청서·제출 초안이 여기에 모임")); body.appendChild(e); return; }
   const l = h("div", "list");
   list.forEach((x) => { const c = h("div", "li"); const top = h("div", "li-top"); top.appendChild(h("b", null, x.title)); if (x.status) top.appendChild(h("span", "tag" + (x.status === "완료" ? " done" : ""), x.status)); c.appendChild(top); c.appendChild(h("small", null, x.detail || x.body)); if (x.body) { const cb = copyBtn("복사", () => x.body); cb.style.alignSelf = "flex-start"; cb.style.marginTop = "6px"; c.appendChild(cb); } l.appendChild(c); });
   body.appendChild(l);
@@ -3132,26 +3290,30 @@ function syncNav(tab) {  // 탭 첫 화면은 ☰, 안으로 들어간 화면은
 }
 function openMe(page) { mePage = page; setTimeout(() => syncNav("me")); try { history.pushState({ tab: "me", page }, "", "#me-" + page); } catch (e) { /* 무시 */ } renderMe(); $("v-me").scrollTop = 0; }
 function buildRoles(v, closeSheet) {
-  if (curDraft()) { v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 정할 수 있어요.")); return; }
-  const cr = h("div", "card"); cr.appendChild(h("b", null, "팀 역할"));
-  cr.appendChild(h("div", "note", "역할을 정해 두면 계획 단계와 할 일을 역할에 맞는 사람에게 맡기고, 리뷰어도 같은 역할 팀원을 먼저 추천해요. 한 사람이 3개까지 맡을 수 있어요. 저장하면 바로 팀 저장소에 남아 팀원 모두 같은 역할표를 봐요."));
-  const body = h("div"); body.textContent = "역할표를 불러오고 있어요…"; cr.appendChild(body); v.appendChild(cr);
+  if (curDraft()) { v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 정할 수 있음")); return; }
+  // 설명은 위에 따로 한 카드, 역할 고르기는 아래 카드
+  const ic = h("div", "card role-introcard");
+  const ul = h("ul", "perm-list role-intro");
+  ["계획 단계와 할 일을 역할에 맞는 사람에게 배정함", "리뷰어도 같은 역할 팀원을 먼저 추천함", "한 사람당 역할은 최대 3개", "저장하면 팀 저장소에 바로 반영돼 팀원 모두 같은 역할표를 봄"].forEach((t) => { const li = h("li"); li.appendChild(h("span", "pm", "•")); li.appendChild(h("span", null, t)); ul.appendChild(li); });
+  ic.appendChild(ul); v.appendChild(ic);
+  const cr = h("div", "card rolecard");
+  const body = h("div"); body.textContent = "역할표 불러오는 중…"; cr.appendChild(body); v.appendChild(cr);
   api("/roles").then((r) => {
     body.textContent = ""; const pick = {}; const ex = (r.members || []);
-    if (!ex.length) { body.textContent = "저장소 팀원을 읽지 못했어요."; return; }
+    if (!ex.length) { body.textContent = "저장소 팀원을 읽지 못함"; return; }
     ex.forEach((m) => {
       pick[m] = [...(r.roles[m] || [])];
       const row = h("div", "rolerow"); row.appendChild(nameWithFace(m, m + (m === meUser() ? " (나)" : ""), 28));
       const chips = h("div", "chips"); chips.setAttribute("role", "group"); chips.setAttribute("aria-label", `${m} 역할`);
       Object.entries(r.choices).forEach(([code, name]) => {
         const b = h("button", "chiptog", name); b.type = "button"; b.setAttribute("aria-pressed", String(pick[m].includes(code)));
-        b.onclick = () => { const on = pick[m].includes(code); if (!on && pick[m].length >= 3) return snack("3개까지 고를 수 있어요"); pick[m] = on ? pick[m].filter((x) => x !== code) : [...pick[m], code]; b.setAttribute("aria-pressed", String(!on)); };
+        b.onclick = () => { const on = pick[m].includes(code); if (!on && pick[m].length >= 3) return snack("3개까지 고를 수 있음"); pick[m] = on ? pick[m].filter((x) => x !== code) : [...pick[m], code]; b.setAttribute("aria-pressed", String(!on)); };
         chips.appendChild(b);
       });
       row.appendChild(chips); body.appendChild(row);
     });
     const sv = h("button", "btn primary", "역할 저장"); sv.type = "button"; sv.style.marginTop = "12px";
-    sv.onclick = async () => { sv.disabled = true; try { const r = await api("/roles", { method: "POST", body: JSON.stringify({ repo: curRepo(), roles: pick }) }); if (!r.saved) { snack(r.message || "바뀐 역할이 없어요"); sv.disabled = false; return; } snack("팀 역할을 저장했어요"); if (closeSheet) closeSheet(); lastTriage = null; refreshHome(); loadBoard(); if (mePage === "roles") renderMe(); bot("역할을 저장했어요. 이제 계획과 할 일을 역할대로 나눠요."); } catch (e) { sv.disabled = false; fail(e); } };
+    sv.onclick = async () => { sv.disabled = true; try { const r = await api("/roles", { method: "POST", body: JSON.stringify({ repo: curRepo(), roles: pick }) }); if (!r.saved) { snack(!r.message || /바뀐 역할이 없/.test(r.message) ? "바뀐 역할이 없음" : r.message, true); sv.disabled = false; return; } snack("팀 역할을 저장함"); if (closeSheet) closeSheet(); lastTriage = null; refreshHome(); loadBoard(); if (mePage === "roles") renderMe(); bot("역할을 저장했어요. 이제 계획과 할 일을 역할대로 나눠요."); } catch (e) { sv.disabled = false; fail(e); } };
     body.appendChild(sv);
   }).catch((e) => { body.textContent = e.message; });
 }
@@ -3168,106 +3330,135 @@ function openRolesSheet() {
 const ME_PAGES = {
   connect: ["연결된 서비스", (v) => {
   if (!DISC.__fresh) { loadDiscord().then(() => { DISC.__fresh = true; if (mePage === "connect") renderMe(); }); }
-  const c2 = h("div", "card"); c2.appendChild(h("b", null, "연결 상태"));
-  const rows = [["GitHub", H.mode === "live" ? `연결됨 · ${H.repo}` : "데모 저장소를 쓰고 있어요 · 실제 저장소는 대회 신청 뒤 연결 단계에서 연결해요", H.mode === "live"], ["Claude AI (공고 분석·자유 대화)", H.ai ? "연결됨" : "꺼져 있어요 · 정해진 말만 알아들어요 (서버를 운영하는 사람이 설정해요)", H.ai], ["디스코드 팀 채널", DISC.connected ? (DISC.source === "team" ? "연결됨 · 이 팀이 연결한 채널" : "연결됨 · 서버 기본 채널") : "미연결 · 팀 메시지는 복사만 돼요", DISC.connected], ["팀 접근 코드", H.needs_code ? (store.get("code", "") ? "입력함" : "실행할 때 물어봐요") : "사용 안 함", H.needs_code]];
+  const c2 = h("div", "card");
+  const rows = [["GitHub", H.mode === "live" ? `연결됨 · ${H.repo}` : "데모 저장소 사용 중 · 실제 저장소는 대회 신청 뒤 연결 단계에서 연결함", H.mode === "live"], ["Claude AI (공고 분석·자유 대화)", H.ai ? "연결됨" : "꺼져 있음 · 정해진 말만 알아들음 (서버 운영자가 설정함)", H.ai], ["Discord 팀 채널", DISC.connected ? (DISC.source === "team" ? "연결됨 · 이 팀이 연결한 채널" : "연결됨 · 서버 기본 채널") : "미연결 · 팀 메시지는 복사만 됨", DISC.connected], ["팀 접근 코드", H.needs_code ? (store.get("code", "") ? "입력함" : "실행할 때 물어봄") : "사용 안 함", H.needs_code]];
   const connectAsk = (n) => {
-    if (n.startsWith("디스코드")) {
+    if (n.startsWith("Discord")) {
       if (!DISC.connected) return { open: () => openDiscordConnect() };
-      if (DISC.source === "team") return { tag: "관리 ›", open: () => confirmSheet({ title: "디스코드 연결을 끊을까요?", body: "끊으면 팀 메시지는 다시 복사만 돼요. 언제든 다시 연결할 수 있어요.", ok: "연결 끊기", danger: true, onOk: async () => { try { await api("/discord/disconnect", { method: "POST", body: JSON.stringify({ repo: curRepo() }) }); await loadDiscord(); snack("디스코드 연결을 끊었어요"); renderMe(); } catch (e) { snack(e.message || "끊지 못했어요"); } } }) };
+      if (DISC.source === "team") return { tag: "관리 ›", open: () => confirmSheet({ title: "Discord 연결을 끊을까요?", body: "끊으면 팀 메시지는 다시 복사만 됨. 언제든 다시 연결할 수 있음", ok: "연결 끊기", onOk: async () => { try { await api("/discord/disconnect", { method: "POST", body: JSON.stringify({ repo: curRepo() }) }); await loadDiscord(); snack("Discord 연결을 끊음"); renderMe(); } catch (e) { snack(e.message || "끊지 못함"); } } }) };
     }
-    // GitHub는 로그인 후 신청 → 저장소 연결 단계에서 연결하고, Claude AI는 서버 설정(환경 변수)이라 서버 운영자가 한다 → 이 둘은 상태만 보여 준다. 디스코드는 팀원이 직접 연결한다
+    // GitHub는 로그인 후 신청 → 저장소 연결 단계에서 연결하고, Claude AI는 서버 설정(환경 변수)이라 서버 운영자가 한다 → 이 둘은 상태만 보여 준다. Discord는 팀원이 직접 연결한다
     return null;
   };
-  rows.forEach(([n, s, on]) => { const ask = connectAsk(n); const r = h(ask ? "button" : "div", ask ? "app tap" : "app"); if (ask) { r.type = "button"; r.onclick = ask.open; } const ic = h("span", "ico", on ? "✓" : "·"); ic.style.background = on ? "var(--ok)" : "var(--surface-2)"; r.appendChild(ic); const tx = h("span"); tx.appendChild(h("b", null, n)); const sm = h("small", null, s); sm.style.display = "block"; sm.style.color = "var(--muted)"; sm.style.fontSize = "13px"; tx.appendChild(sm); r.appendChild(tx); r.appendChild(ask ? h("span", "conn", ask.tag || "연결 ›") : h("span")); c2.appendChild(r); });
+  rows.forEach(([n, s, on]) => { const ask = connectAsk(n); const r = h(ask ? "button" : "div", ask ? "app tap" : "app"); if (ask) { r.type = "button"; r.onclick = ask.open; } const ic = h("span", "ico ico-sm" + (on ? " on" : ""), on ? "✓" : "·"); r.appendChild(ic); const tx = h("span"); tx.appendChild(h("b", null, n)); const sm = h("small", null, s); sm.style.display = "block"; sm.style.color = "var(--muted)"; sm.style.fontSize = "13px"; tx.appendChild(sm); r.appendChild(tx); r.appendChild(ask ? h("span", "conn", ask.tag || "연결 ›") : h("span")); c2.appendChild(r); });
   v.appendChild(c2);
   if (H.mode !== "live") {
-    const c6 = h("div", "card"); c6.appendChild(h("b", null, "데모 저장소")); c6.appendChild(h("div", "note", "가짜 저장소라 실행해도 실제 GitHub에는 남지 않아요. 처음 상태로 되돌릴 수 있어요."));
-    const rs = h("button", "btn", "데모 저장소 초기화"); rs.type = "button"; rs.style.marginTop = "8px"; rs.onclick = async () => { try { await api("/demo/reset", { method: "POST" }); snack("데모 저장소를 처음 상태로 돌렸어요"); loadCalState(); } catch (e) { snack(e.message); } };
+    const c6 = h("div", "card"); c6.appendChild(h("b", null, "데모 저장소")); c6.appendChild(h("div", "note", "가짜 저장소라 실행해도 실제 GitHub에는 남지 않음. 처음 상태로 되돌릴 수 있음"));
+    const rs = h("button", "btn", "데모 저장소 초기화"); rs.type = "button"; rs.style.marginTop = "8px"; rs.onclick = async () => { try { await api("/demo/reset", { method: "POST" }); snack("데모 저장소를 처음 상태로 돌림"); loadCalState(); } catch (e) { snack(e.message); } };
     c6.appendChild(rs); v.appendChild(c6);
   }
   }],
   projects: ["팀플 목록", (v) => {
-  const c = h("div", "card"); c.appendChild(h("div", "note", "눌러서 바꾸면 홈·캘린더도 그 팀플로 바뀌어요.")); const box = h("div"); c.appendChild(box); v.appendChild(c);
-  fillProjectList(box, () => {}).catch(() => {});
+  const c = h("div", "card projcard"); const box = h("div"); c.appendChild(box); v.appendChild(c);
+  fillProjectList(box, () => {}, true).catch(() => {});  // 마이페이지에서는 팀플을 바꿔도 대화로 넘어가지 않는다
   }],
   who: ["내 GitHub 계정", (v) => {
   if (ME.logged_in) {
     const c = h("div", "card"); const top = h("div"); top.style.display = "flex"; top.style.alignItems = "center"; top.style.gap = "12px";
     if (ME.avatar) { const im = h("img"); im.src = ME.avatar; im.alt = ""; im.width = 48; im.height = 48; im.style.borderRadius = "50%"; im.referrerPolicy = "no-referrer"; top.appendChild(im); }
     const tx = h("div"); tx.appendChild(h("b", null, ME.name || ME.login)); tx.appendChild(h("div", "note", "@" + ME.login)); top.appendChild(tx); c.appendChild(top);
-    const nt = h("div", "note", ME.member === false ? `${curRepo()} 팀원이 아니라서 승인은 할 수 없어요.` : "승인하면 이 계정 이름으로 GitHub에 남아요."); nt.style.marginTop = "10px"; c.appendChild(nt);
-    const lo = h("button", "btn", "로그아웃"); lo.type = "button"; lo.style.marginTop = "10px"; lo.onclick = () => confirmSheet({ title: "로그아웃할까요?", body: "승인하려면 다시 GitHub로 로그인해야 해요. 이 기기에 저장한 기록은 그대로 남아요.", ok: "로그아웃", danger: true, onOk: async () => { try { await fetch("/auth/logout", { method: "POST" }); } catch (e) { /* 무시 */ } ME = { logged_in: false }; mePage = null; renderMe(); renderHome(); snack("로그아웃했어요"); } });
+    const nt = h("div", "note", ME.member === false ? `${curRepo()} 팀원이 아니라서 승인할 수 없음` : "승인한 작업은 GitHub 기록에 이 계정이 승인자로 표시됨"); nt.style.marginTop = "10px"; nt.style.textAlign = "center"; c.appendChild(nt);
+    const lo = h("button", "btn", "로그아웃"); lo.type = "button"; lo.style.display = "flex"; lo.style.margin = "14px auto 0";  /* 로그아웃은 가운데 */ lo.onclick = () => confirmSheet({ title: "로그아웃할까요?", body: "승인하려면 다시 GitHub로 로그인해야 함. 이 기기에 저장한 기록은 그대로 남음", ok: "로그아웃", danger: true, onOk: async () => { try { await fetch("/auth/logout", { method: "POST" }); } catch (e) { /* 무시 */ } ME = { logged_in: false }; mePage = null; renderMe(); renderHome(); snack("로그아웃했어요"); } });
     c.appendChild(lo); v.appendChild(c); return;
   }
-  if (H.login) { const c = h("div", "card"); c.appendChild(h("div", "note", "GitHub로 로그인하면 누구인지 고를 필요가 없어요.")); const b = ghBtn("GitHub로 로그인", true); b.style.marginTop = "10px"; c.appendChild(b); v.appendChild(c); return; }
+  if (H.login) { const c = h("div", "card"); c.appendChild(h("div", "note", "GitHub로 로그인하면 누구인지 고를 필요 없음")); const b = ghBtn("GitHub로 로그인", true); b.style.marginTop = "10px"; c.appendChild(b); v.appendChild(c); return; }
   if (!curDraft() && lastTriage && lastTriage.members) {
     const cw = h("div", "card"); cw.appendChild(h("b", null, "나는")); const sel = h("select", "finput"); sel.id = "meSel"; sel.style.marginTop = "8px"; sel.setAttribute("aria-label", "내 GitHub 아이디");
-    const o0 = h("option", null, "골라 주세요"); o0.value = ""; sel.appendChild(o0); lastTriage.members.forEach((m) => { const o = h("option", null, m); o.value = m; if (m === meUser()) o.selected = true; sel.appendChild(o); });
-    sel.onchange = () => setMe(sel.value || null); cw.appendChild(sel); cw.appendChild(h("div", "note", `승인하면 'OO님 승인으로'라고 GitHub에 남아요. 오늘의 당번: ${lastTriage.duty || "-"}`)); v.appendChild(cw);
+    const o0 = h("option", null, "선택"); o0.value = ""; sel.appendChild(o0); lastTriage.members.forEach((m) => { const o = h("option", null, m); o.value = m; if (m === meUser()) o.selected = true; sel.appendChild(o); });
+    sel.onchange = () => setMe(sel.value || null); cw.appendChild(sel); cw.appendChild(h("div", "note", `승인하면 'OO님 승인으로'라고 GitHub에 남음. 오늘의 당번: ${lastTriage.duty || "-"}`)); v.appendChild(cw);
   }
-    if (curDraft() || !lastTriage) v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 고를 수 있어요."));
+    if (curDraft() || !lastTriage) v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 고를 수 있음"));
   }],
   roles: ["팀 역할", (v) => buildRoles(v, null)],
   duty: ["당번 돌아가기", (v) => {
-  if (curDraft() || !lastTriage || !lastTriage.members) { v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 정할 수 있어요.")); return; }
+  if (curDraft() || !lastTriage || !lastTriage.members) { v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 정할 수 있음")); return; }
   const rules = lastTriage.rules || { lazy: [], hours: 24, rotate: 1 }; const rot = rules.rotate || 1; const sch = lastTriage.duty_schedule || [];
   const md = (iso) => { const d = new Date(iso + "T00:00:00"); return `${d.getMonth() + 1}/${d.getDate()}`; };
-  const card = h("div", "card"); card.appendChild(h("b", null, "당번 돌아가기"));
-  const n0 = h("div", "note", "승인을 맡은 사람이 없는 일은 그날의 당번이 먼저 챙겨요. 순서는 한 번 무작위로 정해서 고정하고, 정한 날수마다 다음 사람에게 넘어가요. 디스코드를 연결해 두면 당번이 바뀌는 날 알려 줘요(서버에서 자동 알림을 켠 경우)."); card.appendChild(n0);
-  const list = h("div"); list.style.marginTop = "8px";
-  sch.forEach((x, i) => { const r = h("div", "app"); r.style.gridTemplateColumns = "1fr auto"; const t = h("span"); t.appendChild(nameWithFace(x.who, x.who + (i === 0 ? " · 지금" : ""), 28)); r.appendChild(t); const dt = h("span", "note", x.from === x.to ? md(x.from) : `${md(x.from)} ~ ${md(x.to)}`); r.appendChild(dt); list.appendChild(r); });
+  // 설명은 위 카드에 한 줄씩, 당번 순서·주기 고르기는 아래 카드
+  const ic = h("div", "card role-introcard"); const ul = h("ul", "perm-list role-intro");
+  ["승인 담당자가 없는 일은 그날의 당번이 먼저 챙김", "순서는 한 번 무작위로 정해 고정하고, 정한 날수마다 다음 사람에게 넘어감", "Discord를 연결해 두면 당번이 바뀌는 날 알려 줌 (서버 자동 알림을 켠 경우)", "주기를 바꾸면 팀 전체에 영향을 주므로 팀원 승인을 받음", "저장한 날부터 새 주기로 시작함"].forEach((t) => { const li = h("li"); li.appendChild(h("span", "pm", "•")); li.appendChild(h("span", null, t)); ul.appendChild(li); });
+  ic.appendChild(ul); v.appendChild(ic);
+  const pc = h("div", "card dutycard duty-period");  // 변경 주기 + 순서 섞기 + 저장
+  const card = h("div", "card dutycard");  // 당번 순서
+  const list = h("div", "duty-list");
+  sch.forEach((x, i) => { const r = h("div", "app" + (i === 0 ? " now" : " later")); r.style.gridTemplateColumns = "1fr auto"; const t = h("span", "duty-who"); t.appendChild(nameWithFace(x.who, x.who, 28)); if (i === 0) { const ck = h("span", "duty-check", "✓"); ck.setAttribute("aria-label", "지금 당번"); t.appendChild(ck); } r.appendChild(t); const dt = h("span", "note", x.from === x.to ? md(x.from) : `${md(x.from)} ~ ${md(x.to)}`); r.appendChild(dt); list.appendChild(r); });
   card.appendChild(list);
-  const hl = h("div", "lab", "몇 일마다 바꿀까요?"); hl.style.marginTop = "12px"; card.appendChild(hl);
+  const hl = h("div", "lab duty-q", "변경 주기"); pc.appendChild(hl);
   let pick = rot, reshuffle = false; const opts = [[1, "매일"], [2, "2일"], [3, "3일"], [7, "일주일"]]; if (!opts.some(([d]) => d === rot)) opts.push([rot, `${rot}일`]);
   const seg = h("div", "hseg"); seg.setAttribute("role", "radiogroup"); seg.setAttribute("aria-label", "당번을 바꾸는 주기");
-  const sv = h("button", "btn primary", "팀원에게 승인받고 저장"); sv.type = "button"; sv.style.marginTop = "12px";
+  const sv = h("button", "btn primary", "팀원에게 승인받고 저장"); sv.type = "button";
   const dirty = () => pick !== rot || reshuffle || !rules.seed; const sync = () => { sv.disabled = !dirty(); seg.querySelectorAll(".hsegopt").forEach((b) => b.setAttribute("aria-checked", String(+b.dataset.d === pick))); };
   opts.sort((a, b) => a[0] - b[0]).forEach(([d, name]) => { const b = h("button", "hsegopt", name); b.type = "button"; b.dataset.d = String(d); b.setAttribute("role", "radio"); b.onclick = () => { pick = d; sync(); }; seg.appendChild(b); });
-  card.appendChild(seg);
-  const sf = h("button", "btn", rules.seed ? "순서 다시 섞기" : "순서 무작위로 정하기"); sf.type = "button"; sf.style.marginTop = "10px"; sf.style.display = "block";
-  sf.onclick = () => { reshuffle = !reshuffle; sf.textContent = reshuffle ? "✓ 저장하면 순서를 새로 섞어요" : (rules.seed ? "순서 다시 섞기" : "순서 무작위로 정하기"); sync(); };
-  card.appendChild(sf);
-  const nn = h("div", "note", "바꾸면 팀 전체에 영향을 주니 팀원 승인을 받아요. 저장한 날부터 새 주기로 시작해요."); nn.style.marginTop = "8px"; card.appendChild(nn);
+  pc.appendChild(seg);
+  const sf = h("button", "btn", rules.seed ? "순서 다시 섞기" : "순서 무작위로 정하기"); sf.type = "button"; sf.classList.add("duty-shuffle");
+  sf.onclick = () => { reshuffle = !reshuffle; sf.textContent = reshuffle ? "✓ 저장하면 순서를 새로 섞음" : (rules.seed ? "순서 다시 섞기" : "순서 무작위로 정하기"); sync(); };
+  pc.appendChild(sf);
   sv.onclick = async () => { sv.disabled = true; try { const p = await api("/team-rules", { method: "POST", body: JSON.stringify({ repo: curRepo(), lazy: rules.lazy || [], hours: rules.hours || 24, rotate_days: pick, reshuffle }) }); approval(p.proposal, (ok) => { if (ok) { refreshHome(); setTimeout(() => { if (mePage === "duty") renderMe(); }, 600); } else sync(); }); } catch (e) { snack(e.message); sync(); } };
-  card.appendChild(sv); v.appendChild(card); sync();
+  pc.appendChild(h("div", "duty-sep")); pc.appendChild(sv); v.appendChild(card); v.appendChild(pc); sync();  // 저장 버튼 위에 구분선
   }],
   rules: ["반대가 없으면 실행", (v) => {
   if (!curDraft() && lastTriage && lastTriage.members) {
     const rules = lastTriage.rules || { lazy: [], hours: 24 };
-    const cr = h("div", "card"); cr.appendChild(h("b", null, "반대가 없으면 실행 (팀 규칙)"));
-    cr.appendChild(h("div", "note", "승인이 12시간 넘게 없으면 Bento가 GitHub에 예고 댓글을 달고, 정한 시간 동안 아무도 👎를 누르지 않으면 실행해요. 위험이 낮은 일만 고를 수 있어요."));
-    const boxes = {}; [["reviewers", "리뷰어 지정"], ["reminders", "리마인드 댓글"]].forEach(([k2, n]) => { const l = h("label", "hcheck"); l.style.marginTop = "8px"; const cb = h("input"); cb.type = "checkbox"; cb.id = "rule-" + k2; cb.checked = rules.lazy.includes(k2); l.htmlFor = cb.id; l.appendChild(cb); l.appendChild(h("span", null, n)); cr.appendChild(l); boxes[k2] = cb; });
-    const hl = h("div", "lab", "기다리는 시간"); hl.style.marginTop = "12px"; const hs = { value: String(rules.hours) }; const seg = h("div", "hseg"); seg.setAttribute("role", "radiogroup"); seg.setAttribute("aria-label", "기다리는 시간");
+    // 설명은 위 카드에 한 줄씩, 고르는 부분은 아래 카드
+    const ic = h("div", "card role-introcard"); const ul = h("ul", "perm-list role-intro");
+    ["승인이 12시간 넘게 없으면 Bento가 GitHub에 예고 댓글을 남김", "정한 시간 동안 아무도 반대하지 않으면 실행함", "위험이 낮은 일만 고를 수 있음", "이슈 닫기·마감 바꾸기·제출은 항상 승인이 필요함", "이 규칙을 바꾸는 것도 팀원 승인을 받음"].forEach((t) => { const li = h("li"); li.appendChild(h("span", "pm", "•")); li.appendChild(h("span", null, t)); ul.appendChild(li); });
+    ic.appendChild(ul); v.appendChild(ic);
+    const cr = h("div", "card dutycard rulecard");
+    cr.appendChild(h("div", "lab duty-q", "승인 없이 실행할 일"));
+    const bx = h("div", "rule-boxes"); cr.appendChild(bx);
+    const boxes = {}; [["reviewers", "리뷰어 지정"], ["reminders", "리마인드 댓글"]].forEach(([k2, n]) => { const l = h("label", "hcheck"); const cb = h("input"); cb.type = "checkbox"; cb.id = "rule-" + k2; cb.checked = rules.lazy.includes(k2); l.htmlFor = cb.id; l.appendChild(cb); l.appendChild(h("span", null, n)); bx.appendChild(l); boxes[k2] = cb; });
+    const hl = h("div", "lab duty-q", "기다리는 시간"); hl.style.marginTop = "28px"; const hs = { value: String(rules.hours) }; const seg = h("div", "hseg"); seg.setAttribute("role", "radiogroup"); seg.setAttribute("aria-label", "기다리는 시간");
     [12, 24, 48].forEach((x) => { const o = h("button", "hsegopt", `${x}시간`); o.type = "button"; o.setAttribute("role", "radio"); const sync = () => o.setAttribute("aria-checked", String(hs.value === String(x))); sync(); o.onclick = () => { hs.value = String(x); seg.querySelectorAll(".hsegopt").forEach((b) => b.setAttribute("aria-checked", String(b === o))); }; seg.appendChild(o); });
     cr.appendChild(hl); cr.appendChild(seg);
-    cr.appendChild(h("div", "note", "이슈 닫기·마감 바꾸기·제출은 늘 승인이 필요해요. 규칙을 바꾸는 것도 팀원 승인을 받아요."));
-    const sv = h("button", "btn primary", "팀 규칙 바꾸기"); sv.type = "button"; sv.style.marginTop = "10px";
+    const sv = h("button", "btn primary", "팀 규칙 바꾸기"); sv.type = "button";
     sv.onclick = async () => { sv.disabled = true; try { const r = await api("/team-rules", { method: "POST", body: JSON.stringify({ repo: curRepo(), lazy: Object.keys(boxes).filter((k2) => boxes[k2].checked), hours: +hs.value }) }); approval(r.proposal, (ok) => { if (ok) refreshHome(); }); } catch (e) { snack(e.message); } sv.disabled = false; };
-    cr.appendChild(sv); v.appendChild(cr);
+    cr.appendChild(h("div", "duty-sep")); cr.appendChild(sv); v.appendChild(cr);
   }
-    if (curDraft() || !lastTriage) v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 정할 수 있어요."));
+    if (curDraft() || !lastTriage) v.appendChild(h("div", "note", "저장소가 연결된 팀플에서 정할 수 있음"));
   }],
   interests: ["관심 분야", (v) => {
-  const ci = h("div", "card"); ci.appendChild(h("b", null, "관심 분야")); ci.appendChild(h("div", "note", "눌러서 고르면, 찾아온 대회에서 이 분야를 먼저 보여 줘요."));
+  const ci = h("div", "card interestcard"); ci.appendChild(h("div", "note", "눌러서 고르면, 찾아온 대회에서 이 분야를 먼저 보여 줌"));  // 제목 없이, 전부 가운데 정렬
   const cw2 = h("div", "chips"); INTERESTS.forEach((x) => { const on = interests().includes(x); const b = h("button", "chiptog", x); b.type = "button"; b.setAttribute("aria-pressed", String(on)); b.onclick = () => { const cur2 = interests(); store.set("interests", on ? cur2.filter((y) => y !== x) : [...cur2, x]); renderMe(); loadDiscover(); }; cw2.appendChild(b); }); ci.appendChild(cw2);
-  if (lastDiscover) {
-    const sl = h("div", "note"); sl.style.marginTop = "10px"; sl.style.whiteSpace = "pre-line";
-    sl.textContent = "찾아보는 곳: " + lastDiscover.sources.map((x) => x.name + (x.ai ? "" : " (AI 미사용)")).join(", ") + `\n마지막 확인: ${new Date(lastDiscover.checked_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} · 같은 사이트는 10초 간격, 1시간에 한 번만 읽어요\n` + lastDiscover.not_auto.map((x) => `${x.name}: ${x.why}`).join("\n");
-    ci.appendChild(sl);
-  }
   v.appendChild(ci);
+  if (lastDiscover) {  // 대회를 찾아보는 곳: 다른 설명 카드(반대가 없으면 실행 등)와 같은 • 목록 카드
+    const auto = lastDiscover.sources.map((x) => x.name.replace(/\s*\(.*\)$/, ""));
+    const manual = lastDiscover.not_auto.filter((x) => x.name !== "로켓펀치").map((x) => x.name);
+    const when = new Date(lastDiscover.checked_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
+    const items = [`${auto.join(", ")}에서 대회를 자동으로 찾아봄`];
+    if (lastDiscover.sources.some((x) => !x.ai)) items.push("학부 글은 AI 없이 읽음");
+    if (manual.length) items.push(`${manual.join(", ")}의 공모전은 링크를 붙여넣으면 분석함`);
+    if (lastDiscover.not_auto.some((x) => x.name === "로켓펀치")) items.push("로켓펀치는 스타트업 채용 위주라 찾지 않음");
+    items.push(`같은 사이트는 1시간에 한 번만 읽음 (마지막 확인 ${when})`);
+    const sc = h("div", "card role-introcard"); const ul = h("ul", "perm-list role-intro");
+    items.forEach((t) => { const li = h("li"); li.appendChild(h("span", "pm", "•")); li.appendChild(h("span", null, t)); ul.appendChild(li); });
+    sc.appendChild(ul); v.insertBefore(sc, ci);  // 설명 카드는 관심 분야 칩 위에
+  }
   }],
-  perm: ["권한은 이렇게 써요", (v) => {
-  const c4 = h("div", "card"); c4.appendChild(h("b", null, "권한을 이렇게 쓰고 있어요")); const p = h("div", "note"); p.style.marginTop = "6px"; p.style.whiteSpace = "pre-line";
-  p.textContent = "승인받고 직접 하는 일: 리뷰어 지정, 댓글, 이슈·마일스톤 만들기, 담당자 지정, 이슈 닫기, 디스코드 팀 메시지\n하지 않는 일: 머지, 푸시, 코드 수정, 폼 제출. 대신 링크와 명령어를 드려요.\n저장소 글 속에 에이전트에게 하는 지시가 있으면 따르지 않고 표시만 해요.\n팀원 여럿이 같은 제안을 승인해도 한 번만 실행하고, 그사이 다른 팀원이 바꾼 건 덮어쓰지 않아요.";
-  c4.appendChild(p); v.appendChild(c4);
+  perm: ["권한 사용", (v) => {
+  // 세 묶음으로 나눠 한눈에: 승인받으면 하는 일 / 하지 않는 일 / 안전장치
+  const sec = (title, mark, items, foot) => {
+    const c = h("div", "card permcard"); c.appendChild(h("b", null, title));
+    const ul = h("ul", "perm-list"); items.forEach((t) => { const li = h("li"); li.appendChild(h("span", "pm", mark)); li.appendChild(h("span", null, t)); ul.appendChild(li); }); c.appendChild(ul);
+    if (foot) c.appendChild(h("div", "note", foot));
+    v.appendChild(c);
+  };
+  sec("승인받으면 하는 일", "✓", ["리뷰어 지정", "댓글 남기기", "이슈·마일스톤 만들기", "담당자 지정", "이슈 닫기", "Discord 팀 메시지"]);
+  sec("하지 않는 일", "✕", ["머지", "푸시", "코드 수정", "폼 제출"], "대신 링크와 명령어를 제공함");
+  sec("안전장치", "•", ["저장소 글 속 '에이전트에게 하는 지시'는 따르지 않고 표시만 함", "여러 명이 같은 제안을 승인해도 한 번만 실행함", "그사이 다른 팀원이 바꾼 내용은 덮어쓰지 않음"]);
   }],
-  data: ["이 기기 기록", (v) => {
-  const c5 = h("div", "card"); const cl = h("button", "btn", "이 기기 기록 지우기"); cl.type = "button"; const clearAll = () => { try { Object.keys(localStorage).filter((k) => /^bento:(extract|plan|colors|calHide|progressSeen|info|form|done)/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch (e) { /* 무시 */ } ["tasks", "docs", "drafts"].forEach((k) => store.set(k, [])); store.set("code", ""); tasks.length = 0; docs.length = 0; drafts.length = 0; extract = null; if (cur && cur.draft) { cur = { repo: curRepo() }; store.set("cur", cur); } renderHead(); renderBox(); renderCal(); renderMe(); snack("이 기기 기록을 지웠어요"); }; cl.onclick = () => confirmSheet({ title: "이 기기 기록을 지울까요?", body: "맡긴 일·초안·계획·내 정보 메모가 이 기기에서 지워져요. GitHub에 남은 기록은 그대로예요.\n지우면 되돌릴 수 없어요.", ok: "지우기", danger: true, onOk: clearAll }); c5.appendChild(cl); v.appendChild(c5);  }],
+  data: ["기기 기록", (v) => {
+  const c5 = h("div", "card"); c5.style.display = "flex"; c5.style.justifyContent = "center"; c5.style.padding = "24px 16px"; const cl = h("button", "btn", "기기 기록 지우기"); cl.type = "button";  /* 버튼은 가운데 */ const clearAll = () => { try { Object.keys(localStorage).filter((k) => /^bento:(extract|plan|colors|calHide|progressSeen|info|form|done)/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch (e) { /* 무시 */ } ["tasks", "docs", "drafts"].forEach((k) => store.set(k, [])); store.set("code", ""); tasks.length = 0; docs.length = 0; drafts.length = 0; extract = null; if (cur && cur.draft) { cur = { repo: curRepo() }; store.set("cur", cur); } renderHead(); renderBox(); renderCal(); renderMe(); snack("기기 기록을 지움"); }; cl.onclick = () => confirmSheet({ title: "기기 기록을 지울까요?", body: "맡긴 일·초안·계획·내 정보 메모가 이 기기에서 지워짐.\nGitHub에 남은 기록은 그대로임\n지우면 되돌릴 수 없음", ok: "지우기", danger: true, onOk: clearAll }); c5.appendChild(cl); v.appendChild(c5);  }],
   help: ["도움말", (v) => {
-    const c = h("div", "card"); const p2 = h("div", "note"); p2.style.whiteSpace = "pre-line"; p2.style.fontSize = "14px"; p2.style.color = "var(--ink)";
-    p2.textContent = "1. 홈에서 Bento가 찾아온 대회를 고르거나, 대화에서 공고 링크를 붙여넣어요.\n2. 참가 자격을 확인하고, 신청 페이지에서 직접 신청해요.\n3. 팀 저장소를 만들고 Bento 앱을 설치하면 협업을 챙겨요.\n4. Bento가 제안한 일은 승인해야 실행돼요. 머지·푸시·제출은 직접 해요.";
-    c.appendChild(p2); v.appendChild(c);
+    // 쓰는 순서를 단계별 카드로: 번호 · 제목 · 짧은 설명
+    const c = h("div", "card helpcard");
+    [["대회 고르기", "홈에서 Bento가 찾아온 대회를 고르거나, 대화에 공고 링크를 붙여넣음"],
+     ["직접 신청", "참가 자격을 확인하고 신청 페이지에서 직접 신청함"],
+     ["팀 저장소 연결", "팀 저장소를 만들고 Bento 앱을 설치하면 협업을 챙김"],
+     ["승인하고 실행", "Bento가 제안한 일은 승인해야 실행됨\n머지·푸시·제출은 직접 함"]].forEach(([t, d], i) => {
+      const r = h("div", "help-step"); r.appendChild(h("span", "help-num", String(i + 1)));
+      const tx = h("div"); tx.appendChild(h("b", null, t)); const sm = h("small", null, d); sm.style.whiteSpace = "pre-line"; tx.appendChild(sm); r.appendChild(tx); c.appendChild(r);
+    });
+    v.appendChild(c);
   }],
 };
 function renderMe() {
@@ -3276,26 +3467,27 @@ function renderMe() {
   v.appendChild(h("h1", null, "마이페이지"));
   // AI 사용량
   const cu = h("div", "card"); const top = h("div", "usage-top"); top.appendChild(h("b", null, "AI 사용량")); const use = h("span", null, "…"); top.appendChild(use); cu.appendChild(top);
-  const un = h("div", "note", "공고 분석에만 AI를 써요. 같은 공고는 다시 분석하지 않아요."); cu.appendChild(un); v.appendChild(cu);
+  const un = h("div", "note", "공고 분석에만 AI를 씀. 같은 공고는 다시 분석하지 않음"); cu.appendChild(un); v.appendChild(cu);
   api("/usage").then((u) => { use.textContent = `토큰 ${(u.input_tokens + u.output_tokens).toLocaleString()}`; un.textContent = `AI 분석 ${u.ai_calls}번 · 다시 쓴 분석 ${u.cache_hits}번 · 약 $${u.est_usd.toFixed(2)}`; }).catch(() => { use.textContent = "-"; });
-  // 중요한 줄 세 개
+  // 계정: 권한 · 로그인 · 연결된 서비스
+  v.appendChild(h("div", "glabel", "계정"));
   const g0 = h("div", "group");
-  g0.appendChild(meRow("shield", "권한은 이렇게 써요", "승인한 일만 · 머지·푸시는 안 해요", () => openMe("perm")));
-  if (ME.logged_in) { const r0 = meRow("user", ME.login, ME.member === false ? "GitHub 로그인 · 이 저장소 팀원 아님" : "GitHub 로그인", () => openMe("who")); if (ME.avatar) { const im = h("img"); im.src = ME.avatar; im.alt = ""; im.width = 26; im.height = 26; im.style.borderRadius = "50%"; im.referrerPolicy = "no-referrer"; r0.firstChild.innerHTML = ""; r0.firstChild.appendChild(im); } g0.appendChild(r0); }
-  else if (H.login) g0.appendChild(meRow("user", "GitHub로 로그인", "승인할 때 누구인지 GitHub가 확인해요", goLogin));
-  else g0.appendChild(meRow("user", meUser() || "내 GitHub 아이디 고르기", meUser() ? "내 GitHub 아이디" : "승인하면 이름이 GitHub에 남아요", () => openMe("who")));
+  g0.appendChild(meRow("shield", "권한 사용", "승인한 일에 대해서만 · 머지·푸시는 하지 않음", () => openMe("perm")));
+  if (ME.logged_in) { const r0 = meRow("user", ME.login, ME.member === false ? "GitHub 로그인 계정 · 이 저장소 팀원 아님" : "GitHub 로그인 계정", () => openMe("who")); r0.classList.add("me-acct"); if (ME.avatar) { const im = h("img"); im.src = ME.avatar; im.alt = ""; im.width = 26; im.height = 26; im.style.borderRadius = "50%"; im.referrerPolicy = "no-referrer"; r0.firstChild.innerHTML = ""; r0.firstChild.appendChild(im); } g0.appendChild(r0); }
+  else if (H.login) g0.appendChild(meRow("user", "GitHub로 로그인", "승인할 때 누구인지 GitHub가 확인함", goLogin));
+  else g0.appendChild(meRow("user", meUser() || "내 GitHub 아이디 고르기", meUser() ? "내 GitHub 아이디" : "승인하면 이름이 GitHub에 남음", () => openMe("who")));
   const conn = [H.mode === "live", H.ai, DISC.connected].filter(Boolean).length;
-  g0.appendChild(meRow("plug", `연결된 서비스 ${conn}개`, `GitHub ${H.mode === "live" ? "✓" : "데모"} · Claude ${H.ai ? "✓" : "–"} · 디스코드 ${DISC.connected ? "✓" : "–"}`, () => openMe("connect")));
+  g0.appendChild(meRow("plug", `연결된 서비스 ${conn}개`, `GitHub ${H.mode === "live" ? "✓" : "데모"} · Claude ${H.ai ? "✓" : "–"} · Discord ${DISC.connected ? "✓" : "–"}`, () => openMe("connect")));
   v.appendChild(g0);
   // 팀플
   v.appendChild(h("div", "glabel", "팀플"));
   const g1 = h("div", "group");
-  g1.appendChild(meRow("list", "팀플 목록", curDraft() ? `${projName()} · 준비 중` : `${projName()} · 진행 중`, () => openMe("projects")));
+  g1.appendChild(meRow("list", "팀플 목록", null, () => openMe("projects")));
   const rl = lastTriage && lastTriage.rules && lastTriage.rules.lazy.length ? `켜짐 · ${lastTriage.rules.hours}시간` : "꺼짐 · 모두 승인 필요";
   const rc = lastTriage && lastTriage.roles ? Object.keys(lastTriage.roles).length : 0;
-  g1.appendChild(meRow("user", "팀 역할", curDraft() ? "저장소 연결 뒤에 정해요" : rc ? `${rc}명 정함` : "아직 안 정함 · 정하면 역할대로 나눠요", () => openMe("roles")));
+  g1.appendChild(meRow("user", "팀 역할", null, () => openMe("roles")));
   const dr = lastTriage && lastTriage.rules ? lastTriage.rules.rotate || 1 : 1;
-  g1.appendChild(meRow("user", "당번 돌아가기", curDraft() ? "저장소 연결 뒤에 정해요" : lastTriage && lastTriage.duty ? `${dr === 1 ? "매일" : dr + "일마다"} · 지금 ${lastTriage.duty}님` : "승인을 맡은 사람이 없는 일은 당번이 먼저 챙겨요", () => openMe("duty")));
+  g1.appendChild(meRow("user", "당번 돌아가기", null, () => openMe("duty")));
   g1.appendChild(meRow("vote", "반대가 없으면 실행", rl, () => openMe("rules")));
   g1.appendChild(meRow("box", "보관함", `실행한 일 ${tasks.length}개 · 초안 ${docs.length}개`, () => showTab("box")));
   v.appendChild(g1);
@@ -3312,20 +3504,20 @@ function renderMe() {
     const frameOn = document.documentElement.dataset.frame === "on";
     const fk = h("span", "switch"); fk.setAttribute("aria-hidden", "true"); fk.setAttribute("aria-checked", String(frameOn)); fk.style.width = "auto"; fk.appendChild(h("span", "knob"));
     let fr; const flip = () => { const next = fr.getAttribute("aria-checked") !== "true"; if (next) document.documentElement.dataset.frame = "on"; else delete document.documentElement.dataset.frame; store.set("frame", next ? "on" : "off"); fr.setAttribute("aria-checked", String(next)); fk.setAttribute("aria-checked", String(next)); fitPhone(); };
-    fr = meRow("phone", "휴대폰 틀로 보기", "발표·촬영용: 노트북에서 휴대폰 화면처럼 보여 줘요. 기본은 꺼짐", flip, fk); fr.setAttribute("role", "switch"); fr.setAttribute("aria-checked", String(frameOn)); g2.appendChild(fr);
+    fr = meRow("phone", "휴대폰 틀로 보기", "발표·촬영용 · 휴대폰 화면처럼 보여 줌", flip, fk);  /* 다크 모드 줄처럼 짧게 한 줄로 */ fr.setAttribute("role", "switch"); fr.setAttribute("aria-checked", String(frameOn)); g2.appendChild(fr);
   }
   const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
   if (!standalone && matchMedia("(pointer: coarse)").matches) {  // 휴대폰 브라우저로 열었을 때만: 주소창 없이 전체 화면으로 쓰는 방법
-    g2.appendChild(meRow("phone", "앱처럼 전체 화면으로 쓰기", "주소창 없이 열려요 · 홈 화면에 추가", () => confirmSheet({
-      title: "홈 화면에 추가하면 앱처럼 열려요",
-      body: "주소창과 아래 도구 막대가 사라져서 화면을 더 넓게 쓸 수 있어요.\n\niPhone(Safari): 아래 공유 버튼 → '홈 화면에 추가'\nAndroid(Chrome): 오른쪽 위 ⋮ → '홈 화면에 추가' 또는 '앱 설치'",
-      ok: "알겠어요", cancel: "닫기" })));
+    g2.appendChild(meRow("phone", "앱처럼 전체 화면으로 쓰기", "주소창 없이 열림 · 홈 화면에 추가", () => confirmSheet({
+      title: "홈 화면에 추가하면 앱처럼 열림",
+      body: "주소창과 아래 도구 막대가 사라져서 화면을 더 넓게 쓸 수 있음\n\niPhone(Safari): 아래 공유 버튼 → '홈 화면에 추가'\nAndroid(Chrome): 오른쪽 위 ⋮ → '홈 화면에 추가' 또는 '앱 설치'",
+      ok: "확인", cancel: "닫기" })));
   }
-  g2.appendChild(meRow("trash", "이 기기 기록", "맡긴 일·초안·계획 지우기", () => openMe("data")));
+  g2.appendChild(meRow("trash", "기기 기록", "맡긴 일·초안·계획 지우기", () => openMe("data")));
   v.appendChild(g2);
   // 도움
   v.appendChild(h("div", "glabel", "도움"));
-  const g3 = h("div", "group"); g3.appendChild(meRow("help", "도움말", "Bento는 이렇게 써요", () => openMe("help"))); v.appendChild(g3);
+  const g3 = h("div", "group"); g3.appendChild(meRow("help", "도움말", "Bento 사용법", () => openMe("help"))); v.appendChild(g3);
   const ver = h("div", "note", "Bento 0.1 · 2026 컴퓨터학부 해커톤"); ver.style.textAlign = "center"; ver.style.margin = "14px 0"; v.appendChild(ver);
 }
 
@@ -3341,6 +3533,7 @@ function showTab(tab, segName) {
   // 휴대폰 뒤로 가기(제스처·버튼)로 이전 탭에 돌아오게 기록한다
   if (!showTab.fromPop && (!history.state || history.state.tab !== tab)) { try { history.pushState({ tab }, "", "#" + tab); } catch (e) { /* 기록 못 해도 동작 */ } }
   $("fab").hidden = tab !== "box";
+  $("projBtn").hidden = tab === "cal" || tab === "me" || tab === "box";  // 캘린더·마이페이지는 팀플을 고를 일이 없어 위의 팀플 고르기를 숨긴다
   if (tab === "home") { renderHome(); $("homeBadge").hidden = true; }
   if (tab === "cal") loadCalState();
   if (tab === "box") renderBox();
