@@ -53,6 +53,12 @@ def test_deployer_still_sees_their_repo_as_default():
     assert [p["repo"] for p in r["projects"]] == ["deployer/their-repo"] and r["default"] == "deployer/their-repo"
 
 
-def test_not_logged_in_keeps_old_behavior():
+def test_not_logged_in_sees_no_ones_repos():
     r = client.get("/api/projects").json()
-    assert len(r["projects"]) == 2 and not r["mine_only"]
+    assert r["projects"] == []  # 로그인 전에는 배포한 사람의 저장소도 보여 주지 않는다
+
+
+def test_demo_and_no_login_server_unchanged(monkeypatch):
+    monkeypatch.setattr(main, "settings", main.settings.__class__(**{**main.settings.__dict__, "client_id": None, "client_secret": None}))
+    r = client.get("/api/projects").json()  # 로그인을 켜지 않은 서버(팀 접근 코드 방식)는 지금처럼 전부
+    assert len(r["projects"]) == 2

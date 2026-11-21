@@ -273,7 +273,10 @@ def projects(request: Request):
             raise HTTPException(502, "설치된 저장소 목록을 읽지 못했어요") from e
     else:
         repos = [_demo.repo]
-    user = current_user(request) if settings.live and settings.login_enabled else None
+    mine_only = settings.live and settings.login_enabled
+    user = current_user(request) if mine_only else None
+    if mine_only and not user:
+        repos = []  # 로그인 전에는 누구의 저장소도 보여 주지 않는다 (배포한 사람의 저장소가 그대로 보이던 것)
     out = []
     for r in repos:
         if user:
