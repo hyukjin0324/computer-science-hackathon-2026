@@ -87,6 +87,8 @@ def watch(state: RepoState) -> list[dict]:
         recent = [m for m in state.members if (t := parse_ts(act.get(m))) and hours(t, now) < QUIET_H]
         if recent:
             for m in state.members:
+                if m == lead:
+                    continue  # 팀장이 자기 자신에게 안부 댓글을 승인하는 제안은 만들지 않는다
                 t = parse_ts(act.get(m))
                 if t and hours(t, now) < QUIET_H:
                     continue
@@ -115,15 +117,18 @@ def watch(state: RepoState) -> list[dict]:
             continue
         if re.search(rf"(?<![\w/])#{i.number}\b|(?<!\d){i.number}(?!\d)[-_/]", pr_text):
             continue  # 이 할 일을 다루는 PR이 열려 있다
-        stale.append((i, int(hours(up, now) // 24)))
+        targets = [a for a in i.assignees if a != lead]
+        if not targets:
+            continue  # 팀장 자신의 할 일은 '내 할 일'에서 보고, 자기 자신에게 댓글을 보내지는 않는다
+        stale.append((i, int(hours(up, now) // 24), targets))
     if stale:
         stale.sort(key=lambda x: -x[1])
         items.append({"id": "stale", "sev": "주의", "who": lead, "age": 0, "title": f"맡은 지 3일 넘게 그대로인 할 일 {len(stale)}개",
-                      "why": " · ".join(f"#{i.number} {i.title} ({', '.join(i.assignees)}, {d}일째)" for i, d in stale[:3]),
-                      "evidence": [issue_link(i, "진행 확인하러 가기") for i, _ in stale[:3]],
+                      "why": " · ".join(f"#{i.number} {i.title} ({', '.join(targets)}, {d}일째)" for i, d, targets in stale[:3]),
+                      "evidence": [issue_link(i, "진행 확인하러 가기") for i, _, _ in stale[:3]],
                       "options": [{"label": "담당자께 진행 상황 묻기", "recommended": True, "sub": f"이슈 {min(3, len(stale))}개에 댓글", "actions": [
-                          Comment(number=i.number, body=f"{' '.join('@' + a for a in i.assignees)} 님, 이 일은 어디까지 됐나요? 막힌 게 있으면 말씀해 주세요. 시작 전이면 PR이나 브랜치를 먼저 열어 두면 팀이 알 수 있어요!")
-                          for i, _ in stale[:3]]}]})
+                          Comment(number=i.number, body=f"{' '.join('@' + a for a in targets)} 님, 이 일은 어디까지 됐나요? 막힌 게 있으면 말씀해 주세요. 시작 전이면 PR이나 브랜치를 먼저 열어 두면 팀이 알 수 있어요!")
+                          for i, _, targets in stale[:3]]}]})
 
     # 6. 초대를 수락하지 않은 팀원
     inv = [x for x in (sig.get("invites") or []) if (t := parse_ts(x.get("at"))) and hours(t, now) >= INVITE_H]
@@ -149,8 +154,7 @@ def watch(state: RepoState) -> list[dict]:
                       "why": f"{', '.join(p.changes_by)} 님이 고쳐 달라고 했는데 그 뒤로 새 커밋이 없어요",
                       "evidence": [{"label": f"PR #{p.number}", "url": p.url}],
                       "handoff": [{"label": "리뷰 내용 보기", "url": f"{p.url}/files"}, {"label": "브랜치 받기", "command": f"git fetch origin && git checkout {shlex.quote(p.branch)}"}],
-                      "options": [{"label": f"{p.author} 님께 상황 묻기", "recommended": True, "sub": "PR 댓글", "actions": [
-                          Comment(number=p.number, body=f"@{p.author} 님, {', '.join(p.changes_by)} 님의 수정 요청이 남아 있어요. 고치기 어렵거나 생각이 다르면 리뷰에 답글로 남겨 주세요!")]}]})
+                      "options": []})
 
     # 8. 리뷰 승인 없이 머지된 PR
     mu = sig.get("merged_unreviewed") or []
@@ -169,8 +173,8 @@ def watch(state: RepoState) -> list[dict]:
                           "title": f"PR #{m['number']}이 리뷰 승인 없이 머지됐어요",
                           "why": f"{m['title']} · {m['author']} 님. " + ("마감이 가까워 바로 합친 것으로 보여요. 제출 전에 한 사람이 훑어보면 안전해요" if near else "급해서 그랬을 수 있어요. 머지된 뒤라도 한 사람이 훑어보면 실수를 일찍 찾아요"),
                           "evidence": [{"label": f"PR #{m['number']}", "url": m["url"]}],
-                          "options": [{"label": "팀원에게 머지 뒤 리뷰 부탁하기", "recommended": True, "sub": f"PR 댓글 · 추천 {others[0]} (댓글에서 바꿀 수 있어요)", "actions": [
-                              Comment(number=m["number"], body=f"@{others[0]} 님, 이 PR이 리뷰 없이 머지됐어요. 시간 될 때 한 번 훑어봐 주실 수 있을까요?")]}]})
+                          "handoff": [{"label": f"PR #{m['number']} 머지 뒤 리뷰하기", "url": m["url"]}],
+                          "options": []})
 
     # 9. 계정에 연결되지 않은 커밋 (기여도에 안 잡힌다). 이메일은 보여 주지 않는다
     loose: dict[str, list[dict]] = {}

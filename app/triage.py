@@ -98,10 +98,9 @@ def triage(state: RepoState, review_wait_hours: float = 24) -> list[dict]:
                     given[who] = given.get(who, 0) + 1
                     pairs.append((i, who))
             fallback = bool(pairs)
-        # 한두 개면 이유를 댓글로 남기고, 여러 개면 담당자 지정 알림만으로 충분하다 (댓글 폭탄 막기)
+        # 담당자 지정 자체가 GitHub 알림을 보내므로 별도 댓글은 만들지 않는다.
+        # 배정 대상이 이 제안을 승인하면 자기 자신에게 '맡아 달라'고 댓글을 보내는 문제도 막는다.
         acts = [AssignIssue(issue=i.number, users=[u], expect_assignees=list(i.assignees)) for i, u in pairs]
-        if len(pairs) <= 3:
-            acts += [Comment(number=i.number, body=f"@{u} 님, 이 일을 맡아 주실 수 있을까요? 어려우면 편하게 말씀해 주세요!") for i, u in pairs]
         sub = " · ".join(f"#{i.number} → {u}" for i, u in pairs[:4])
         if asked and not fallback:
             sub += (" · " if sub else "") + f"제목에 담당이 적힌 {len(asked)}개({', '.join('#' + str(i.number) for i in asked[:3])}{'…' if len(asked) > 3 else ''})는 직접 정해 주세요"
@@ -141,9 +140,7 @@ def triage(state: RepoState, review_wait_hours: float = 24) -> list[dict]:
                               {"label": "바뀐 파일 보기", "url": f"{pr.url}/files"},
                               {"label": "브랜치 받기", "command": f"git fetch origin && git checkout {shlex.quote(pr.branch)}"},
                               {"label": "main 최신 내용 합치기", "command": "git merge origin/main"} if pr.mergeable == "dirty" else None,
-                          ],
-                          "options": [{"label": f"{pr.author} 님께 상황 묻기", "recommended": True, "sub": "PR 댓글", "actions": [
-                              Comment(number=pr.number, body=f"@{pr.author} 님, 이 PR이 {', '.join(why)} 상태예요. 막힌 부분이 있으면 알려 주세요. 같이 볼 사람을 찾아 드릴게요!")]}]})
+                          ], "options": []})  # 작성자 자신의 할 일이라 자기 자신에게 상황을 묻는 댓글은 만들지 않는다
 
     # 5. 머지할 준비가 된 PR → 머지는 사람이
     for pr in state.prs:
@@ -151,9 +148,7 @@ def triage(state: RepoState, review_wait_hours: float = 24) -> list[dict]:
             items.append({"id": f"merge-{pr.number}", "sev": "바로 가능", "title": f"PR #{pr.number}은 머지할 준비가 됨",
                           "why": f"{', '.join(pr.approvals)} 님 승인 · CI {'통과' if pr.ci == 'pass' else '없음'} · 충돌 없음. 머지 버튼은 직접 눌러 주세요",
                           "evidence": [{"label": f"PR #{pr.number}", "url": pr.url}],
-                          "handoff": [{"label": f"PR #{pr.number} 머지하러 가기", "url": pr.url}],
-                          "options": [{"label": f"{pr.author} 님께 머지해도 된다고 알리기", "recommended": True, "sub": "PR 댓글", "actions": [
-                              Comment(number=pr.number, body=f"@{pr.author} 님, 리뷰 승인과 CI 확인이 끝나서 머지할 수 있어요!")]}]})
+                          "handoff": [{"label": f"PR #{pr.number} 머지하러 가기", "url": pr.url}], "options": []})
 
     # 6. 머지된 PR이 언급했는데 아직 열린 이슈
     for i in state.issues:
