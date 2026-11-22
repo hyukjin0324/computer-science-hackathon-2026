@@ -106,7 +106,7 @@ def triage(state: RepoState, review_wait_hours: float = 24) -> list[dict]:
         if asked and not fallback:
             sub += (" · " if sub else "") + f"제목에 담당이 적힌 {len(asked)}개({', '.join('#' + str(i.number) for i in asked[:3])}{'…' if len(asked) > 3 else ''})는 직접 정해 주세요"
         items.append({"id": "assign", "sev": "긴급" if _due_soon(state, unassigned) else "주의", "title": f"담당자 없는 이슈 {len(unassigned)}개",
-                      "why": "맡은 사람이 없는 이슈예요. 역할에 맞게 나눠 드릴까요?" + (f" (외 {len(unassigned) - 4}개)" if len(unassigned) > 4 else ""),
+                      "why": "맡은 사람이 없는 이슈예요. " + (("역할에 맞게" if state.roles else "맡은 일이 적은 사람부터") + " 나눠 드릴까요?" if pairs else "이슈를 눌러 담당자를 정해 주세요") + (f" (외 {len(unassigned) - 4}개)" if len(unassigned) > 4 else ""),
                       "evidence": [issue_link(i) for i in unassigned[:4]],
                       "options": [{"label": "역할대로 나누기" if state.roles else "맡은 일이 적은 순서로 나누기", "recommended": True,
                                    "sub": sub, "actions": acts}] if pairs else []})
