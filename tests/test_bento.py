@@ -1192,7 +1192,8 @@ def test_triage_includes_watch_items_and_owner():
 
 
 def test_plan_adds_midpoint_deadlines_for_slides_and_video():
-    steps = [s["title"] for s in work_plan(SAMPLE_EXTRACT)]
+    now = datetime(2026, 11, 14, 10, 0, tzinfo=KST)
+    steps = [s["title"] for s in work_plan(SAMPLE_EXTRACT, now)]
     if any("발표" in d.name for d in SAMPLE_EXTRACT.deliverables):
         assert steps.index("발표 자료 초안 공유") < steps.index("발표 자료 완성")
     if any("영상" in d.name for d in SAMPLE_EXTRACT.deliverables):
