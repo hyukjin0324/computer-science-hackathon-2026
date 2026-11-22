@@ -86,12 +86,13 @@ def watch(state: RepoState) -> list[dict]:
     if team and act is not None:
         recent = [m for m in state.members if (t := parse_ts(act.get(m))) and hours(t, now) < QUIET_H]
         if recent:
+            from .triage import _load
+            load = _load(state)
             for m in state.members:
                 who = lead
-                if m == lead:  # 팀장 자신이 조용하면 팀장에게 '나에게 안부 묻기'를 보이지 않고, 지금 움직이는 다른 팀원에게 보인다
-                    from .triage import _load
-                    load = _load(state)
-                    others = sorted((x for x in recent if x != lead), key=lambda x: (load.get(x, 0), x))
+                if not who or who == m:
+                    # 조용한 팀장도 챙기되, 본인에게 자기 안부를 묻게 하지는 않는다.
+                    others = sorted((x for x in recent if x != m), key=lambda x: (load.get(x, 0), x))
                     if not others:
                         continue
                     who = others[0]
@@ -123,7 +124,7 @@ def watch(state: RepoState) -> list[dict]:
             continue
         if re.search(rf"(?<![\w/])#{i.number}\b|(?<!\d){i.number}(?!\d)[-_/]", pr_text):
             continue  # 이 할 일을 다루는 PR이 열려 있다
-        targets = [a for a in i.assignees if a != lead]
+        targets = [a for a in i.assignees if a not in state.leads]
         if not targets:
             continue  # 팀장 자신의 할 일은 '내 할 일'에서 보고, 자기 자신에게 댓글을 보내지는 않는다
         stale.append((i, int(hours(up, now) // 24), targets))

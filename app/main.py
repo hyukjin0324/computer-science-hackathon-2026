@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from . import notice as notice_mod
-from .actions import EDITABLE, STALE, ActionList, AssignIssue, CloseIssue, CreateIssue, CreateMilestone, TeamMessage, UpdateMilestone, approval_preview, execute, label, validate
+from .actions import EDITABLE, STALE, ActionList, AssignIssue, CloseIssue, CreateIssue, CreateMilestone, TeamMessage, UpdateMilestone, approval_preview, contact_targets, execute, label, validate
 from .forms import FormError, inspect_form
 from . import submission as sub_mod
 from . import progress as prog
@@ -318,13 +318,20 @@ def get_triage(repo: str | None = None):
     items = triage(st, settings.review_wait_hours)
     now = datetime.now(timezone.utc)
     rules = own.read_rules(gh)
+    viewer = _ASKER.get()
     for it in items:
         owner, age = own.owner_and_age(it, st, settings.review_wait_hours, now)
         it.update(owner=owner, owner_why=own.owner_reason(it, st, owner, now), age_hours=round(age, 1), level=own.level(age))
-        first = next((o for o in it["options"] if o.get("recommended")), it["options"][0] if it["options"] else None)
+        # 모든 팀원이 목록을 볼 수 있어도, 연락 대상 본인이 자기 자신에게 댓글·리뷰 요청을 보내는 제안은 받지 않는다.
+        options = []
+        for option in it["options"]:
+            actions = [a for a in option["actions"] if not (viewer and viewer in contact_targets([a]))]
+            if actions:
+                options.append({**option, "actions": actions})
+        first = next((o for o in options if o.get("recommended")), options[0] if options else None)
         it["lazy"] = own.lazy_status(gh, it, first["actions"], rules, st.members, now) if first and rules["lazy"] else {"eligible": False}
         it["options"] = [{"label": o["label"], "recommended": o.get("recommended", False), "sub": o.get("sub", ""),
-                          "proposal": _proposal(gh.repo, o["label"], o["actions"], it["id"])} for o in it["options"]]
+                          "proposal": _proposal(gh.repo, o["label"], o["actions"], it["id"])} for o in options]
     for it in _approval_items(gh, st):  # 다른 팀원이 보낸 승인 요청: 팀장(제안자가 아니면)이 먼저, 아니면 팀 누구나
         lead = next((m for m in st.leads if m != it["proposed_by"]), None)
         it.update(owner=lead, age_hours=0, level=0 if lead else 2, lazy={"eligible": False})
@@ -1189,6 +1196,8 @@ def run_proposal(body: ExecuteIn, request: Request, x_bento_code: str | None = H
     if not actions:
         raise HTTPException(400, "실행할 행동을 하나 이상 골라 주세요")
     who = (x_bento_user or "").strip()
+    if who and who in contact_targets(actions):
+        raise HTTPException(409, {"message": "자기 자신에게 댓글이나 리뷰 요청을 보내는 제안은 실행하지 않아요", "errors": []})
     if any(a.type in TEAM_WIDE for a in actions) and data.get("by") and who and data["by"] == who:
         gh, st = state_for(data["repo"])
         if len(st.members) > 1 and who not in st.leads:

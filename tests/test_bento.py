@@ -1196,6 +1196,21 @@ def test_watch_stale_excludes_leads_own_issue_and_self_mention():
     assert "@hajun" in actions[0].body and "@jiwoo" not in actions[0].body
 
 
+def test_watch_stale_excludes_every_lead_not_just_the_first():
+    def old(d):
+        d["leads"] = ["jiwoo", "hajun"]
+        for number, assignee in ((20, "jiwoo"), (21, "hajun"), (22, "seoyeon")):
+            d["issues"].append({"number": number, "title": f"오래된 일 {number}", "user": {"login": assignee},
+                                "assignees": [{"login": assignee}], "body": "", "created_at": _ts(200),
+                                "updated_at": _ts(100), "milestone": None, "html_url": f"https://github.com/x/y/issues/{number}"})
+    w, _ = _w(old)
+    it = w["stale"]
+    actions = it["options"][0]["actions"]
+    assert len(actions) == 1 and actions[0].number == 22
+    assert "@seoyeon" in actions[0].body
+    assert "@jiwoo" not in actions[0].body and "@hajun" not in actions[0].body
+
+
 def test_watch_deadline_soon_and_commits_after_deadline():
     def soon(d):
         due = (datetime.now(KST) + timedelta(hours=3)).strftime("%Y-%m-%dT23:59:00+09:00")
@@ -1229,6 +1244,28 @@ def test_triage_never_proposes_commenting_to_the_items_owner():
         texts = [step.get("text") or "" for option in item.get("options", [])
                  for step in option.get("proposal", {}).get("steps", [])]
         assert not any(f"@{owner}" in text for text in texts), item["id"]
+
+
+def test_triage_hides_contact_actions_from_the_person_being_contacted():
+    for member in main._demo.d["members"]:
+        items = client.get("/api/triage", headers={"x-bento-user": member}).json()["items"]
+        texts = [step.get("text") or "" for item in items for option in item.get("options", [])
+                 for step in option.get("proposal", {}).get("steps", [])]
+        labels = [step.get("label") or "" for item in items for option in item.get("options", [])
+                  for step in option.get("proposal", {}).get("steps", [])]
+        assert not any(f"@{member}" in text for text in texts), member
+        assert not any(f"검토를 {member}님에게 부탁하기" in label for label in labels), member
+
+
+def test_execute_rejects_contacting_the_approver_themselves():
+    cases = [
+        Comment(number=12, body="@doyoon 님, 진행 상황을 알려 주세요"),
+        RequestReviewers(pr=14, users=["doyoon"], expect_reviewers=["seoyeon"]),
+    ]
+    for action in cases:
+        token = sign({"repo": main._demo.repo, "summary": "자기 대상 연락", "actions": [action.model_dump()]}, main.settings.signing_key)
+        r = client.post("/api/execute", headers={"x-bento-user": "doyoon"}, json={"token": token})
+        assert r.status_code == 409 and "자기 자신" in r.json()["detail"]["message"]
 
 
 def test_plan_adds_midpoint_deadlines_for_slides_and_video():
