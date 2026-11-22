@@ -46,3 +46,41 @@ def test_assign_card_without_roles_does_not_promise_role_split():
     it = next(i for i in triage(dataclasses.replace(st, roles={})) if i["id"] == "assign")
     assert it["options"][0]["label"] == "맡은 일이 적은 순서로 나누기"
     assert "역할에 맞게" not in it["why"] and "맡은 일이 적은 사람부터" in it["why"]
+
+
+def _match(name, text, spaces=False):
+    return bool(_rx(name).search(text if spaces else re.sub(r"\s", "", text)))
+
+
+def test_who_questions_about_issues_are_not_bot_intro():
+    for t in ("#11 이슈 담당 누구야?", "PR 14 리뷰어 누구야", "발표 누구세요"):
+        assert not _match("ABOUT_BOT_RX", t), t
+    for t in ("누구야?", "누구세요", "너 누구야", "Bento는 누구야", "너 이름이 뭐야"):
+        assert _match("ABOUT_BOT_RX", t), t
+
+
+def test_topic_name_is_not_my_name():
+    for t in ("프로젝트 주제 이름 추천해줘", "과제 역할 나눠줘", "주제 이름 뭐로 하지"):
+        assert not _match("ABOUT_ME_RX", t, spaces=True), t
+    for t in ("내 이름 뭐야", "내이름 뭐야", "나는 누구야", "이번 대회에서 내 역할 뭐야", "제 역할이 뭐예요"):
+        assert _match("ABOUT_ME_RX", t, spaces=True), t
+
+
+def test_quiet_lead_card_goes_to_another_active_member():
+    from datetime import datetime, timedelta, timezone
+    from app.demo import DemoGitHub
+    from app.state import build_state
+    from app.watch import watch
+    gh = DemoGitHub()
+    old = (datetime.now(timezone.utc) - timedelta(hours=100)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for e in gh.d["events"]:
+        if e["actor"]["login"] == "jiwoo":
+            e["created_at"] = old
+    for c in gh.d["commits"]:
+        if (c.get("author") or {}).get("login") == "jiwoo":
+            c["commit"]["author"]["date"] = c["commit"]["committer"]["date"] = old
+    gh.d["issues"][0]["assignees"].append({"login": "jiwoo"})  # 팀장도 맡은 일이 있다
+    st = build_state(gh)
+    w = {it["id"]: it for it in watch(st)}
+    assert "quiet-jiwoo" in w
+    assert w["quiet-jiwoo"]["who"] in st.members and w["quiet-jiwoo"]["who"] != "jiwoo"

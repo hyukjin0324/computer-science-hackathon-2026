@@ -87,8 +87,14 @@ def watch(state: RepoState) -> list[dict]:
         recent = [m for m in state.members if (t := parse_ts(act.get(m))) and hours(t, now) < QUIET_H]
         if recent:
             for m in state.members:
-                if m == lead:
-                    continue  # 팀장이 자기 자신에게 안부 댓글을 승인하는 제안은 만들지 않는다
+                who = lead
+                if m == lead:  # 팀장 자신이 조용하면 팀장에게 '나에게 안부 묻기'를 보이지 않고, 지금 움직이는 다른 팀원에게 보인다
+                    from .triage import _load
+                    load = _load(state)
+                    others = sorted((x for x in recent if x != lead), key=lambda x: (load.get(x, 0), x))
+                    if not others:
+                        continue
+                    who = others[0]
                 t = parse_ts(act.get(m))
                 if t and hours(t, now) < QUIET_H:
                     continue
@@ -98,7 +104,7 @@ def watch(state: RepoState) -> list[dict]:
                     continue  # 맡은 일이 없으면 조용해도 괜찮다
                 since = f"{int(hours(t, now) // 24)}일째 활동이 없어요" if t else "저장소에서 활동한 기록이 없어요"
                 target = mine[0].number if mine else prs[0].number
-                items.append({"id": f"quiet-{m}", "sev": "주의", "who": lead, "age": 0,
+                items.append({"id": f"quiet-{m}", "sev": "주의", "who": who, "age": 0,
                               "title": f"{m} 님이 {since.replace('어요', '음')}",
                               "why": f"맡은 할 일 {len(mine)}개 · 열린 PR {len(prs)}개. 바쁜 사정이 있는지 먼저 물어보고, 어려우면 일을 다시 나눠요",
                               "evidence": [{"label": f"{'이슈' if mine else 'PR'} #{target}", "url": f"{gh_url}/{'issues' if mine else 'pull'}/{target}"}],
