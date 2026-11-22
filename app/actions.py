@@ -125,6 +125,17 @@ EDITABLE = {"comment": "body", "close_issue": "comment", "team_message": "text",
 STALE = "다른 팀원이 먼저 바꿨어요 · "
 
 
+def contact_targets(actions: list) -> set[str]:
+    """댓글·리뷰 요청으로 직접 연락받는 GitHub 아이디. 담당 지정처럼 본인이 승인해도 자연스러운 행동은 제외한다."""
+    targets: set[str] = set()
+    for action in actions:
+        if isinstance(action, RequestReviewers):
+            targets.update(action.users)
+        elif isinstance(action, Comment):
+            targets.update(re.findall(r"(?<![\w-])@([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))\b", action.body or ""))
+    return targets
+
+
 def _same_time(a: str | None, b: str | None) -> bool:
     from datetime import datetime
     if not a or not b:

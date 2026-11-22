@@ -87,8 +87,8 @@ def watch(state: RepoState) -> list[dict]:
         recent = [m for m in state.members if (t := parse_ts(act.get(m))) and hours(t, now) < QUIET_H]
         if recent:
             for m in state.members:
-                if m == lead:
-                    continue  # 팀장이 자기 자신에게 안부 댓글을 승인하는 제안은 만들지 않는다
+                if m in state.leads:
+                    continue  # 어느 팀장이 승인하더라도 자기 자신에게 안부 댓글을 보내지 않게 팀장은 대상에서 뺀다
                 t = parse_ts(act.get(m))
                 if t and hours(t, now) < QUIET_H:
                     continue
@@ -117,7 +117,7 @@ def watch(state: RepoState) -> list[dict]:
             continue
         if re.search(rf"(?<![\w/])#{i.number}\b|(?<!\d){i.number}(?!\d)[-_/]", pr_text):
             continue  # 이 할 일을 다루는 PR이 열려 있다
-        targets = [a for a in i.assignees if a != lead]
+        targets = [a for a in i.assignees if a not in state.leads]
         if not targets:
             continue  # 팀장 자신의 할 일은 '내 할 일'에서 보고, 자기 자신에게 댓글을 보내지는 않는다
         stale.append((i, int(hours(up, now) // 24), targets))
