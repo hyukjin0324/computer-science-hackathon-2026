@@ -9,7 +9,8 @@
 
 | 문서 | 링크 |
 |---|---|
-| 배포 / 데모 | https://racing-basalt-z9sddsr-mini33392-6593.vercel.app (데모 저장소로 동작, 로그인 없이 체험) |
+| 배포 / 서비스 | https://racing-basalt-z9sddsr-mini33392-6593.vercel.app (GitHub 로그인 필요, Bento 앱을 설치한 저장소로 동작) |
+| 로그인 없는 데모 | 아래 **로컬 실행** 방법으로 실행 (GitHub App·AI 키 불필요) |
 | 기능명세서 (Notion) | https://app.notion.com/p/41a74ed5ffce816c9174e84558855a89 |
 | 표지 이미지 (발표용 1600×900) | [docs/cover.png](docs/cover.png) |
 | 프로토타입 (화면 시안) | https://claude.ai/artifact/XYafR8CsNqyoVyFXfvB8Jr |
@@ -114,11 +115,11 @@ api/index.py        Vercel 진입점
 
 ```bash
 uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r requirements.txt uvicorn pytest tzdata
-.venv/bin/python -m pytest -q
+BENTO_NO_DOTENV=1 .venv/bin/python -m pytest -q
 .venv/bin/python -m uvicorn app.main:app --port 8787
 ```
 
-http://localhost:8787 을 열면 데모 저장소로 동작해요. GitHub App이나 AI 키 없이도 모든 화면을 볼 수 있어요.
+http://localhost:8787 을 열면 데모 저장소로 동작해요. GitHub App이나 AI 키 없이도 모든 화면을 볼 수 있어요. 공개 배포 주소는 실제 GitHub 연결 모드라서 GitHub 로그인이 필요해요.
 
 Windows에서는 경로가 `.venv\Scripts\python`이에요. `tzdata`는 Windows에 시간대 정보가 없어서 테스트(마일스톤 날짜를 미국 서부 시간으로 바꿔 보는 것)에 필요해요. 앱 실행에는 필요 없어요.
 
@@ -152,7 +153,7 @@ npx vercel deploy --prod
 
 ## 알려진 한계
 
-- 데모 저장소는 서버 메모리에 있어서, 서버가 다시 시작되면 처음 상태로 돌아가요.
+- 로컬 데모 저장소는 서버 메모리에 있어서, 서버가 다시 시작되면 처음 상태로 돌아가요.
 - 초대 미수락 확인은 GitHub App에 Administration 읽기 권한이 있을 때만 동작해요.
 - 비밀키 모양은 main의 최근 커밋 5개와 파일 목록에서만 찾아요.
 - 상업 공모전 사이트는 약관을 확인하기 전까지 자동으로 모으지 않아요. 링크를 붙여넣으면 읽어요.
