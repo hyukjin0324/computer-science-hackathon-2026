@@ -1104,6 +1104,19 @@ def test_watch_quiet_needs_others_active_and_own_work():
     assert "quiet-doyoon" not in w  # 맡은 일이 없으면 조용해도 괜찮다
 
 
+def test_watch_does_not_ask_lead_about_themselves():
+    def quiet_lead(d):
+        for e in d["events"]:
+            if e["actor"]["login"] == "jiwoo":
+                e["created_at"] = _ts(100)
+        for c in d["commits"]:
+            if (c.get("author") or {}).get("login") == "jiwoo":
+                c["commit"]["author"]["date"] = _ts(100)
+                c["commit"]["committer"]["date"] = _ts(100)
+    w, _ = _w(quiet_lead)
+    assert "quiet-jiwoo" not in w
+
+
 def test_watch_main_ci_broken():
     def broken(d):
         d["checks"][d["head"]] = [{"name": "test", "status": "completed", "conclusion": "failure", "completed_at": _ts(3)}]
@@ -1145,6 +1158,7 @@ def test_watch_changes_requested_without_new_commit():
         d["reviews"][14] = [{"user": {"login": "seoyeon"}, "state": "CHANGES_REQUESTED", "submitted_at": _ts(30)}]
     w, _ = _w(asked)
     assert "changes-14" in w and w["changes-14"]["who"] == "jiwoo"
+    assert w["changes-14"]["options"] == [] and w["changes-14"]["handoff"]
 
     def fixed(d):
         asked(d)
@@ -1165,6 +1179,20 @@ def test_watch_stale_assigned_issue():
         d["prs"][2]["title"] = "검색 화면 (#20)"
     w, _ = _w(has_pr)
     assert "stale" not in w  # 이 일을 다루는 PR이 열려 있으면 괜찮다
+
+
+def test_watch_stale_excludes_leads_own_issue_and_self_mention():
+    def old(d):
+        for number, assignee in ((20, "jiwoo"), (21, "hajun")):
+            d["issues"].append({"number": number, "title": f"오래된 일 {number}", "user": {"login": assignee},
+                                "assignees": [{"login": assignee}], "body": "", "created_at": _ts(200),
+                                "updated_at": _ts(100), "milestone": None, "html_url": f"https://github.com/x/y/issues/{number}"})
+    w, _ = _w(old)
+    it = w["stale"]
+    actions = it["options"][0]["actions"]
+    assert "#20" not in it["why"] and "#21" in it["why"]
+    assert len(actions) == 1 and actions[0].number == 21
+    assert "@hajun" in actions[0].body and "@jiwoo" not in actions[0].body
 
 
 def test_watch_deadline_soon_and_commits_after_deadline():
@@ -1189,6 +1217,17 @@ def test_triage_includes_watch_items_and_owner():
     ids = {i["id"]: i for i in r["items"]}
     assert "invite" in ids and ids["invite"]["owner"] == "jiwoo"
     assert ids["selfmerge-10"]["owner"] == "hajun"
+
+
+def test_triage_never_proposes_commenting_to_the_items_owner():
+    items = client.get("/api/triage").json()["items"]
+    for item in items:
+        owner = item.get("owner")
+        if not owner:
+            continue
+        texts = [step.get("text") or "" for option in item.get("options", [])
+                 for step in option.get("proposal", {}).get("steps", [])]
+        assert not any(f"@{owner}" in text for text in texts), item["id"]
 
 
 def test_plan_adds_midpoint_deadlines_for_slides_and_video():
