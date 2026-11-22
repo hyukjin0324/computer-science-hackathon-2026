@@ -1114,7 +1114,8 @@ def test_watch_does_not_ask_lead_about_themselves():
                 c["commit"]["author"]["date"] = _ts(100)
                 c["commit"]["committer"]["date"] = _ts(100)
     w, _ = _w(quiet_lead)
-    assert "quiet-jiwoo" not in w
+    # 팀장에게 '나에게 안부 묻기'를 보이지 않는다. 대신 지금 움직이는 다른 팀원에게 보여서, 조용한 팀장도 챙길 수 있게
+    assert "quiet-jiwoo" not in w or w["quiet-jiwoo"]["who"] not in (None, "jiwoo")
 
 
 def test_watch_main_ci_broken():
