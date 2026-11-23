@@ -1663,6 +1663,8 @@ def submit_confirm(body: ConfirmIn):
     text = (f"제출 전에 다른 팀원 한 명이 확인해 주세요.\n\n**확인할 버전**: {gh.html('/commit/' + body.head_sha)}\n\n"
             f"요청한 사람이 확인한 것:\n{checks or '- (없음)'}\n\n"
             "괜찮으면 이 이슈에 👍를 누르거나 '확인' 댓글을 남겨 주세요. 이 버전 뒤에 커밋이 생기면 Bento가 다시 알려요.\n\n"
+            "**제출을 마친 뒤**에는 Bento에서 '제출 완료로 기록'을 눌러 주세요. 팀원 모두의 화면이 제출 완료로 바뀌어요. "
+            "GitHub에서 직접 하려면 이 이슈를 닫고, 댓글에 `제출 완료 증거:` 뒤에 접수 번호나 확인 메일 문구를 적어 주세요.\n\n"
             f"<!-- bento-lock:{body.head_sha} -->")
     title = f"{sub_mod.CONFIRM_PREFIX} {body.title.strip()[:50]} · {body.head_sha[:7]}"
     actions.append(CreateIssue(title=title, body=text))
