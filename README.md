@@ -43,7 +43,7 @@ Bento는 이런 일을 대신 지켜보고, 해야 할 일을 **누가, 언제�
 | 단계 | Bento가 하는 일 |
 |---|---|
 | 신청 | 공고 링크·파일·글을 읽어 마감·팀 인원·참가 자격·제출물을 뽑고, 원문 인용과 대조해요. 신청 버튼은 사용자가 직접 눌러요 |
-| 팀 세팅 | 마이페이지에서 팀원별 **역할**(기획·PM, FE, BE …)과 디스코드를 한 번 정해 두면, 그 뒤 모든 담당 배정이 거기에 맞춰져요. 역할은 저장소 라벨에 저장돼 팀 전체가 같이 봐요 |
+| 팀 세팅 | Bento에서 GitHub 아이디를 입력하면 저장소 관리자 승인 뒤 초대를 보내요. 팀원은 GitHub에서 수락해요. 역할과 디스코드는 마이페이지에서 정할 수 있어요 |
 | 계획 | 제출 마감에서 거꾸로 단계별 계획을 짜요(제출물 준비는 마감일 전날까지, 오래 걸리는 MVP는 앞쪽). GitHub 마일스톤·이슈·담당자로 만들고, 이미 있으면 다시 만들지 않아요 |
 | 협업 | 저장소를 지켜보다가 막힌 곳을 급한 순서로 찾아 **내 할 일 / 팀장이 정할 일 / 팀원 할 일**로 나눠 보여 줘요 |
 | 진행 점검 | 캘린더에서 "끝났어요"를 누르면 GitHub 이슈도 함께 닫혀요(실행 취소 가능). 닫히지 않은 단계가 늦어지면 남은 시간에 맞게 다시 짜 줘요 |
@@ -62,7 +62,7 @@ Bento는 이런 일을 대신 지켜보고, 해야 할 일을 **누가, 언제�
 관찰(저장소·공고 읽기) → 판단(규칙으로 우선순위) → 제안(서명된 토큰) → 사람이 고치고 승인 → 실행 직전 다시 확인 → 실행 → 결과 링크
 ```
 
-- 승인받고 직접 하는 일: 리뷰어 지정, 댓글, 이슈·마일스톤 만들기, 담당자 지정, 팀 메시지
+- 승인받고 직접 하는 일: 팀 저장소 초대, 리뷰어 지정, 댓글, 이슈·마일스톤 만들기, 담당자 지정, 팀 메시지
 - 승인 없이 바로 되는 일(되돌릴 수 있어요): 역할 저장, 캘린더 "끝났어요"(이슈 닫기, 실행 취소 있음)
 - **하지 않는 일**: 머지, 푸시, 코드 수정, 폼 제출 → 링크와 명령어로 안내만 해요
 - 팀 전체에 영향을 주는 변경은 제안한 사람이 아닌 다른 팀원이나 팀장이 승인해야 실행돼요
@@ -133,11 +133,14 @@ Windows에서는 경로가 `.venv\Scripts\python`이에요. `tzdata`는 Windows�
    - Issues: Read and write
    - Checks: Read-only
    - Metadata: Read-only
+   - Administration: **Read and write** (Bento에서 팀원 초대를 보낼 때 필요. 기존 설치는 앱 권한 변경을 승인해야 해요.)
 4. Subscribe to events: Pull request, Pull request review, Issues, Issue comment, Check run
 5. 만든 뒤 Private key를 내려받고, 팀 저장소에 앱을 설치
 6. 환경 변수 설정 (`.env.example` 참고): `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`(GitHub로 시작하기), `BENTO_REPO`, `BENTO_SIGNING_KEY`, `BENTO_ACCESS_CODE`, `ANTHROPIC_API_KEY`, `DISCORD_WEBHOOK_URL`(선택), `CRON_SECRET`(매일 알림용)
 
 배포 주소가 공개라면 `BENTO_ACCESS_CODE`를 꼭 설정하세요. 설정하지 않으면 주소를 아는 누구나 승인 버튼을 누를 수 있어요.
+
+팀원 초대는 대회 준비 순서와 **마이페이지 → 팀원 초대**에서 시작해요. 실제 발송에는 GitHub 로그인과 서버의 `BENTO_SIGNING_KEY` 설정이 필요해요. GitHub 저장소 관리자가 Bento에서 승인하면 저장소 쓰기 권한으로 초대를 보내고, 상대방은 GitHub에서 수락해요.
 
 **"GitHub로 시작하기"에서 GitHub 404 페이지가 뜰 때**: 앱 주인은 되는데 다른 팀원만 404면 GitHub 앱이 비공개라서예요. GitHub → Settings → Developer settings → GitHub Apps → 앱 → Advanced → Danger zone의 **Make public**을 눌러 주세요. 모두 404면 `GITHUB_CLIENT_ID`가 앱의 Client ID와 다른 거예요 (앱 설정 General에서 확인). Redirect URI(Callback URL)가 틀리면 404가 아니라 `redirect_uri` 오류가 떠요. 값을 바꾼 뒤에는 Vercel에서 다시 배포해야 반영돼요.
 

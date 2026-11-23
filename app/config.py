@@ -3,6 +3,8 @@
 import os
 from dataclasses import dataclass
 
+DEFAULT_SIGNING_KEY = "dev-only-signing-key"
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -71,7 +73,7 @@ def load_settings() -> Settings:
         app_id=os.getenv("GITHUB_APP_ID") or None,
         private_key=key or None,
         webhook_secret=os.getenv("GITHUB_WEBHOOK_SECRET") or None,
-        signing_key=os.getenv("BENTO_SIGNING_KEY") or "dev-only-signing-key",
+        signing_key=os.getenv("BENTO_SIGNING_KEY") or DEFAULT_SIGNING_KEY,
         access_code=os.getenv("BENTO_ACCESS_CODE") or None,
         anthropic_ready=bool(os.getenv("ANTHROPIC_API_KEY")),
         default_repo=os.getenv("BENTO_REPO") or "team-matzip/knu-matzip",

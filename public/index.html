@@ -264,6 +264,23 @@ button.bigrow.chosen { box-shadow: inset 0 0 0 1.5px var(--ink); }
 .path-acts .btn { justify-content: center; padding-inline: 8px; text-align: center; line-height: 1.25; word-break: keep-all; white-space: pre-line; }
 .path-acts.mid { display: flex; justify-content: center; }  /* 버튼 하나뿐인 단계는 가운데 */
 .path-acts .btn.primary { font-weight: 600; }  /* 나란히 놓인 두 버튼(검정·흰색) 글자 굵기를 같게 */
+.invite-form { display: grid; gap: 8px; min-width: 0; }
+.invite-fields { display: grid; gap: 8px; }
+.invite-form .urlrow { grid-template-columns: minmax(0, 1fr) auto; gap: 0; border: 1px solid var(--line); border-radius: var(--r-badge); background: var(--bg); color: var(--ink); }
+.invite-form .urlrow:has(input:focus) { outline: 2px solid var(--blue); outline-offset: 2px; }
+.invite-form .urlrow input { border: 0; background: transparent; color: inherit; outline: none; }
+.invite-form .btn { justify-content: center; text-align: center; }
+.invite-field-action { width: 44px; display: grid; place-items: center; border-radius: var(--r-badge); font-size: 20px; line-height: 1; }
+.invite-field-action:focus-visible { outline-offset: -4px; }
+.invite-field-action:disabled { opacity: .5; cursor: default; }
+.journey.journey-invite { border: 1px solid var(--line); }
+.journey-invite .path > li { align-items: center; padding-block: 14px; }
+.journey-invite .path > li.now { align-items: start; }
+.journey-invite .path > li.now > i { background: var(--primary); color: var(--primary-ink); box-shadow: none; }
+.journey-invite .path > li.now b { margin-block: 3px 10px; }
+.invite-actions { grid-auto-flow: row; grid-template-columns: minmax(0, 1fr); }
+.invite-actions .btn { min-height: 46px; }
+.invite-actions .linkbtn { justify-self: center; min-height: 44px; color: var(--muted); }
 details.more summary { cursor: pointer; font-size: var(--fs-small); color: var(--muted); min-height: 32px; display: flex; align-items: center; }
 .journey { background: var(--surface); border: 1.5px solid var(--ink); border-radius: var(--r-card); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
 .journey.pin { position: sticky; top: 0; z-index: 3; box-shadow: 0 6px 18px rgba(0,0,0,.08); }
@@ -1484,7 +1501,7 @@ function approval(proposal, onDone, context = {}) {
     depNote.textContent = `마감일을 빼면 거기 넣을 할 일 ${skippedDependencies}개도 같이 빠져요.`;
     depNote.hidden = !skippedDependencies;
     const count = rows.filter((_, i) => isPicked(i)).length;
-    go.textContent = `승인하고 실행 (${count})`;
+    go.textContent = context.approveLabel || `승인하고 실행 (${count})`;
     go.disabled = !count;
     for (const group of editGroups.values()) group.label.hidden = !group.indexes.some(isPicked);
     if (editDisclosure) editDisclosure.details.hidden = [...editGroups.values()].every((group) => group.label.hidden);
@@ -1531,7 +1548,7 @@ function approval(proposal, onDone, context = {}) {
       toChat();
       tg.className = "tag skip";
       if (e.stale) { tg.textContent = "먼저 처리됨"; bot(`다른 팀원이 먼저 처리해서 실행하지 않았어요. 같은 일을 두 번 하거나 덮어쓰지 않으려고요.${e.errors && e.errors.length ? "\n· " + e.errors.map((x) => x.replace(/^\d+번 행동: /, "")).join("\n· ") : ""}`); lastTriage = null; lastProgress = null; refreshHome(); chip("새 상태로 다시 보기", today); if (onDone) onDone(false); return; }
-      if (e.needSecond) { tg.textContent = "다른 팀원 승인 필요"; askSecond(proposal, e.leads); return; }
+      if (e.needSecond) { tg.textContent = "다른 사람 승인 필요"; askSecond(proposal, e.leads, context.approveLabel ? e.message : ""); if (context.approveLabel && onDone) onDone(false); return; }
       if (e.status === 401 && e.login) { tg.textContent = "로그인 필요"; bot("승인하려면 GitHub로 로그인해 주세요. 누가 승인했는지 GitHub에 남아요."); add(ghBtn("GitHub로 로그인", true)); return; }
       if (e.status === 401) { tg.textContent = "접근 코드 필요"; askCode(() => approval(proposal, onDone, context)); return; }
       tg.textContent = "실행 안 함"; fail(e);
@@ -1556,7 +1573,7 @@ function approval(proposal, onDone, context = {}) {
       bot(r.ok ? "끝났어요. 한 일은 보관함에 기록해 뒀어요." : "중간에 멈췄어요. 어디까지 했는지 카드에 표시해 뒀어요.");
       const skipped = r.results.find((x) => x.skipped && proposal.steps[x.index ?? 0]?.edit === "text");
       if (skipped) { const index = skipped.index ?? 0; add(copyBtn("팀 메시지 복사", () => edits[index] ?? proposal.steps[index].text)); }
-      if (onDone) onDone(r.ok);
+      if (onDone) onDone(r.ok, r.results);
     };
     if (inSheet) {
       const close = h("button", "btn primary lg", "확인"); close.type = "button"; close.onclick = toChat;
@@ -1919,6 +1936,113 @@ async function afterTasks() {
 function repoSlug(t) { const s = t.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); return /[a-z]/.test(s) ? s : `hackathon-${new Date().getFullYear()}`; }
 const PATHS = {};
 function needsApply(ex) { return !!ex && !ex.no_apply; }  // 대회는 거의 다 참가 신청이 있다. 공고에서 신청 마감을 못 읽어도 신청부터
+function inviteForm(target, onInvited) {
+  const form = h("form", "invite-form");
+  const fields = h("div", "invite-fields");
+  const more = h("button", "invite-field-action", "+"); more.type = "button";
+  more.setAttribute("aria-label", "팀원 추가");
+  const submit = h("button", "btn primary", "초대 내용 확인"); submit.type = "submit";
+  const status = h("div", "note"); status.setAttribute("role", "status");
+  const maxLogins = 10;
+  const inputs = () => [...fields.querySelectorAll("input")];
+  const loginOf = (input) => input.value.trim().replace(/^@/, "").toLowerCase();
+  const syncMore = () => { more.disabled = fields.childElementCount >= maxLogins; };
+  const addField = (value = "") => {
+    const row = h("div", "urlrow"), input = h("input");
+    input.setAttribute("aria-label", "GitHub 아이디");
+    input.autocomplete = "off";
+    input.autocapitalize = "none";
+    input.spellcheck = false;
+    input.maxLength = 40;
+    input.value = value;
+    row.appendChild(input);
+    if (fields.childElementCount) {
+      const remove = h("button", "invite-field-action", "×"); remove.type = "button";
+      remove.setAttribute("aria-label", "추가 입력칸 삭제");
+      remove.onclick = () => { row.remove(); syncMore(); more.focus(); };
+      row.appendChild(remove);
+    } else {
+      input.placeholder = "예: octocat";
+      row.appendChild(more);
+    }
+    fields.appendChild(row);
+    syncMore();
+    return input;
+  };
+  addField();
+  more.onclick = () => addField().focus();
+  form.append(h("div", "lab", "GitHub 아이디"), fields, submit, status);
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const invalid = inputs().find((input) => input.value.trim() && !/^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/.test(loginOf(input)));
+    const logins = [...new Set(inputs().map(loginOf).filter(Boolean))];
+    if (invalid || !logins.length) {
+      status.textContent = "GitHub 아이디만 입력해 주세요.";
+      (invalid || inputs()[0]).focus();
+      return;
+    }
+    const controls = fields.querySelectorAll("input, button");
+    submit.disabled = true;
+    controls.forEach((control) => { control.disabled = true; });
+    status.textContent = "";
+    const unlock = () => {
+      controls.forEach((control) => { control.disabled = false; });
+      submit.disabled = false;
+      syncMore();
+    };
+    try {
+      const { proposal } = await api("/collaborator-invite", { method: "POST", body: JSON.stringify({ repo: target, logins }) });
+      approval(proposal, (ok, results = []) => {
+        const completed = new Set(results.filter((res) => res.ok).map((res) => logins[res.index]));
+        if (completed.size) {
+          const remaining = inputs().filter((input) => !completed.has(loginOf(input))).map((input) => input.value);
+          fields.replaceChildren();
+          for (const value of remaining.length ? remaining : [""]) addField(value);
+        }
+        if (results.length > 1) {
+          const failed = results.length - completed.size;
+          status.textContent = failed ? `${completed.size}명 처리 · ${failed}명 실패. 결과를 확인해 주세요.` : `${completed.size}명의 초대를 처리했어요.`;
+        } else status.textContent = results[0]?.note || results[0]?.error || "";
+        if (ok && onInvited) onInvited();
+      }, { approveLabel: "승인하고 초대 보내기" });
+      // 승인 시트를 나중에 다시 열더라도 이 입력칸에서 다음 팀원을 고를 수 있다.
+      unlock();
+    } catch (e) {
+      unlock();
+      status.textContent = e.status === 401 && !e.login ? "팀 접근 코드를 입력해 주세요." : e.message;
+      if (e.status === 401 && e.login) form.appendChild(ghBtn("GitHub로 로그인", false));
+      else if (e.status === 401) askCode(() => form.requestSubmit());
+    }
+  };
+  return form;
+}
+function inviteFromProject() {
+  const draft = curDraft();
+  const target = draft ? draft.teamRepo : curRepo();
+  if (!target) return;
+  showTab("chat");
+  const form = inviteForm(target, () => {
+    if (!draft || draft.invited || draft.teamRepo !== target || !drafts.includes(draft)) return;
+    draft.invited = true;
+    saveDrafts();
+    PATHS[draft.id]?.at(-1)?.render();
+  });
+  const card = add(h("div", "task"));
+  card.append(h("b", null, "팀원 초대"), form);
+  scroll();
+}
+function selectDraftRepo(d, target) {
+  if (!drafts.includes(d) || curDraft() !== d) return;
+  if (d.teamRepo !== target) { delete d.invited; delete d.inviteDone; }
+  d.teamRepo = target;
+  d.repoMade ||= Date.now();
+  saveDrafts();
+  const path = PATHS[d.id]?.at(-1);
+  if (path?.card.isConnected) {
+    path.render();
+    add(path.card);
+  } else startPath(d);
+}
 function startPath(d) {
   // 새 팀플이 할 일을 순서대로 한 장에. 지금 할 단계에만 버튼이 있다.
   if (!d) return;
@@ -1930,18 +2054,22 @@ function startPath(d) {
   const steps = [
     ...(apply ? [{ k: "apply", name: "신청하기", who: "직접", done: applied }] : []),
     { k: "repo", name: "팀 저장소 만들기", who: "GitHub", done: () => !!d.repoMade },
-    { k: "app", name: "Bento 앱 설치", who: "GitHub", done: () => !!d.installed },
-    { k: "link", name: "연결 완료", who: "Bento", done: () => false },
+    { k: "app", name: "Bento 앱 설치", done: () => !!d.teamRepo },
+    { k: "invite", name: "팀원 초대", done: () => !!d.inviteDone },
+    { k: "link", name: "연결 완료", done: () => !!d.connected },
   ];
   const render = () => {
     c.innerHTML = "";
-    const hd = h("div", "j-h"); hd.appendChild(h("b", null, `준비 순서 · ${d.title}`)); const nowI = steps.findIndex((x) => !x.done());
-    const tag = h("span", "tag"); tag.textContent = `${nowI + 1}/${steps.length}`; hd.appendChild(tag); c.appendChild(hd);
+    const hd = h("div", "j-h"); hd.appendChild(h("b", null, `준비 순서 · ${d.title}`));
+    const pendingStep = steps.findIndex((x) => !x.done());
+    const nowI = pendingStep < 0 ? steps.length : pendingStep;
+    c.classList.toggle("journey-invite", steps[nowI]?.k === "invite");
+    const tag = h("span", "tag"); tag.textContent = `${Math.min(nowI + 1, steps.length)}/${steps.length}`; hd.appendChild(tag); c.appendChild(hd);
     if (!apply) c.appendChild(h("div", "note", "이 대회는 공고에 따로 신청 단계가 없어서 바로 팀 저장소부터 해요."));
     const ol = h("ol", "path");
     steps.forEach((st, i) => {
       const state = i < nowI ? "done" : i === nowI ? "now" : "";
-      const li = h("li", state); if (state === "now") li.setAttribute("aria-current", "step");
+      const li = h("li", state); if (state === "now" && !frozen) li.setAttribute("aria-current", "step");
       li.appendChild(h("i", null, state === "done" ? "✓" : String(i + 1)));
       const body = h("div"); body.appendChild(h("b", null, st.name));
       if (state === "now" && !frozen) {
@@ -1959,56 +2087,77 @@ function startPath(d) {
         } else if (st.k === "app") {
           if (H.install_url) {
             body.appendChild(h("small", null, d.existingRepo
-              ? "설치 화면에서 'Only select repositories'로 연결할 저장소를 고르면, Bento로 돌아와 바로 연결돼요. 이미 Bento가 설치된 저장소면 아래 목록에서 바로 고르면 돼요."
-              : "설치 화면에서 'Only select repositories'로 방금 만든 저장소를 고르면, Bento로 돌아와 바로 연결돼요."));
+              ? "설치 화면에서 연결할 저장소를 골라 주세요. 이미 Bento가 설치된 저장소는 아래에서 고를 수 있어요."
+              : "설치 화면에서 'Only select repositories'로 방금 만든 저장소를 골라 주세요."));
             const a = link("Bento 앱 설치", H.install_url); a.classList.add("primary");
-            a.addEventListener("click", () => { store.set("connectAfterInstall", d.id); d.installed = Date.now(); saveDrafts(); setTimeout(render, 400); }); acts.appendChild(a);
-            // 이미 Bento가 설치된 내 저장소는 설치 버튼 아래에 바로 보여 주고, 누르면 그 저장소에 연결
+            a.addEventListener("click", () => store.set("connectAfterInstall", d.id)); acts.appendChild(a);
             const list = h("div", "big"); list.appendChild(h("small", null, "이미 Bento가 설치된 내 저장소를 찾고 있어요…"));
             loadProjects().then((ps) => {
               list.innerHTML = "";
-              list.appendChild(h("small", null, ps.length ? "이미 Bento가 설치된 내 저장소 · 누르면 바로 연결돼요" : "아직 Bento가 설치된 내 저장소가 없어요. 위에서 설치하면 돌아와 바로 연결돼요."));
-              [...ps.filter((p) => !p.notice), ...ps.filter((p) => p.notice)].forEach((p) => pickRow(list, p.repo, projSub(p), () => connectTo(d, p.repo)));
+              list.appendChild(h("small", null, ps.length ? "이미 Bento가 설치된 내 저장소" : "아직 Bento가 설치된 내 저장소가 없어요."));
+              [...ps.filter((p) => !p.notice), ...ps.filter((p) => p.notice)].forEach((p) => pickRow(list, p.repo, projSub(p), () => selectDraftRepo(d, p.repo)));
             }).catch(() => { list.innerHTML = ""; list.appendChild(h("small", null, "저장소 목록을 불러오지 못했어요.")); });
             tail = list;
           } else {
-            body.appendChild(h("small", null, "데모에서는 설치 없이 예시 저장소로 연결해 볼 수 있어요."));
-            const b = h("button", "btn primary", "다음"); b.type = "button"; b.onclick = () => { d.installed = Date.now(); saveDrafts(); render(); }; acts.appendChild(b);
+            body.appendChild(h("small", null, H.mode === "demo" ? "데모에서는 설치 없이 예시 저장소로 연결해 볼 수 있어요." : "Bento 앱이 설치된 저장소를 골라 주세요."));
+            const b = h("button", "btn primary", "저장소 연결하기"); b.type = "button"; b.onclick = connectDraft; acts.appendChild(b);
           }
+        } else if (st.k === "invite") {
+          body.appendChild(h("small", null, "함께할 팀원의 GitHub 아이디를 입력해 주세요."));
+          acts.classList.add("invite-actions");
+          const open = h("button", "btn primary", "GitHub 팀원 초대");
+          const next = h("button", "btn", "초대했어요");
+          const later = h("button", "linkbtn", "나중에 할게요");
+          open.type = next.type = later.type = "button";
+          next.disabled = !d.invited;
+          later.hidden = !!d.invited;
+          const connect = () => { d.inviteDone = true; saveDrafts(); connectTo(d, d.teamRepo, render); };
+          next.onclick = later.onclick = connect;
+          const form = inviteForm(d.teamRepo, () => {
+            d.invited = true; saveDrafts();
+            next.disabled = false;
+            later.hidden = true;
+          });
+          form.hidden = true;
+          open.onclick = () => { open.hidden = true; form.hidden = false; form.querySelector("input").focus(); };
+          acts.append(open, form, next, later);
         } else {
-          body.appendChild(h("small", null, "앱 설치 화면에서 돌아오면 자동으로 연결돼요. 안 됐으면 눌러 주세요."));
-          const b = h("button", "btn primary", "저장소 연결하기"); b.type = "button"; b.onclick = () => { b.disabled = true; connectDraft(); }; acts.appendChild(b);
+          const b = h("button", "btn primary", "연결 완료하기"); b.type = "button"; b.disabled = connectingDrafts.has(d.id);
+          b.onclick = () => connectTo(d, d.teamRepo, render); acts.appendChild(b);
           acts.classList.add("mid");  // 연결 완료: 버튼 하나라 가운데
         }
         body.appendChild(acts); if (tail) body.appendChild(tail);
-      } else if (state === "") body.appendChild(h("small", null, st.who === "직접" ? "직접" : `${st.who}에서`));
+      } else if (state === "" && st.who) body.appendChild(h("small", null, st.who === "직접" ? "직접" : `${st.who}에서`));
       li.appendChild(body); ol.appendChild(li);
     });
     c.appendChild(ol);  // '저장소가 이미 있어요'는 2번 안의 버튼으로 옮겼다 (여기서 바로 연결 목록으로 가면 앱 설치를 건너뛰었다)
     scroll();
   };
   render();
-  const api2 = { freeze: () => { frozen = true; render(); }, render };
+  const api2 = { card: c, freeze: () => { frozen = true; render(); }, render };
   (PATHS[d.id] = PATHS[d.id] || []).push(api2);
   return api2;
 }
 function draftNext() {
   const d = curDraft(); if (!d) return;
-  bot(`'${d.title}'은(는) 새 팀플이라 아직 저장소가 없어요. 순서는 이래요:\n1. 신청하기\n2. 팀 저장소 만들고 Bento 앱 설치하기\n3. 연결하면 마감일과 할 일을 GitHub에 적어 둬요`);
-  const c = add(h("div", "task")); c.appendChild(h("b", null, "팀 저장소 준비"));
-  const rb = h("div", "row-btns"); rb.appendChild(link("저장소 만들기", "https://github.com/new?name=" + encodeURIComponent(repoSlug(d.title))));
-  if (H.install_url) { const ins = link("Bento 앱 설치", H.install_url); ins.addEventListener("click", () => store.set("connectAfterInstall", d.id)); rb.appendChild(ins); } c.appendChild(rb);
-  const go = h("button", "btn primary", "만든 저장소 연결하기"); go.type = "button"; go.onclick = () => { go.disabled = true; connectDraft(); }; c.appendChild(go);
-  c.appendChild(h("div", "note", "저장소 만들기와 앱 설치는 직접 해 주세요. 설치 화면에서 방금 만든 저장소를 고르면 Bento로 돌아와 바로 연결돼요."));
-  scroll();
+  startPath(d);
 }
-async function connectTo(d, repo) {
+const connectingDrafts = new Set();
+async function connectTo(d, repo, render) {
+  if (!drafts.includes(d) || !repo || connectingDrafts.has(d.id)) return;
+  connectingDrafts.add(d.id);
+  render();
   me(`${repo}에 연결해 줘`);
-  let r; try { r = await thinking("대회 일정을 정리하고 있어요", noticeApi({ text: d.text, repo, no_ai: !!d.noAi })); } catch (e) { return fail(e); }
+  let r;
+  try { r = await thinking("대회 일정을 정리하고 있어요", noticeApi({ text: d.text, repo, no_ai: !!d.noAi })); }
+  catch (e) { return fail(e); }
+  finally { connectingDrafts.delete(d.id); if (curDraft() === d) render(); }
+  if (curDraft() !== d) return;
   const pl = store.get("plan:d:" + d.id, null); try { localStorage.removeItem("bento:plan:d:" + d.id); } catch (e) { /* 무시 */ }
   const applied = store.get(doneKey("apply", "d:" + d.id), null) || (d.applied ? { at: d.applied, proof: "" } : null);
   const info0 = store.get("info:d:" + d.id, null);
   const url0 = d.url;
+  d.connected = true; (PATHS[d.id] || []).forEach((path) => path.freeze()); delete PATHS[d.id];
   drafts.splice(drafts.indexOf(d), 1); saveDrafts();
   moveRoom("d:" + d.id, "r:" + repo); delete ROOMS["r:" + repo]; roomKey = "r:" + repo;  // 지금 보고 있는 대화방이 그대로 이 저장소의 대화방이 된다
   useProject({ repo }, true); if (pl) store.set("plan:" + projKey(), pl); if (info0) store.set("info:" + projKey(), info0); if (url0) store.set("noticeUrl:" + projKey(), { url: url0, title: d.title });
@@ -2022,18 +2171,19 @@ async function connectTo(d, repo) {
 }
 async function connectDraft() {
   const d = curDraft(); if (!d) return;
+  if (d.teamRepo) return startPath(d);
   me("저장소 연결해 줘");
   let ps; try { ps = await thinking("Bento 앱이 설치된 저장소를 찾고 있어요", loadProjects()); } catch (e) { return fail(e); }
   const offerInstall = () => {  // 연결할 저장소가 목록에 없으면 그 저장소에 Bento를 설치하는 길 (전에는 이 화면에 없었다)
     if (!H.install_url) return;
-    const c2 = add(h("div", "task")); c2.appendChild(h("div", "note", "연결할 저장소가 목록에 없으면, 그 저장소에 Bento 앱을 설치해 주세요. 설치 화면에서 'Only select repositories'로 그 저장소를 고르면 돌아와 바로 연결돼요."));
+    const c2 = add(h("div", "task")); c2.appendChild(h("div", "note", "연결할 저장소가 목록에 없으면, 그 저장소에 Bento 앱을 설치해 주세요. 설치 화면에서 'Only select repositories'로 그 저장소를 골라 주세요."));
     const ins = link("Bento 앱 설치", H.install_url); ins.addEventListener("click", () => store.set("connectAfterInstall", d.id)); c2.appendChild(ins);
   };
   if (!ps.length) { bot("아직 Bento 앱이 설치된 내 저장소가 없어요."); offerInstall(); chip("다시 확인", connectDraft); scroll(); return; }
   const free = ps.filter((p) => !p.notice);
   bot(free.length ? `'${d.title}'을(를) 어느 저장소에 연결할까요? 아직 공고가 없는 저장소를 위에 뒀어요.` : `어느 저장소에 연결할까요? 모든 저장소에 이미 다른 공고가 연결돼 있어요.`);
   const box = add(h("div", "big"));
-  [...free, ...ps.filter((p) => p.notice)].forEach((p) => pickRow(box, p.repo, projSub(p), () => connectTo(d, p.repo)));
+  [...free, ...ps.filter((p) => p.notice)].forEach((p) => pickRow(box, p.repo, projSub(p), () => selectDraftRepo(d, p.repo)));
   offerInstall();
   chip("다시 확인", connectDraft);
   scroll();
@@ -2919,12 +3069,12 @@ async function today() {
   }
   scroll();
 }
-function askSecond(proposal, leads) {
+function askSecond(proposal, leads, adminMessage = "") {
   // 팀 전체에 영향을 주는 변경: 제안한 사람이 아닌 팀원이나 팀장이 승인해야 실행된다
   const me2 = meUser(); const lead = (leads || []).filter((x) => x !== me2);
-  bot(`이건 팀 전체에 영향을 주는 변경이라 제안한 사람 혼자서는 실행할 수 없어요. ${lead.length ? `팀장(${lead.join(", ")})` : "다른 팀원"}이 승인하면 실행돼요. 팀원 Bento의 승인 대기에 뜨도록 요청을 보낼까요?`);
-  const b = h("button", "btn primary", "팀원에게 승인 요청 보내기"); b.type = "button"; b.style.alignSelf = "flex-start";
-  b.onclick = async () => { b.disabled = true; try { const r = await api("/approval-request", { method: "POST", body: JSON.stringify({ token: proposal.token }) }); bot(r.already ? "이미 승인 요청을 보냈어요. 팀원이 승인하면 실행돼요." : `승인 요청을 보냈어요. GitHub #${r.issue}에 남았고, 팀원이 Bento에서 승인하면 실행되고 요청은 닫혀요.`); if (r.url) add(link(`#${r.issue} 승인 요청`, r.url)); } catch (e) { b.disabled = false; fail(e); } };
+  bot(adminMessage || `이건 팀 전체에 영향을 주는 변경이라 제안한 사람 혼자서는 실행할 수 없어요. ${lead.length ? `팀장(${lead.join(", ")})` : "다른 팀원"}이 승인하면 실행돼요. 팀원 Bento의 승인 대기에 뜨도록 요청을 보낼까요?`);
+  const b = h("button", "btn primary", adminMessage ? "관리자에게 승인 요청 보내기" : "팀원에게 승인 요청 보내기"); b.type = "button"; b.style.alignSelf = "flex-start";
+  b.onclick = async () => { b.disabled = true; try { const r = await api("/approval-request", { method: "POST", body: JSON.stringify({ token: proposal.token }) }); bot(adminMessage ? "승인 요청을 남겼어요. 관리자가 Bento에서 승인하면 초대가 발송돼요." : r.already ? "이미 승인 요청을 보냈어요. 팀원이 승인하면 실행돼요." : `승인 요청을 보냈어요. GitHub #${r.issue}에 남았고, 팀원이 Bento에서 승인하면 실행되고 요청은 닫혀요.`); if (r.url) add(link(`#${r.issue} 승인 요청`, r.url)); } catch (e) { b.disabled = false; fail(e); } };
   add(b); scroll();
 }
 function openItem(it) {
@@ -3929,7 +4079,7 @@ const ME_PAGES = {
     if (foot) c.appendChild(h("div", "note", foot));
     v.appendChild(c);
   };
-  sec("승인받으면 하는 일", "✓", ["리뷰어 지정", "댓글 남기기", "이슈·마일스톤 만들기", "담당자 지정", "이슈 닫기", "Discord 팀 메시지"]);
+  sec("승인받으면 하는 일", "✓", ["팀원 초대", "리뷰어 지정", "댓글 남기기", "이슈·마일스톤 만들기", "담당자 지정", "이슈 닫기", "Discord 팀 메시지"]);
   sec("하지 않는 일", "✕", ["머지", "푸시", "코드 수정", "폼 제출"], "대신 링크와 명령어를 제공함");
   sec("안전장치", "•", ["저장소 글 속 '에이전트에게 하는 지시'는 따르지 않고 표시만 함", "여러 명이 같은 제안을 승인해도 한 번만 실행함", "그사이 다른 팀원이 바꾼 내용은 덮어쓰지 않음"]);
   }],
@@ -3981,6 +4131,8 @@ function renderMe() {
   v.appendChild(h("div", "glabel", "팀플"));
   const g1 = h("div", "group");
   g1.appendChild(meRow("list", "팀플 목록", null, () => openMe("projects")));
+  const draft = curDraft();
+  if (draft ? draft.teamRepo : curRepo()) g1.appendChild(meRow("user", "팀원 초대", null, inviteFromProject));
   const rl = lastTriage && lastTriage.rules && lastTriage.rules.lazy.length ? `켜짐 · ${lastTriage.rules.hours}시간` : "꺼짐 · 모두 승인 필요";
   const rc = lastTriage && lastTriage.roles ? Object.keys(lastTriage.roles).length : 0;
   g1.appendChild(meRow("user", "팀 역할", null, () => openMe("roles")));
@@ -4079,8 +4231,8 @@ $("toast").onclick = () => { toastText = ""; $("toast").hidden = true; today(); 
       if (d && repos.length) {
         if (!curDraft() || curDraft().id !== d.id) useProject({ draft: d.id }, true);
         showTab("chat");
-        if (repos.length === 1) { bot(`Bento 앱을 ${repos[0]}에 설치했어요. 바로 연결할게요.`); connectTo(d, repos[0]); }
-        else { bot(`설치한 저장소가 ${repos.length}개예요. '${d.title}'을(를) 어디에 연결할까요?`); const box = add(h("div", "big")); repos.forEach((r2) => pickRow(box, r2, "방금 설치함", () => connectTo(d, r2))); }
+        if (repos.length === 1) { bot(`Bento 앱을 ${repos[0]}에 설치했어요.`); selectDraftRepo(d, repos[0]); }
+        else { bot(`설치한 저장소가 ${repos.length}개예요. '${d.title}'을(를) 어디에 연결할까요?`); const box = add(h("div", "big")); repos.forEach((r2) => pickRow(box, r2, "방금 설치함", () => selectDraftRepo(d, r2))); }
         return;
       }
       if (repos.length) { showTab("chat"); bot(`Bento 앱을 ${repos.join(", ")}에 설치했어요. 위쪽 팀플 이름을 눌러 고를 수 있어요.`); }

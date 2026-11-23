@@ -11,7 +11,7 @@ from dataclasses import asdict
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ValidationError
 
 from . import notice as notice_mod
 from .actions import EDITABLE, STALE, ActionList, AssignIssue, CloseIssue, CreateIssue, CreateMilestone, TeamMessage, UpdateMilestone, approval_preview, contact_targets, execute, label, validate
@@ -23,8 +23,8 @@ from . import discover as disc
 from . import ownership as own
 from . import discord as discord_mod
 from datetime import datetime, timedelta, timezone
-from .actions import SetRoles, SetTeamRules, is_suspicious
-from .config import load_settings
+from .actions import InviteCollaborator, SetRoles, SetTeamRules, is_suspicious
+from .config import DEFAULT_SIGNING_KEY, load_settings
 from .demo import DemoGitHub
 from .fetch import FetchError, fetch_notice
 from .schedule import work_plan
@@ -106,7 +106,7 @@ import contextvars
 
 _ASKER: contextvars.ContextVar[str | None] = contextvars.ContextVar("asker", default=None)
 # 팀 전체에 영향을 주는 변경: 제안한 사람 혼자서는 실행하지 못한다 (팀장이거나 다른 팀원이 승인해야)
-TEAM_WIDE = {"set_team_rules", "update_milestone", "close_issue", "reassign_issue"}
+TEAM_WIDE = {"set_team_rules", "update_milestone", "close_issue", "reassign_issue", "invite_collaborator"}
 APPROVE_PREFIX = "[승인 요청]"
 
 
@@ -161,6 +161,51 @@ def _proposal(repo: str, summary: str, actions: list, item_id: str | None = None
 def health():
     return {"ok": True, "mode": "live" if settings.live else "demo", "repo": settings.default_repo,
             "ai": settings.anthropic_ready, "discord": bool(settings.discord_webhook), "needs_code": bool(settings.access_code) and not settings.login_enabled, "login": settings.login_enabled, "install_url": _install_url()}
+
+
+class CollaboratorInviteIn(BaseModel):
+    repo: str = Field(pattern=r"^[A-Za-z0-9-]+/[A-Za-z0-9_.-]+$", max_length=140)
+    login: str | None = None
+    logins: list[str] | None = Field(default=None, min_length=1, max_length=10)
+
+
+def _check_invite_login(actor: str | None) -> None:
+    if not settings.live:
+        return
+    if not settings.login_enabled or settings.signing_key == DEFAULT_SIGNING_KEY:
+        raise HTTPException(503, "실제 초대를 보내려면 Bento 서버에 GitHub 로그인과 서명 키를 설정해 주세요")
+    if not actor:
+        raise HTTPException(401, {"message": "GitHub로 로그인해 주세요", "login": True})
+
+
+def _invite_permission(gh, actor: str) -> str:
+    try:
+        return gh.collaborator_permission(actor)
+    except GitHubError as e:
+        if e.status == 404:
+            raise HTTPException(404, "Bento가 저장소 권한을 읽지 못했어요. 해당 저장소의 Bento 앱 설치를 확인해 주세요") from e
+        raise HTTPException(502, "GitHub에서 저장소 권한을 확인하지 못했어요. 잠시 후 다시 시도해 주세요") from e
+
+
+@app.post("/api/collaborator-invite")
+def collaborator_invite(body: CollaboratorInviteIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    if body.repo.split("/")[-1] in {".", ".."}:
+        raise HTTPException(400, "저장소 이름을 확인해 주세요")
+    actor = _ASKER.get()
+    _check_invite_login(actor)
+    _check_code(x_bento_code, request)
+    actions = {}
+    try:
+        for login in body.logins if body.logins is not None else [body.login]:
+            action = InviteCollaborator(login=login)
+            actions[action.login] = action
+    except ValidationError as e:
+        raise HTTPException(422, "GitHub 아이디를 확인해 주세요") from e
+    gh = gh_for(body.repo)
+    if settings.live and _invite_permission(gh, actor) == "none":
+        raise HTTPException(403, "이 저장소 팀원만 팀원 초대를 제안할 수 있어요")
+    proposal = _proposal(gh.repo, f"{gh.repo}에 팀원 초대", list(actions.values()), "invite-collaborator")
+    return {"proposal": proposal}
 
 
 class DiscordIn(BaseModel):
@@ -1158,11 +1203,26 @@ class ExecuteIn(BaseModel):
     skip: list[int] = []  # 승인 화면에서 체크를 푼 행동 번호
 
 
-def _run(repo: str, actions: list, by: str | None = None, require_member: bool = False, proposer: str | None = None) -> list[dict]:
+def _run(repo: str, actions: list, by: str | None = None, require_member: bool = False, proposer: str | None = None,
+         approval_token: str | None = None) -> list[dict]:
     """승인된 행동을 안전하게 실행한다 (사람 승인 · 반대가 없으면 실행 모두 이 길로)."""
     data = {"repo": repo}
     # 팀원 여럿이 같은 제안을 동시에 승인해도 한 번만, 그리고 제안할 때 본 상태 그대로일 때만 실행한다.
     key = hashlib.sha256(json.dumps([data["repo"], [a.model_dump() for a in actions]], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+    invite = any(isinstance(a, InviteCollaborator) for a in actions)
+    if invite:
+        if not approval_token or not all(isinstance(a, InviteCollaborator) for a in actions):
+            raise HTTPException(403, "팀원 초대는 사람이 직접 승인해야 해요")
+        _check_invite_login(by)
+        if settings.live:
+            gh = gh_for(repo)
+            permission = _invite_permission(gh, by)
+            if permission != "admin":
+                if permission != "none" and proposer == by:
+                    raise HTTPException(409, {"message": "GitHub 저장소 관리자가 초대를 승인해야 해요", "need_second": True, "leads": gh.leads()})
+                raise HTTPException(403, "GitHub 저장소 관리자만 팀원 초대를 승인할 수 있어요")
+        # 새 제안은 이전 초대가 취소되거나 만료된 뒤에도 승인할 수 있다.
+        key = hashlib.sha256(approval_token.encode()).hexdigest()
     already = HTTPException(409, {"message": "다른 팀원이 같은 일을 이미 승인해서 실행했어요", "errors": [], "stale": True})
     with _repo_lock(data["repo"]):  # 같은 서버 안: 한 번에 하나씩
         if (done := _EXECUTED.get(key)) and time.time() - done < 6 * 3600:
@@ -1177,18 +1237,23 @@ def _run(repo: str, actions: list, by: str | None = None, require_member: bool =
         try:
             if key[:10] in coord.recent(gh):  # 다른 서버에서 이미 실행한 제안
                 raise already
-            gh, st = state_for(data["repo"], fresh=True)  # 잠근 뒤에 저장소를 새로 읽는다 (15초 캐시를 쓰면 그사이 바뀐 것을 못 본다)
-            errors = validate(actions, st)
-            if errors:
-                stale = any(e.split(": ", 1)[-1].startswith(STALE) for e in errors)
-                raise HTTPException(409, {"message": "다른 팀원이 먼저 처리해서 실행하지 않았어요. 새 상태로 다시 볼게요" if stale
-                                          else "저장소 상태가 바뀌었거나 실행할 수 없는 행동이 있어서 실행하지 않았어요", "errors": errors, "stale": stale})
-            if by and by != "lazy" and by not in st.members:
-                if require_member and settings.live:
-                    raise HTTPException(403, {"message": f"{by}님은 {gh.repo} 팀원이 아니라서 실행할 수 없어요", "errors": []})
-                by = None  # 팀원 목록에 없는 이름은 적지 않는다
-            results = execute(actions, gh, settings, op=key[:12], by=f"{proposer}|{by}" if proposer in st.members and by and by != "lazy" else by)  # 팀원 이름만 적는다
-            if any(r["ok"] for r in results):
+            if invite:
+                results = execute(actions, gh, settings, by=by)  # 초대 대상의 현재 상태는 발송 직전에 확인한다
+            else:
+                gh, st = state_for(data["repo"], fresh=True)  # 잠근 뒤에 저장소를 새로 읽는다
+                errors = validate(actions, st)
+                if errors:
+                    stale = any(e.split(": ", 1)[-1].startswith(STALE) for e in errors)
+                    raise HTTPException(409, {"message": "다른 팀원이 먼저 처리해서 실행하지 않았어요. 새 상태로 다시 볼게요" if stale
+                                              else "저장소 상태가 바뀌었거나 실행할 수 없는 행동이 있어서 실행하지 않았어요", "errors": errors, "stale": stale})
+                if by and by != "lazy" and by not in st.members:
+                    if require_member and settings.live:
+                        raise HTTPException(403, {"message": f"{by}님은 {gh.repo} 팀원이 아니라서 실행할 수 없어요", "errors": []})
+                    by = None  # 팀원 목록에 없는 이름은 적지 않는다
+                results = execute(actions, gh, settings, op=key[:12], by=f"{proposer}|{by}" if proposer in st.members and by and by != "lazy" else by)
+            # 초대를 일부만 보냈다면 다시 승인할 수 있다. 발송된 초대는 GitHub 상태로 확인한다.
+            completed = all if invite else any
+            if completed(r["ok"] for r in results):
                 _EXECUTED[key] = time.time()
                 coord.mark_done(gh, key)
         finally:
@@ -1222,12 +1287,12 @@ def run_proposal(body: ExecuteIn, request: Request, x_bento_code: str | None = H
     who = (x_bento_user or "").strip()
     if who and who in contact_targets(actions):
         raise HTTPException(409, {"message": "자기 자신에게 댓글이나 리뷰 요청을 보내는 제안은 실행하지 않아요", "errors": []})
-    if any(a.type in TEAM_WIDE for a in actions) and data.get("by") and who and data["by"] == who:
+    if any(a.type in TEAM_WIDE and not isinstance(a, InviteCollaborator) for a in actions) and data.get("by") and who and data["by"] == who:
         gh, st = state_for(data["repo"])
         if len(st.members) > 1 and who not in st.leads:
             raise HTTPException(409, {"message": "팀 전체에 영향을 주는 변경이라, 제안한 사람이 아닌 팀원이나 팀장이 승인해야 해요", "need_second": True,
                                       "leads": st.leads})
-    results = _run(data["repo"], actions, by=who or None, require_member=settings.login_enabled, proposer=data.get("by"))
+    results = _run(data["repo"], actions, by=who or None, require_member=settings.login_enabled, proposer=data.get("by"), approval_token=body.token)
     from . import signals as _sig
     _sig._CACHE.clear()  # 방금 실행한 일이 다음 목록에 바로 반영되게 (같은 제안을 두 번 누르지 않게)
     if all(r["ok"] for r in results):
@@ -1272,6 +1337,9 @@ def approval_request(body: RequestIn, request: Request, x_bento_code: str | None
     if actor and data.get("by") != actor:
         raise HTTPException(403, "내가 낸 제안만 승인 요청을 보낼 수 있어요. 화면을 새로 고친 뒤 다시 제안해 주세요")
     actions = ActionList.validate_python(data["actions"])
+    invite = any(isinstance(a, InviteCollaborator) for a in actions)
+    if invite:
+        _check_invite_login(actor)
     key = _tok_key(body.token)
     for i in st.issues:
         if i.title.startswith(APPROVE_PREFIX) and f"bento-approve:{key}" in (i.body or ""):
@@ -1279,8 +1347,9 @@ def approval_request(body: RequestIn, request: Request, x_bento_code: str | None
     by = data.get("by") or "팀원"
     lines = "\n".join(f"- {s['label']}" + (f" · {s['sub']}" if s["sub"] else "") for s in _steps(actions, gh.repo))
     ask = " ".join(f"@{m}" for m in st.leads if m != data.get("by")) or "다른 팀원"
-    text = (f"**{by}** 님이 제안했어요. {ask} 님(또는 다른 팀원)이 Bento에서 확인하고 승인해 주세요.\n\n{lines}\n\n"
-            "팀 전체에 영향을 주는 변경이라, 제안한 사람이 아닌 팀원이나 팀장이 승인해야 실행돼요.\n"
+    reviewer = (f"GitHub 저장소 관리자 {ask} 님이 Bento에서 확인하고 승인해 주세요." if invite
+                else f"{ask} 님(또는 다른 팀원)이 Bento에서 확인하고 승인해 주세요.\n팀 전체에 영향을 주는 변경이라, 제안한 사람이 아닌 팀원이나 팀장이 승인해야 실행돼요.")
+    text = (f"**{by}** 님이 제안했어요. {reviewer}\n\n{lines}\n\n"
             f"<!-- bento-approve:{key} -->\n<!-- bento-token:{body.token} -->")
     n = gh.create_issue(f"{APPROVE_PREFIX} {data.get('summary', '')[:60]}", text, [], None)
     return {"issue": n.get("number"), "url": n.get("html_url"), "already": False}
@@ -1324,8 +1393,9 @@ def _approval_items(gh, st) -> list[dict]:
                         "evidence": ev, "options": [], "handoff": [], "proposed_by": data.get("by"), "expired": True})
             continue
         actions = ActionList.validate_python(data["actions"])
+        reviewer = "GitHub 저장소 관리자가 승인해요" if any(isinstance(a, InviteCollaborator) for a in actions) else "제안한 사람이 아닌 팀원이나 팀장이 승인해요"
         out.append({"id": f"approve-{i.number}", "sev": "주의", "title": f"승인 요청 · {data.get('summary', '')}",
-                    "why": f"{data.get('by') or '팀원'} 님이 제안했어요 · 제안한 사람이 아닌 팀원이나 팀장이 승인해요",
+                    "why": f"{data.get('by') or '팀원'} 님이 제안했어요 · {reviewer}",
                     "evidence": ev, "options": [],
                     "proposal": {"summary": data.get("summary", ""), "steps": _steps(actions, gh.repo), "token": m.group(1), "by": data.get("by"), "team_wide": True},
                     "proposed_by": data.get("by")})
