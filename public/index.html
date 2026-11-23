@@ -1164,6 +1164,13 @@ const store = {
   get(k, d) { try { const v = localStorage.getItem("bento:" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem("bento:" + k, JSON.stringify(v)); } catch (e) { /* 저장 못 해도 화면은 동작 */ } },
 };
+const AI_USAGE_ZERO = { ai_calls: 0, cache_hits: 0, input_tokens: 0, output_tokens: 0, est_usd: 0 };
+function aiUsageRead() { return { ...AI_USAGE_ZERO, ...store.get("aiUsage", {}) }; }
+function aiUsageWrite(u) { store.set("aiUsage", u); }
+function recordAiUsage(u) {
+  if (!u) return;
+  const total = aiUsageRead(); total.ai_calls += 1; total.input_tokens += u.input_tokens || 0; total.output_tokens += u.output_tokens || 0; total.est_usd = +(total.est_usd + (u.est_usd || 0)).toFixed(6); aiUsageWrite(total);
+}
 let H = { mode: "?", repo: "", ai: false, discord: false, needs_code: false };
 let repo = store.get("repo", "");
 let extract = null;
@@ -1742,7 +1749,7 @@ function showExtract(r) {
   offerPlan(r);
 }
 let lastNoticeBody = null;  // 마지막으로 분석한 공고 (날짜를 직접 적은 뒤 다시 분석할 때 쓴다)
-function noticeApi(body) { const u = noticeUrl(); if (u && !body.url) body = { ...body, url: u }; lastNoticeBody = body; return api("/notice", { method: "POST", body: JSON.stringify(body) }); }  // 공고 주소를 같이 보내면 일정 만들 때 마일스톤에 적어 두고, 서버가 마감이 바뀌는지 지켜본다
+function noticeApi(body) { const u = noticeUrl(); if (u && !body.url) body = { ...body, url: u }; lastNoticeBody = body; return api("/notice", { method: "POST", body: JSON.stringify(body) }).then((r) => { recordAiUsage(r.usage); return r; }); }  // 공고 주소를 같이 보내면 일정 만들 때 마일스톤에 적어 두고, 서버가 마감이 바뀌는지 지켜본다
 function repoNoticeSrc() { for (const m of (calState && calState.milestones) || []) { const x = /<!-- bento-src:(https:\/\/[^\s>]+) -->/.exec(m.description || ""); if (x) return x[1]; } return null; }  // 다른 기기에서도 저장소에 적힌 공고 주소로 지켜본다
 /* ---------- 날짜 고르기: 브라우저 기본 달력 대신 앱 모양 ----------
    날짜는 달력에서 한 번 누르면 끝, 시간은 오전/오후·시·분 휠을 굴려서(누르면 그 줄로 감). 고른 날·가운데 줄은 이 대회 색.
@@ -2514,9 +2521,9 @@ function homeBoard(v, me2, items) {
   const otherItems = items.filter((i) => i.id !== heroItem && !myItems.includes(i));
   const roles = b ? b.roles || {} : {};
   // 역할이 비어 있으면 먼저 안내
-  if (b && people.length > 1 && !Object.keys(roles).length) {
-    const n = h("div", "card hint"); n.appendChild(h("b", null, "팀 역할을 아직 안 정했어요")); n.appendChild(h("div", "note", "역할을 정하면 할 일과 리뷰어를 역할에 맞게 나눠요."));
-    const bt = h("button", "btn", "팀 역할 정하기"); bt.type = "button"; bt.onclick = openRolesSheet; n.appendChild(bt); v.appendChild(n);
+  if (b && me2 && people.length > 1 && !roles[me2]) {
+    const n = h("div", "card hint"); n.appendChild(h("b", null, "내 역할을 아직 안 정했어요")); n.appendChild(h("div", "note", "내 역할을 고르면 할 일과 리뷰어를 역할에 맞게 추천해요."));
+    const bt = h("button", "btn", "내 역할 정하기"); bt.type = "button"; bt.onclick = openRolesSheet; n.appendChild(bt); v.appendChild(n);
   }
   // 내 할 일 = 나에게 맡겨진 GitHub 할 일 + 내가 확인할 제안
   if (me2) {
@@ -3724,6 +3731,7 @@ async function freeChat(t) {
   let r;
   try { r = await thinking("생각하는 중…", api("/chat", { method: "POST", body: JSON.stringify({ message: t.slice(0, 500), history: chatHist.slice(-4), context: chatContext() }) })); }
   catch (e) { bot(e.message || "AI가 답하지 못했어요."); chip("할 수 있는 일 보기", openPicks); return; }
+  recordAiUsage(r && r.usage);
   if (!r || !r.ai) return dunno();
   chatHist.push({ role: "user", text: t.slice(0, 500) }, { role: "assistant", text: r.reply }); chatHist = chatHist.slice(-12);
   if (r.kind === "do" && r.action && FREE_ACTIONS[r.action]) { FREE_ACTIONS[r.action](); return; }  // 요청은 설명 없이 바로 그 기능을 보여 준다
@@ -3963,34 +3971,29 @@ function buildRoles(v, closeSheet) {
   // 설명은 위에 따로 한 카드, 역할 고르기는 아래 카드
   const ic = h("div", "card role-introcard");
   const ul = h("ul", "perm-list role-intro");
-  ["팀장은 한 명만 선택하며, 선택하지 않으면 GitHub 저장소 관리자가 맡음", "계획 단계와 할 일을 역할에 맞는 사람에게 배정함", "리뷰어도 같은 역할 팀원을 먼저 추천함", "역할 개수 제한 없이 여러 역할을 함께 선택할 수 있음", "역할을 받을 사람에게만 요청이 가며, 본인이 승인한 뒤 역할표에 반영됨"].forEach((t) => { const li = h("li"); li.appendChild(h("span", "pm", "•")); li.appendChild(h("span", null, t)); ul.appendChild(li); });
+  ["각자 본인 역할만 정하고 언제든 수정할 수 있음", "저장한 역할은 팀원 모두가 함께 봄", "계획 단계와 할 일, 리뷰어를 역할에 맞게 추천함", "역할 개수 제한 없이 여러 역할을 함께 선택할 수 있음", "팀장은 한 명만 선택하며, 선택하지 않으면 GitHub 저장소 관리자가 맡음"].forEach((t) => { const li = h("li"); li.appendChild(h("span", "pm", "•")); li.appendChild(h("span", null, t)); ul.appendChild(li); });
   ic.appendChild(ul); v.appendChild(ic);
   const cr = h("div", "card rolecard");
   const body = h("div"); body.textContent = "역할표 불러오는 중…"; cr.appendChild(body); v.appendChild(cr);
   api("/roles").then((r) => {
-    body.textContent = ""; const pick = {}; const ex = (r.members || []);
+    body.textContent = ""; const me2 = meUser(); const ex = (r.members || []);
     if (!ex.length) { body.textContent = "저장소 팀원을 읽지 못함"; return; }
-    ex.forEach((m) => {
-      pick[m] = [...(r.roles[m] || [])];
-      const row = h("div", "rolerow"); row.appendChild(nameWithFace(m, m + (m === meUser() ? " (나)" : ""), 28));
-      const chips = h("div", "chips"); chips.setAttribute("role", "group"); chips.setAttribute("aria-label", `${m} 역할`);
+    if (!me2 || !ex.includes(me2)) { body.textContent = "먼저 마이페이지에서 내 GitHub 아이디를 선택해 주세요."; return; }
+    const pick = [...(r.roles[me2] || [])];
+    const row = h("div", "rolerow"); row.appendChild(nameWithFace(me2, me2 + " (나)", 28));
+    const chips = h("div", "chips"); chips.setAttribute("role", "group"); chips.setAttribute("aria-label", "내 역할");
       Object.entries(r.choices).forEach(([code, name]) => {
-        const b = h("button", "chiptog", name); b.type = "button"; b.setAttribute("aria-pressed", String(pick[m].includes(code)));
+        const b = h("button", "chiptog", name); b.type = "button"; b.setAttribute("aria-pressed", String(pick.includes(code)));
         b.dataset.role = code;
         b.onclick = () => {
-          const on = pick[m].includes(code);
-          if (code === "lead" && !on) {
-            Object.keys(pick).forEach((member) => (pick[member] = pick[member].filter((x) => x !== "lead")));
-            body.querySelectorAll('[data-role="lead"]').forEach((x) => x.setAttribute("aria-pressed", "false"));
-          }
-          pick[m] = on ? pick[m].filter((x) => x !== code) : [...pick[m], code]; b.setAttribute("aria-pressed", String(!on));
+          const on = pick.includes(code); if (on) pick.splice(pick.indexOf(code), 1); else pick.push(code); b.setAttribute("aria-pressed", String(!on));
         };
         chips.appendChild(b);
       });
-      row.appendChild(chips); body.appendChild(row);
-    });
-    const sv = h("button", "btn primary", "역할 승인 요청 보내기"); sv.type = "button"; sv.style.marginTop = "12px";
-    sv.onclick = async () => { sv.disabled = true; try { const r = await api("/roles", { method: "POST", body: JSON.stringify({ repo: curRepo(), roles: pick }) }); if (!r.requested) { snack(!r.message || /바뀐 역할이 없/.test(r.message) ? "바뀐 역할이 없음" : r.message, true); sv.disabled = false; return; } snack("역할 승인 요청을 보냄"); if (closeSheet) closeSheet(); lastTriage = null; refreshHome(); loadBoard(); if (mePage === "roles") renderMe(); const names = (r.requests || []).map((x) => x.target).join(", "); bot(`${names || "역할을 받을 팀원"} 님에게만 승인 요청을 보냈어요. 각자 승인하면 본인 역할이 반영돼요.`); } catch (e) { sv.disabled = false; fail(e); } };
+    row.appendChild(chips); body.appendChild(row);
+    const all = h("div", "note", "팀 역할표 · " + ex.map((m) => `${m}: ${(r.roles[m] || []).map((c) => r.choices[c]).filter(Boolean).join("·") || "미정"}`).join(" / ")); body.appendChild(all);
+    const sv = h("button", "btn primary", "내 역할 저장"); sv.type = "button"; sv.style.marginTop = "12px";
+    sv.onclick = async () => { sv.disabled = true; try { const out = await api("/roles", { method: "POST", body: JSON.stringify({ repo: curRepo(), roles: { [me2]: pick } }) }); snack(out.saved ? "내 역할을 저장했어요" : out.message, true); if (closeSheet) closeSheet(); lastTriage = null; await loadBoard(); refreshHome(); if (mePage === "roles") renderMe(); } catch (e) { sv.disabled = false; fail(e); } };
     body.appendChild(sv);
   }).catch((e) => { body.textContent = e.message; });
 }
@@ -4155,8 +4158,12 @@ function renderMe() {
   v.appendChild(h("h1", null, "마이페이지"));
   // AI 사용량
   const cu = h("div", "card"); const top = h("div", "usage-top"); top.appendChild(h("b", null, "AI 사용량")); const use = h("span", null, "…"); top.appendChild(use); cu.appendChild(top);
-  const un = h("div", "note", "공고 분석에만 AI를 씀. 같은 공고는 다시 분석하지 않음"); cu.appendChild(un); v.appendChild(cu);
-  api("/usage").then((u) => { use.textContent = `토큰 ${(u.input_tokens + u.output_tokens).toLocaleString()}`; un.textContent = `AI 분석 ${u.ai_calls}번 · 다시 쓴 분석 ${u.cache_hits}번 · 약 $${u.est_usd.toFixed(2)}`; }).catch(() => { use.textContent = "-"; });
+  const un = h("div", "note", "공고 분석과 자유 대화 사용량 · 이 기기에 누적"); cu.appendChild(un); v.appendChild(cu);
+  api("/usage").then((server) => {
+    const local = aiUsageRead();
+    const u = { ai_calls: Math.max(local.ai_calls, server.ai_calls), cache_hits: Math.max(local.cache_hits, server.cache_hits), input_tokens: Math.max(local.input_tokens, server.input_tokens), output_tokens: Math.max(local.output_tokens, server.output_tokens), est_usd: Math.max(local.est_usd, server.est_usd) };
+    aiUsageWrite(u); use.textContent = `토큰 ${(u.input_tokens + u.output_tokens).toLocaleString()}`; un.textContent = `AI 호출 ${u.ai_calls}번 · 다시 쓴 분석 ${u.cache_hits}번 · 약 $${u.est_usd.toFixed(2)}`;
+  }).catch(() => { const u = aiUsageRead(); use.textContent = `토큰 ${(u.input_tokens + u.output_tokens).toLocaleString()}`; });
   // 계정: 권한 · 로그인 · 연결된 서비스
   v.appendChild(h("div", "glabel", "계정"));
   const g0 = h("div", "group");

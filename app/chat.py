@@ -206,9 +206,10 @@ def ask(message: str, history=None, who: str = "anon", client=None, context=None
         USAGE["input_tokens"] += inp
         USAGE["output_tokens"] += out
         USAGE["est_usd"] = round(USAGE["est_usd"] + usd, 6)
+    usage = {"input_tokens": inp, "output_tokens": out, "est_usd": usd}
     print(json.dumps({"event": "bento_ai_usage", "feature": "chat", "model": resp.model, "input_tokens": inp, "output_tokens": out, "est_usd": usd}), flush=True)
     if resp.stop_reason == "refusal":
-        return {"ai": True, "reply": "그 이야기는 도와 드리기 어려워요. 대회 찾기나 계획 짜기처럼 팀플 일을 물어봐 주세요.", "action": "none"}
+        return {"ai": True, "reply": "그 이야기는 도와 드리기 어려워요. 대회 찾기나 계획 짜기처럼 팀플 일을 물어봐 주세요.", "action": "none", "usage": usage}
     if resp.stop_reason == "max_tokens":
         raise ChatError("답이 길어져서 끊겼어요. 짧게 다시 물어봐 주세요", 503)
     raw = next((b.text for b in resp.content if b.type == "text"), "")
@@ -219,9 +220,9 @@ def ask(message: str, history=None, who: str = "anon", client=None, context=None
     action = data.get("action") if data.get("action") in ACTIONS else "none"
     kind = data.get("kind") if data.get("kind") in ("do", "ask", "offtopic") else "ask"
     if kind == "offtopic":  # 관련 없는 말: 지어낸 답 대신 정해진 안내 한 줄
-        return {"ai": True, "kind": "offtopic", "reply": OFFTOPIC, "action": "none", "label": None}
+        return {"ai": True, "kind": "offtopic", "reply": OFFTOPIC, "action": "none", "label": None, "usage": usage}
     reply = str(data.get("reply") or "").strip()[:600] or "무슨 뜻인지 잘 모르겠어요. 조금만 더 알려 주세요."
     if kind == "do" and action != "none":  # 요청: 화면이 설명 없이 바로 그 기능을 연다 (실행·승인은 그 기능 안에서 사람이 한다)
-        return {"ai": True, "kind": "do", "reply": reply, "action": action, "label": ACTIONS[action]}
+        return {"ai": True, "kind": "do", "reply": reply, "action": action, "label": ACTIONS[action], "usage": usage}
     action = align(reply, action)
-    return {"ai": True, "kind": "ask", "reply": reply, "action": action, "label": ACTIONS[action]}
+    return {"ai": True, "kind": "ask", "reply": reply, "action": action, "label": ACTIONS[action], "usage": usage}

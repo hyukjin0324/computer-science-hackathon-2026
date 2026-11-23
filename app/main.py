@@ -23,7 +23,7 @@ from . import discover as disc
 from . import ownership as own
 from . import discord as discord_mod
 from datetime import datetime, timedelta, timezone
-from .actions import InviteCollaborator, SetRoles, SetTeamRules, is_suspicious
+from .actions import InviteCollaborator, SetTeamRules, is_suspicious
 from .config import DEFAULT_SIGNING_KEY, load_settings
 from .demo import DemoGitHub
 from .fetch import FetchError, fetch_notice
@@ -844,43 +844,25 @@ def roles_get(repo: str | None = None):
 
 @app.post("/api/roles")
 def roles_set(body: RolesIn, request: Request, x_bento_code: str | None = Header(default=None)):
-    """팀 역할 바꾸기. 바뀌는 사람마다 승인 요청을 보내고, 본인이 승인한 뒤에만 반영한다."""
+    """각 팀원이 자기 역할만 고쳐 바로 공유한다."""
     _check_code(x_bento_code, request)
     gh, st = state_for(body.repo)
-    actor = _member_actor(request, st, "역할 승인 요청을 보낼")
-    roles = {m: [c for c in dict.fromkeys(cs) if c in own.ROLES] for m, cs in body.roles.items() if m in st.members}
-    effective = {**st.roles, **roles}
-    picked_leads = [m for m in st.members if own.LEAD_ROLE in effective.get(m, [])]
-    if len(picked_leads) > 1:
-        raise HTTPException(400, "팀장은 한 명만 선택해 주세요")
-    changed = {m: c for m, c in roles.items() if sorted(c) != sorted(st.roles.get(m, []))}
-    if not changed:
-        return {"requested": False, "message": "바뀐 역할이 없어요", "roles": st.roles}
-
-    # 팀장 교체는 한 번에 반영해야 '기존 팀장 제거 → 새 팀장 추가' 사이에 실패하지 않는다.
-    # 새 팀장이 있으면 그 사람이, 팀장을 없애는 변경이면 기존 팀장이 승인한다.
-    old_leads = {m for m in st.members if own.LEAD_ROLE in st.roles.get(m, [])}
-    new_leads = {m for m in st.members if own.LEAD_ROLE in effective.get(m, [])}
-    lead_changed = {m for m in changed if (m in old_leads) != (m in new_leads)}
-    groups: list[tuple[str, dict[str, list[str]]]] = []
-    consumed: set[str] = set()
-    if lead_changed:
-        target = next(iter(new_leads), next(iter(old_leads), None))
-        if target:
-            groups.append((target, {m: changed[m] for m in lead_changed}))
-            consumed.update(lead_changed)
-    groups.extend((m, {m: codes}) for m, codes in changed.items() if m not in consumed)
-
-    requests = []
+    actor = _member_actor(request, st, "자기 역할을 정할") or _ASKER.get()
+    if not actor or actor not in st.members:
+        raise HTTPException(400, "먼저 내 GitHub 아이디를 선택해 주세요")
+    if set(body.roles) != {actor}:
+        raise HTTPException(403, "내 역할만 바꿀 수 있어요")
+    codes = [c for c in dict.fromkeys(body.roles[actor]) if c in own.ROLES]
+    explicit_lead = next((m for m, rs in st.roles.items() if own.LEAD_ROLE in rs and m != actor), None)
+    if own.LEAD_ROLE in codes and explicit_lead:
+        raise HTTPException(409, f"팀장은 이미 {explicit_lead}님이에요")
+    if sorted(codes) == sorted(st.roles.get(actor, [])):
+        return {"saved": False, "message": "바뀐 역할이 없어요", "roles": st.roles}
     try:
-        for target, change in groups:
-            proposal = _proposal(gh.repo, f"{target}님의 역할 정하기", [SetRoles(roles=change)], "roles", target=target)
-            data = verify(proposal["token"], settings.signing_key)
-            req = _create_approval_request(gh, st, proposal["token"], data)
-            requests.append({"target": target, **req})
+        own.write_roles(gh, {actor: codes})
     except GitHubError as e:
-        raise HTTPException(502, f"GitHub에 승인 요청을 남기지 못했어요: {e}") from e
-    return {"requested": True, "requests": requests, "changed": sorted(changed), "by": actor or _ASKER.get()}
+        raise HTTPException(502, f"역할을 저장하지 못했어요: {e}") from e
+    return {"saved": True, "who": actor, "roles": {**st.roles, actor: codes}}
 
 
 FOOT_UNDO = "\n\n<sub>— 캘린더에서 누른 것을 Bento가 대신 남겼어요</sub>"
@@ -1213,10 +1195,18 @@ def saved_notice(repo: str | None = None):
 
 @app.get("/api/usage")
 def usage():
-    """이 서버가 켜진 뒤의 AI 사용량. 서버리스에서는 인스턴스마다 따로 센다."""
-    u = notice_mod.USAGE
-    calls = u["ai_calls"]
-    return {**u, "avg_usd_per_call": round(u["est_usd"] / calls, 5) if calls else None,
+    """현재 서버 인스턴스의 AI 사용량. 화면은 이 값과 브라우저 누적값을 합쳐 표시한다."""
+    from . import attach as attach_mod, chat as chat_mod, websearch as websearch_mod
+    sources = (notice_mod.USAGE, chat_mod.USAGE, attach_mod.USAGE, websearch_mod.USAGE)
+    calls = notice_mod.USAGE["ai_calls"] + sum(u["calls"] for u in sources[1:])
+    total = {
+        "ai_calls": calls,
+        "cache_hits": notice_mod.USAGE["cache_hits"],
+        "input_tokens": notice_mod.USAGE["input_tokens"] + chat_mod.USAGE["input_tokens"],
+        "output_tokens": notice_mod.USAGE["output_tokens"] + chat_mod.USAGE["output_tokens"],
+        "est_usd": round(sum(u["est_usd"] for u in sources), 6),
+    }
+    return {**total, "avg_usd_per_call": round(total["est_usd"] / calls, 5) if calls else None,
             "note": "추정치예요. 정확한 비용은 Claude Console 사용량에서 확인하세요."}
 
 
