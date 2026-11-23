@@ -486,9 +486,12 @@ def board(repo: str | None = None):
     except Exception:  # noqa: BLE001 - 못 읽어도 남은 일은 그대로 보여 준다
         pass
     key = lambda t: (t["due"] is None, t["due"] or "")
+    from .watch import checkin_of
     for p in people.values():
         p["tasks"].sort(key=key)
         p["open"], p["late"] = len(p["tasks"]), sum(t["late"] for t in p["tasks"])
+        ck = checkin_of(st, p["login"])  # Bento가 안부를 물었고 아직 답이 없음 (하루 안이면 팀장이 정할 일 대신 여기에만 보인다)
+        p["checkin"] = {"at": ck["at"], "url": ck.get("url"), "overdue": ck["overdue"]} if ck else None
     unassigned.sort(key=key)
     load0 = {m: people[m]["open"] for m in people}
     for t in unassigned:  # 담당 없는 할 일: 제목으로 역할을 보고, 그 역할에서 맡은 일이 적은 사람을 추천

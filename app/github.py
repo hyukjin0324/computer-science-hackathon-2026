@@ -196,6 +196,10 @@ class GitHub:
     def issue_comments(self, n: int):
         return self.api_all(self._r(f"/issues/{n}/comments"))
 
+    def recent_comments(self, since: str):
+        """저장소 전체 이슈·PR의 최근 댓글 (since 이후). 안부 댓글·답장을 한 번에 본다. 이벤트 목록보다 늦게 반영되지 않는다."""
+        return self.api("GET", self._r("/issues/comments"), params={"since": since, "sort": "created", "direction": "desc", "per_page": 100})
+
     # 라벨: 서버 여러 대가 함께 쓰는 잠금·기록 장소 (Issues 쓰기 권한으로 충분하다)
     def create_label(self, name: str, color: str, description: str):
         return self.api("POST", self._r("/labels"), json={"name": name, "color": color, "description": description})

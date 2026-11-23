@@ -41,6 +41,24 @@ def key_kinds(patch: str) -> list[str]:
     return [name for name, rx in KEY_SHAPES if rx.search(added)]
 
 
+CHECKIN = re.compile(r"@([A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?) 님, 요즘 어떠세요\?")
+
+
+def checkins(comments: list) -> dict:
+    """Bento가 남긴 안부 댓글: 팀원별로 가장 최근 것과, 그 뒤에 그 팀원이 댓글로 답했는지."""
+    out: dict[str, dict] = {}
+    for c in comments or []:
+        m = CHECKIN.search(c.get("body") or "")
+        at = c.get("created_at")
+        if not m or not at or at <= out.get(m.group(1), {}).get("at", ""):
+            continue
+        num = re.search(r"/issues/(\d+)$", c.get("issue_url") or "")
+        out[m.group(1)] = {"at": at, "issue": int(num.group(1)) if num else None, "url": c.get("html_url")}
+    for who, ck in out.items():  # 안부를 받은 뒤 그 사람이 어느 이슈·PR에든 댓글을 달았으면 답한 것
+        ck["replied"] = any(((c.get("user") or {}).get("login") == who and (c.get("created_at") or "") > ck["at"]) for c in comments or [])
+    return out
+
+
 def _safe(fn, default=None):
     try:
         return fn()
@@ -61,13 +79,16 @@ def collect(gh, prs, now: datetime) -> dict:
     since = (now - timedelta(days=14)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # 1단계: 브랜치 이름만 알면 되는 읽기들
-    sha, raw, ev, inv, merged = par([
+    sha, raw, ev, inv, merged, rc = par([
         lambda: _safe(lambda: gh.head_sha(branch)),
         lambda: _safe(lambda: gh.commits(branch, since), None),
         lambda: _safe(gh.events, None),
         lambda: _safe(gh.invitations, None),
         lambda: _safe(gh.merged_prs, None),
+        lambda: _safe(lambda: gh.recent_comments(since), None),
     ])
+    if rc is not None:
+        sig["checkins"] = checkins(rc)
     commits = None
     if raw is not None:
         commits = [{"sha": c["sha"], "login": (c.get("author") or {}).get("login"),
@@ -128,6 +149,10 @@ def collect(gh, prs, now: datetime) -> dict:
         for c in commits or []:
             if c["login"] and c["at"] and c["at"] > last.get(c["login"], ""):
                 last[c["login"]] = c["at"]
+        for c in rc or []:  # 댓글(안부에 단 답장 등)도 활동으로 센다. 이벤트 목록은 늦게 반영될 때가 있다
+            who, at = (c.get("user") or {}).get("login"), c.get("created_at")
+            if who and at and at > last.get(who, ""):
+                last[who] = at
         sig["activity"] = last
         sig["pushes"] = [{"login": (e.get("actor") or {}).get("login"), "at": e.get("created_at"), "ref": (e.get("payload") or {}).get("ref", "")}
                          for e in ev if e.get("type") == "PushEvent"]

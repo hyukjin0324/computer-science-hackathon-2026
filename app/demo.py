@@ -201,6 +201,10 @@ class DemoGitHub:
     def compare(self, base, head): return {"ahead_by": 0 if base == head else 2, "files": [] if base == head else ["src/pages/Search.tsx", "README.md"]}
     def issue(self, n): return copy.deepcopy(self._issue(n))
     def issue_comments(self, n): return copy.deepcopy(self.d["comments"].get(n, []))
+    def recent_comments(self, since=None):
+        return [{**copy.deepcopy(c), "issue_url": f"https://api.github.com/repos/{self.repo}/issues/{n}",
+                 "html_url": c.get("html_url") or f"https://github.com/{self.repo}/issues/{n}#issuecomment-{c.get('id')}"}
+                for n, cs in self.d["comments"].items() for c in cs]
     def issue_reactions(self, n): return copy.deepcopy(self.d["reactions"].get(n, []))
     def comment_reactions(self, cid): return copy.deepcopy(self.d.setdefault("comment_reactions", {}).get(cid, []))
 
