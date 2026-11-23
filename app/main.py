@@ -442,6 +442,11 @@ def board(repo: str | None = None):
         if who:
             load0[who] = load0.get(who, 0) + 1
         t["suggest"] = {"who": who, "role": own.role_names(own.role_codes_for(t["title"])), "why": why}
+    # 담당 없는 일을 하나씩 정하기: 팀원마다 '이 사람에게 맡기기' 제안을 미리 서명해 둔다 (홈에서 누르면 대화에서 사람을 골라 승인)
+    for t in unassigned:
+        t["pick"] = [{"user": m, "proposal": _proposal(gh.repo, f"#{t['number']} 담당을 {m} 님으로 정하기",
+                                                       [AssignIssue(issue=t["number"], users=[m], expect_assignees=[])], f"assign-{t['number']}")}
+                     for m in st.members]
     # 다시 나누기: 평균보다 2개 넘게 많이 맡은 사람(3개 이상)이나 늦은 일이 2개 이상인 사람의 일을, 역할 맞고 한가한 사람에게
     rebalance, why = None, []
     if len(st.members) > 1:

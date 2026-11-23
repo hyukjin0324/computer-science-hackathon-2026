@@ -2491,7 +2491,9 @@ function hRow(nav, tone, key) {
   nav.classList.add("htask-go"); row.append(ck, nav); return row;
 }
 function hTaskRow(t, suggest, checkable) {
-  const a = h("a"); a.href = t.url; a.target = "_blank"; a.rel = "noopener noreferrer";
+  // 담당 정하기 목록: GitHub로 가지 않고 대화에서 사람을 골라 정한다 (팀장이 정할 일과 같은 흐름)
+  let a; if (suggest && t.pick && t.pick.length) { a = h("button"); a.type = "button"; a.onclick = () => { showTab("chat"); assignOne(t); }; }
+  else { a = h("a"); a.href = t.url; a.target = "_blank"; a.rel = "noopener noreferrer"; }
   const dd = t.due ? ddays(t.due) : null; const tone = t.late ? "crit" : dd != null && dd <= 2 ? "warn" : "ok";
   const tx = h("span"); tx.appendChild(h("b", null, t.title));
   const sub = h("small", null, `GitHub 할 일 · #${t.number}`); const due = t.late ? "늦음" : dd == null ? "" : dd === 0 ? "오늘 마감" : `D-${dd}`;
@@ -2499,6 +2501,23 @@ function hTaskRow(t, suggest, checkable) {
   if (suggest && t.suggest && t.suggest.who) tx.appendChild(h("small", "suggest", `추천: ${t.suggest.who}${t.suggest.why ? " · " + t.suggest.why : ""}`));
   else if (suggest && t.suggest && t.suggest.why) tx.appendChild(h("small", null, t.suggest.why));
   a.appendChild(tx); a.appendChild(h("span", "chev", "›")); return hRow(a, tone, checkable ? "t" + t.number : null);
+}
+function assignOne(t) {
+  me(`#${t.number} 담당 정하기`);
+  const sg = t.suggest || {};
+  bot(`'${t.title}'을(를) 누가 맡을지 골라 주세요.` + (sg.who ? ` ${sg.who} 님을 추천해요${sg.why ? ` (${sg.why})` : ""}.` : sg.why ? ` ${sg.why}.` : "") + " 고른 뒤 승인하면 GitHub 담당자로 지정돼요.");
+  const roles = (lastBoard && lastBoard.roles) || {};
+  const picks = [...t.pick].sort((x, y) => (y.user === sg.who) - (x.user === sg.who));
+  const c = add(h("div", "big"));
+  picks.forEach((p) => {
+    const b = h("button", "arow"); b.type = "button"; b.style.gridTemplateColumns = "minmax(0, 1fr) auto";
+    const tx = h("span"); tx.appendChild(h("b", null, p.user + (p.user === meUser() ? " (나)" : "")));
+    tx.appendChild(h("small", null, [roles[p.user] || "역할 없음", p.user === sg.who ? "추천" : ""].filter(Boolean).join(" · ")));
+    b.append(tx, h("span", "chev", "›"));
+    b.onclick = () => { c.querySelectorAll("button").forEach((x) => (x.disabled = true)); me(`${p.user} 님에게 맡길래`); approval(p.proposal, (ok) => { if (ok) { lastBoard = null; refreshHome(); } }); };
+    c.appendChild(b);
+  });
+  const gh = link("GitHub에서 이슈 보기", t.url); gh.style.alignSelf = "flex-start"; add(gh);
 }
 function hItemRow(it, inGroup, checkable) {
   const b = h("button"); b.type = "button"; const [tt, tc] = itemTag(it);
@@ -2587,12 +2606,14 @@ function homeBoard(v, me2, items) {
     });
   }
   // 일이 몰렸을 때 다시 나누기: 팀원 별 할 일 칸 안, 맨 아래에 붙인다
-  if (lateP.length || b.rebalance) {
+  // 늦은 사람 줄: 위 팀원 목록에 이미 '늦음 N'으로 나온 사람은 다시 쓰지 않는다 (같은 사람이 두 번 보이던 것)
+  const lateRows = lateP.filter((p) => !groups.some((g) => g.m === p.login));
+  if (lateRows.length || b.rebalance) {
     const lsec = tsec || v.appendChild(h("section", "hsec"));
     // 서버는 GitHub 할 일만 세서, 위 '할 일 N개'(PR·이슈 일 포함)와 숫자가 달랐다: 같은 숫자로 맞춘다
     const total = (m) => { const g = groups.find((x) => x.m === m); return g ? g.items.length + g.tasks.length : null; };
     const c = h("div", "lead-late");
-    lateP.forEach((p) => { const r = h("div", "prow"); r.appendChild(h("b", null, p.login + (p.login === me2 ? " (나)" : ""))); r.appendChild(h("span", null, `${roles[p.login] || "역할 없음"} · ${total(p.login) ?? p.open}개`)); r.appendChild(h("span", "late", `늦음 ${p.late}`)); c.appendChild(r); });
+    lateRows.forEach((p) => { const r = h("div", "prow"); r.appendChild(h("b", null, p.login + (p.login === me2 ? " (나)" : ""))); r.appendChild(h("span", null, `${roles[p.login] || "역할 없음"} · ${total(p.login) ?? p.open}개`)); r.appendChild(h("span", "late", `늦음 ${p.late}`)); c.appendChild(r); });
     if (b.rebalance) {
       c.appendChild(h("div", "note", `일이 몰렸어요 · ${b.rebalance.why.replace(/(\S+) 님이 (\d+)개를/g, (all, m, n) => `${m} 님이 ${total(m) ?? n}개를`)}`));
       const bt = h("button", "btn", "다시 나누기"); bt.type = "button";
@@ -3701,6 +3722,7 @@ $("composer").addEventListener("submit", (e) => { e.preventDefault(); const inpu
   if (/마감/.test(n) && /고치|고칠|고쳐|바꾸|바꿀|바꿔|수정|변경/.test(n) && extract) return editDeadline();  // 제출 마감 고치기는 대화에서만 (홈 카드에는 두지 않는다)
   if (/대회|해커톤|공모전|공고/.test(n) && /바꿔|바꾸|바꿀|교체|변경/.test(n)) return swapContest();  // '해커톤 바꿔 줘'를 AI가 못 알아듣던 것: 연결된 대회 바꾸기로 바로
   if (/나갈만한|해커톤있|공모전있|새대회/.test(n) || (/찾아|추천/.test(n) && /대회|공모전|해커톤|행사|나갈/.test(n))) return discoverChat(undefined, topicsIn(t));  // '노래 추천'·'아이디어 추천'은 대회 찾기가 아니다
+  if (/채점|심사기준|몇점|점수매|자가평가/.test(n)) return criteriaScore();  // '심사 기준으로 채점해 줘'가 AI 대화로 가서 '도와드리기 어려워요'로 끝나던 것: 자가 채점으로 바로
   if (/늦|지연|진행|재계획|다시계획/.test(n)) return progressCheck(false);
   if (/계획|일정짜|스케줄/.test(n)) return planFlow();
   if (/신청/.test(n) && extract) { return (me(t), applyFlow(extract)); }

@@ -1878,6 +1878,17 @@ def test_everyone_tasks_get_no_single_person_suggestion_and_text_is_not_confusin
     assert one["who"] and "발표" in one["role"]  # role은 '이 일의 성격'
 
 
+def test_unassigned_tasks_come_with_one_person_assign_proposals():
+    main._demo.reset()
+    main._demo.create_issue("[발표] 발표 자료 만들기", "본문", [], None)
+    b = client.get("/api/board").json()
+    t = next(t for t in b["unassigned"] if t["title"] == "[발표] 발표 자료 만들기")
+    st = main.build_state(main._demo)
+    assert [p["user"] for p in t["pick"]] == st.members  # 팀원 누구에게나 맡길 수 있다
+    data = verify(t["pick"][0]["proposal"]["token"], main.settings.signing_key)
+    assert data["actions"] == [{"type": "assign_issue", "issue": t["number"], "users": [st.members[0]], "expect_assignees": []}]
+
+
 # ---------- 공고 날짜·자격을 잘못 읽던 것 ----------
 _NOW_KST = datetime(2026, 11, 19, 14, 0, tzinfo=KST)
 
