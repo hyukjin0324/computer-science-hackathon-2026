@@ -2568,9 +2568,9 @@ function homeBoard(v, me2, items) {
     const more = (label, list) => { if (!list.length) return; const d = h("details", "hmore"); d.appendChild(h("summary", null, label)); list.forEach((row) => d.appendChild(row)); sec.appendChild(d); };
     more(`${ordered.length - 5}개 더 보기`, ordered.slice(5).map(([, mk]) => mk()));
     const myDone = (people.find((p) => p.login === me2) || {}).done || [];
-    more(`끝낸 일 ${myDone.length}개 보기`, myDone.map((t) => hDoneRow(t)));
     if (!ts.length && !myItems.length && !myDone.length) sec.appendChild(h("div", "note", b ? "나에게 맡겨진 할 일이 없어요." : "할 일을 불러오고 있어요…"));
     else if (!ordered.length) sec.appendChild(h("div", "note", "남은 일이 없어요. 수고했어요!"));
+    more(`끝낸 일 ${myDone.length}개 보기`, myDone.map((t) => hDoneRow(t)));  // 끝낸 일은 늘 맨 아래 (안내 문구보다 아래)
     v.appendChild(sec);
   }
   // 팀장이 정할 일: 담당 정하기 · 리뷰어 지정 · 일이 몰렸을 때 다시 나누기 (누구나 볼 수 있고, 오래 비면 누구나 승인)
