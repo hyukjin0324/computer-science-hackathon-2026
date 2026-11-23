@@ -4055,7 +4055,7 @@ const ME_PAGES = {
   connect: ["연결된 서비스", (v) => {
   if (!DISC.__fresh) { loadDiscord().then(() => { DISC.__fresh = true; if (mePage === "connect") renderMe(); }); }
   const c2 = h("div", "card");
-  const rows = [["GitHub", H.mode === "live" ? `연결됨 · ${H.repo}` : "데모 저장소 사용 중 · 실제 저장소는 대회 신청 뒤 연결 단계에서 연결함", H.mode === "live"], ["Claude AI (공고 분석·자유 대화)", H.ai ? "연결됨" : "꺼져 있음 · 정해진 말만 알아들음 (서버 운영자가 설정함)", H.ai], ["Discord 팀 채널", DISC.connected ? (DISC.source === "team" ? "연결됨 · 이 팀이 연결한 채널" : "연결됨 · 서버 기본 채널") : "미연결 · 팀 메시지는 복사만 됨", DISC.connected], ["팀 접근 코드", H.needs_code ? (store.get("code", "") ? "입력함" : "실행할 때 물어봄") : "사용 안 함", H.needs_code]];
+  const rows = [["GitHub", H.mode === "live" ? (curDraft() ? "연결됨 · 이 대회는 아직 저장소 연결 전" : `연결됨 · ${curRepo() || H.repo}`) : "데모 저장소 사용 중 · 실제 저장소는 대회 신청 뒤 연결 단계에서 연결함", H.mode === "live"], ["Claude AI (공고 분석·자유 대화)", H.ai ? "연결됨" : "꺼져 있음 · 정해진 말만 알아들음 (서버 운영자가 설정함)", H.ai], ["Discord 팀 채널", DISC.connected ? (DISC.source === "team" ? "연결됨 · 이 팀이 연결한 채널" : "연결됨 · 서버 기본 채널") : "미연결 · 팀 메시지는 복사만 됨", DISC.connected], ["팀 접근 코드", H.needs_code ? (store.get("code", "") ? "입력함" : "실행할 때 물어봄") : "사용 안 함", H.needs_code]];
   const connectAsk = (n) => {
     if (n.startsWith("Discord")) {
       if (!DISC.connected) return { open: () => openDiscordConnect() };
