@@ -2928,13 +2928,18 @@ function onboarding() {
 
 /* ---------- 팀플 고르기 ---------- */
 function dtxt(iso) { if (!iso) return ""; const n = new Date(); n.setHours(0, 0, 0, 0); const d = new Date(iso); d.setHours(0, 0, 0, 0); const k = Math.round((d - n) / 864e5); return k >= 0 ? `D-${k}` : `D+${-k}`; }
-// 끝난 팀플: 제출물을 다 냈거나(제출 마일스톤의 이슈가 모두 닫힘) 제출 마감이 지났으면 목록에서 숨긴다
+// 이슈 완료나 마감 경과는 실제 제출 완료가 아니다. 사용자가 제출 완료를 확인한 팀플만 숨긴다.
 function isPast(iso) {  // 날짜만 있거나 GitHub 마일스톤처럼 자정(00:00Z)이면 그날이 다 갈 때까지는 진행 중
   if (!iso) return false;
   const dayOnly = /^\d{4}-\d{2}-\d{2}(T00:00:00(\.000)?Z)?$/.test(iso);
   return (dayOnly ? new Date(iso.slice(0, 10) + "T23:59:59").getTime() : Date.parse(iso)) < Date.now();
 }
-function projEnded(p) { return !p.error && (isPast(p.due) || (p.total > 0 && p.done >= p.total)); }
+function setProjectHidden(key, hidden) {
+  const keys = new Set(store.get("hiddenProjects", []));
+  if (hidden) keys.add(key); else keys.delete(key);
+  store.set("hiddenProjects", [...keys].slice(-100));
+}
+function projEnded(p) { return !p.error && new Set(store.get("hiddenProjects", [])).has("r:" + p.repo); }
 function projSub(p) { if (p.error) return "저장소를 읽지 못했어요"; return [p.notice || "연결된 공고 없음", p.due ? `제출 ${dtxt(p.due)}` : "", p.total ? `제출물 ${p.done}/${p.total}` : ""].filter(Boolean).join(" · "); }
 function draftSub(d) { const ex = d.extract || {}; return [d.applied ? "신청 완료" : "신청 준비", ex.apply_deadline_iso ? `신청 ${dtxt(ex.apply_deadline_iso)}` : "", ex.submit_deadline_iso ? `제출 ${dtxt(ex.submit_deadline_iso)}` : ""].filter(Boolean).join(" · "); }
 async function loadProjects({ selectDefault = true } = {}) {
@@ -3056,6 +3061,7 @@ function fillProjectList(box, close, stay) {  // stay: 고른 뒤에도 지금 �
   const proj = (title, sub, color, on, fn) => { const b = h("button", "dw-proj" + (on ? " on" : "")); b.type = "button"; const dot = h("span", "pdot"); dot.style.background = `var(${color})`; b.appendChild(dot); const tx = h("span"); tx.appendChild(h("b", null, title)); tx.appendChild(h("small", null, sub)); b.appendChild(tx); b.onclick = () => { close(); if (!on) fn(); }; return b; };
   dw.appendChild(h("div", "dw-lab", "진행 중인 팀플"));
   const live = h("div", "dw-live"); live.appendChild(h("div", "note", "불러오는 중…")); dw.appendChild(live);
+  const hiddenProjects = h("div", "dw-hidden"); dw.appendChild(hiddenProjects);
   dw.appendChild(h("div", "dw-lab", "준비 중인 대회"));
   const liveDrafts = drafts.filter((d) => !isPast((d.extract || {}).submit_deadline_iso));  // 제출 마감이 지난 대회는 숨긴다
   if (!liveDrafts.length) dw.appendChild(h("div", "note", "아직 없음. 홈에서 찾아온 대회를 고르면 여기에 생김"));
@@ -3072,14 +3078,22 @@ function fillProjectList(box, close, stay) {  // stay: 고른 뒤에도 지금 �
   if (cached.length) { const keep = projects; projects = cached; drawLive(); projects = keep; }
   function drawLive() {
     live.innerHTML = "";
-    const shown = projects.filter((p) => !projEnded(p));  // 제출을 마쳤거나 제출 마감이 지난 팀플은 숨긴다
-    if (!shown.length) live.appendChild(h("div", "note", projects.length ? "진행 중인 팀플 없음 · 끝난 팀플은 숨겼어요" : ME.logged_in ? "Bento 앱이 설치된 내 저장소가 아직 없음" : "Bento 앱이 설치된 저장소가 없음"));
+    hiddenProjects.innerHTML = "";
+    const shown = projects.filter((p) => !projEnded(p));
+    const hidden = projects.filter(projEnded);
+    if (!shown.length) live.appendChild(h("div", "note", projects.length ? "진행 중인 팀플이 없어요" : ME.logged_in ? "Bento 앱이 설치된 내 저장소가 아직 없음" : "Bento 앱이 설치된 저장소가 없음"));
     shown.forEach((p) => {  // 진행 중인 팀플 옆 연필: 연결된 대회 바꾸기 (잘못 고른 대회를 대화로만 바꾸던 것)
       const row = h("div", "dw-row"); row.appendChild(proj(p.repo.split("/")[1], projSub(p), colorOf("r:" + p.repo), !curDraft() && curRepo() === p.repo, () => useProject({ repo: p.repo }, stay)));
       const ed = h("button", "dw-del"); ed.type = "button"; ed.setAttribute("aria-label", "이 팀플의 대회 바꾸기"); ed.title = "대회 바꾸기"; ed.innerHTML = icon("pencil");
       ed.onclick = () => { close(); if (curDraft() || curRepo() !== p.repo) useProject({ repo: p.repo }, true); showTab("chat"); swapContest(); };
       row.appendChild(ed); live.appendChild(row);
     });
+    if (hidden.length) {
+      hiddenProjects.appendChild(h("div", "dw-lab", `숨긴 팀플 ${hidden.length}개`));
+      hidden.forEach((p) => hiddenProjects.appendChild(proj(p.repo.split("/")[1], `${projSub(p)} · 다시 표시`, colorOf("r:" + p.repo), false, () => {
+        setProjectHidden("r:" + p.repo, false); useProject({ repo: p.repo }, stay); snack("팀플을 다시 표시했어요");
+      })));
+    }
     if (H.install_url) {  // 내 GitHub 저장소가 목록에 없으면: 그 저장소에 Bento 앱을 설치하면 여기에 생긴다 (전에는 이 화면에 방법이 없었다)
       live.appendChild(h("div", "note dw-hint", "내 저장소가 안 보이면, 그 저장소에 Bento 앱 설치 필요"));
       const ins = link("내 저장소에 Bento 설치", H.install_url); ins.target = "_self"; live.appendChild(ins);
@@ -3631,9 +3645,10 @@ function markDone(kind, proof, journeyState) {
     if (d) { d.applied = at; saveDrafts(); }
     try { localStorage.removeItem("bento:applyTodo:" + projKey()); } catch (e) { /* 무시 */ }
   }
+  if (kind === "submit" && !d) setProjectHidden(projKey(), true);
   if (journeyState) journeyState.set(journeyState.n);
   renderCal(); renderHome();
-  if (kind === "submit") { bot("제출 완료로 기록했어요. 마감 알림을 멈출게요."); return; }
+  if (kind === "submit") { bot("제출 완료로 기록했어요. 팀플 목록의 숨긴 팀플로 옮겼어요."); return; }
   resumeChat();
   if (d) { bot("신청 완료로 기록했어요. 이제 팀 저장소를 준비해요."); startPath(d); }
   else { bot("신청 완료로 기록했어요. 이제 팀에서 할 일을 나눠요."); chip("할 일 나누기", afterTasks); }
@@ -4199,7 +4214,7 @@ const ME_PAGES = {
   sec("안전장치", "•", ["저장소 글 속 '에이전트에게 하는 지시'는 따르지 않고 표시만 함", "여러 명이 같은 제안을 승인해도 한 번만 실행함", "그사이 다른 팀원이 바꾼 내용은 덮어쓰지 않음"]);
   }],
   data: ["기기 기록", (v) => {
-  const c5 = h("div", "card"); c5.style.display = "flex"; c5.style.justifyContent = "center"; c5.style.padding = "24px 16px"; const cl = h("button", "btn", "기기 기록 지우기"); cl.type = "button";  /* 버튼은 가운데 */ const clearAll = () => { try { Object.keys(localStorage).filter((k) => /^bento:(extract|plan|colors|calHide|progressSeen|info|form|done)/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch (e) { /* 무시 */ } ["tasks", "docs", "drafts"].forEach((k) => store.set(k, [])); store.set("code", ""); tasks.length = 0; docs.length = 0; drafts.length = 0; extract = null; if (cur && cur.draft) { cur = { repo: curRepo() }; store.set("cur", cur); } renderHead(); renderBox(); renderCal(); renderMe(); snack("기기 기록을 지움"); }; cl.onclick = () => confirmSheet({ title: "기기 기록을 지울까요?", body: "맡긴 일·초안·계획·내 정보 메모가 이 기기에서 지워집니다.\nGitHub에 남은 기록은 그대로입니다.\n지우면 되돌릴 수 없습니다.", ok: "지우기", danger: true, onOk: clearAll }); c5.appendChild(cl); v.appendChild(c5);  }],
+  const c5 = h("div", "card"); c5.style.display = "flex"; c5.style.justifyContent = "center"; c5.style.padding = "24px 16px"; const cl = h("button", "btn", "기기 기록 지우기"); cl.type = "button";  /* 버튼은 가운데 */ const clearAll = () => { try { Object.keys(localStorage).filter((k) => /^bento:(extract|plan|colors|calHide|hiddenProjects|progressSeen|info|form|done)/.test(k)).forEach((k) => localStorage.removeItem(k)); } catch (e) { /* 무시 */ } ["tasks", "docs", "drafts"].forEach((k) => store.set(k, [])); store.set("code", ""); tasks.length = 0; docs.length = 0; drafts.length = 0; extract = null; if (cur && cur.draft) { cur = { repo: curRepo() }; store.set("cur", cur); } renderHead(); renderBox(); renderCal(); renderMe(); snack("기기 기록을 지움"); }; cl.onclick = () => confirmSheet({ title: "기기 기록을 지울까요?", body: "맡긴 일·초안·계획·내 정보 메모가 이 기기에서 지워집니다.\nGitHub에 남은 기록은 그대로입니다.\n지우면 되돌릴 수 없습니다.", ok: "지우기", danger: true, onOk: clearAll }); c5.appendChild(cl); v.appendChild(c5);  }],
   help: ["도움말", (v) => {
     // 쓰는 순서를 단계별 카드로: 번호 · 제목 · 짧은 설명
     const c = h("div", "card helpcard");
