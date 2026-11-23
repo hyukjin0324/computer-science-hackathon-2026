@@ -796,6 +796,8 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .htask-check.ok { border-color: var(--ok); } .htask-check.crit { border-color: var(--crit); } .htask-check.info { border-color: var(--info); } .htask-check.muted { border-color: #A3A5AA; }
 .htask.done .htask-go > span > b:first-child { text-decoration: line-through; color: #A3A5AA; } .htask.done .hdue { opacity: .5; }
 .htask.hcheckable { grid-template-columns: 18px minmax(0, 1fr); cursor: default; }
+.hlead .htask-check { width: 8px; height: 8px; border: 0; border-radius: 50%; background: var(--warn); justify-self: center; }  /* 팀장이 정할 일: 네모 대신 작은 동그라미 (색은 급한 정도 그대로) */
+.hlead .htask-check.ok { background: var(--ok); } .hlead .htask-check.crit { background: var(--crit); } .hlead .htask-check.info { background: var(--info); } .hlead .htask-check.muted { background: #A3A5AA; }
 .htask.dotrow .htask-check { width: 6px; height: 6px; border: 0; border-radius: 50%; justify-self: center; }  /* 팀원 별 할 일: 네모 대신 작은 점 (색은 대회 색, 스크립트에서) */
 .htask.dotrow { min-height: 52px; padding: 8px 0; }  /* 사람 이름(위 줄)과 구별되게 글자를 한 단계 작게 */
 .htask.dotrow b { font-size: var(--fs-small); font-weight: 500; }
@@ -2566,7 +2568,7 @@ function homeBoard(v, me2, items) {
   const leads = b ? (b.leads || []).filter(Boolean) : [];
   const showUnassigned = unassigned.length && leads.includes(me2);  // 담당 없는 할 일은 팀장에게만
   if (leadItems.some((i) => i.id !== "assign") || showUnassigned) {  // 보여 줄 게 없으면 칸째 숨김
-    const lsec = h("section", "hsec"); v.appendChild(lsec);
+    const lsec = h("section", "hsec hlead"); v.appendChild(lsec);
     const sh = h("div", "sech"); sh.appendChild(h("h2", null, "팀장이 정할 일")); sh.appendChild(h("span", null, leads.length ? `팀장 ${leads.join(", ")}${leads.includes(me2) ? " (나)" : ""}` : "")); lsec.appendChild(sh);
     leadItems.filter((i) => i.id !== "assign").forEach((it) => lsec.appendChild(hItemRow(it)));
     if (showUnassigned) {
