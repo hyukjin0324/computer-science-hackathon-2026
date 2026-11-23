@@ -1020,11 +1020,13 @@ def test_roles_are_saved_directly_then_used_for_tasks_and_reviewers():
 
 def test_selected_team_lead_overrides_repo_admin_and_roles_have_no_limit():
     from app import ownership as own
+    from app.actions import SetRoles
 
     m = main._demo.d["members"]
     assert main.build_state(main._demo).leads == [m[0]]  # 선택 전에는 기존 저장소 관리자
 
     all_roles = list(own.ROLES)
+    assert validate([SetRoles(roles={m[1]: all_roles})], main.build_state(main._demo)) == []
     saved = client.post("/api/roles", json={"roles": {m[1]: all_roles}})
     assert saved.status_code == 200 and saved.json()["roles"][m[1]] == all_roles
     assert main.build_state(main._demo).leads == [m[1]]
