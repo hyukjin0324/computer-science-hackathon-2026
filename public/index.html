@@ -702,8 +702,8 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .htask .chev { color: #979AA1; font-size: 24px; line-height: 1; }
 .htask .hdue { display: inline-block; margin-left: 10px; padding: 1px 8px; border-radius: 99px; font-size: var(--fs-body); font-weight: 800; line-height: 1.35; vertical-align: -2px; background: var(--ok-soft); color: var(--ok); }  /* 마감(D-1·늦음)은 크게 칩으로 */
 .htask .hdue.warn { background: var(--warn-soft); color: var(--warn); } .htask .hdue.crit { background: var(--crit-soft); color: var(--crit); }
-.hcheck { width: 18px; height: 18px; border: 2px solid var(--warn); border-radius: 5px; }
-.hcheck.ok { border-color: var(--ok); } .hcheck.crit { border-color: var(--crit); } .hcheck.info { border-color: var(--info); } .hcheck.muted { border-color: #A3A5AA; }
+.htask-check { width: 18px; height: 18px; border: 2px solid var(--warn); border-radius: 5px; }
+.htask-check.ok { border-color: var(--ok); } .htask-check.crit { border-color: var(--crit); } .htask-check.info { border-color: var(--info); } .htask-check.muted { border-color: #A3A5AA; }
 .htask.done b { text-decoration: line-through; color: #A3A5AA; }
 .hsec .note { font-size: var(--fs-small); padding: 8px 0; }
 .hsec .lead-tasks { gap: 0; border-top: 1px solid var(--line); padding-top: 10px; }
@@ -2043,7 +2043,7 @@ function itemRow(it, inGroup) {
 function hTaskRow(t, suggest) {
   const a = h("a", "htask"); a.href = t.url; a.target = "_blank"; a.rel = "noopener noreferrer";
   const dd = t.due ? ddays(t.due) : null; const tone = t.late ? "crit" : dd != null && dd <= 2 ? "warn" : "ok";
-  const ck = h("i", "hcheck " + tone); ck.setAttribute("aria-hidden", "true"); a.appendChild(ck);
+  const ck = h("i", "htask-check " + tone); ck.setAttribute("aria-hidden", "true"); a.appendChild(ck);
   const tx = h("span"); tx.appendChild(h("b", null, t.title));
   const sub = h("small", null, `GitHub 할 일 · #${t.number}`); const due = t.late ? "늦음" : dd == null ? "" : dd === 0 ? "오늘 마감" : `D-${dd}`;
   if (due) sub.appendChild(h("b", "hdue " + tone, due)); tx.appendChild(sub);  // 마감은 눈에 띄게
@@ -2053,7 +2053,7 @@ function hTaskRow(t, suggest) {
 }
 function hItemRow(it, inGroup) {
   const b = h("button", "htask"); b.type = "button"; const [tt, tc] = itemTag(it);
-  const ck = h("i", "hcheck " + tc); ck.setAttribute("aria-hidden", "true"); b.appendChild(ck);
+  const ck = h("i", "htask-check " + tc); ck.setAttribute("aria-hidden", "true"); b.appendChild(ck);
   const tx = h("span"); tx.appendChild(h("b", null, it.title));
   tx.appendChild(h("small", null, [kindOf(it)[0], tt, inGroup ? "" : turnLabel(it)[0]].filter(Boolean).join(" · ")));
   b.appendChild(tx); b.appendChild(h("span", "chev", "›")); b.onclick = () => { showTab("chat"); openItem(it); }; return b;
