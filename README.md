@@ -145,7 +145,7 @@ Windows에서는 경로가 `.venv\Scripts\python`이에요. `tzdata`는 Windows�
    - Administration: **Read and write** (Bento에서 팀원 초대를 보낼 때 필요. 기존 설치는 앱 권한 변경을 승인해야 해요.)
 4. Subscribe to events: Pull request, Pull request review, Issues, Issue comment, Check run
 5. 만든 뒤 Private key를 내려받고, 팀 저장소에 앱을 설치
-6. 환경 변수 설정 (`.env.example` 참고): `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`(GitHub로 시작하기), `BENTO_REPO`, `BENTO_SIGNING_KEY`, `BENTO_ACCESS_CODE`, `ANTHROPIC_API_KEY`, `DISCORD_WEBHOOK_URL`(선택), `CRON_SECRET`(매일 알림용)
+6. 환경 변수 설정 (`.env.example` 참고): `GITHUB_APP_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_WEBHOOK_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`(GitHub로 시작하기), `BENTO_PUBLIC_URL`, `BENTO_APP_URL`, `BENTO_REPO`, `BENTO_SIGNING_KEY`, `BENTO_ACCESS_CODE`, `ANTHROPIC_API_KEY`, `DISCORD_WEBHOOK_URL`(선택), `CRON_SECRET`(매일 알림용)
 
 배포 주소가 공개라면 `BENTO_ACCESS_CODE`를 꼭 설정하세요. 설정하지 않으면 주소를 아는 누구나 승인 버튼을 누를 수 있어요.
 
