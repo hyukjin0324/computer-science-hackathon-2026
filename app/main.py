@@ -1033,6 +1033,7 @@ def _agent_repo(repo: str, gh, st) -> dict:
             sent = True
     # 승인이 미뤄지면 단계적으로 알린다: 12시간 → 주인에게 다시, 24시간 → 팀 전체 (단계마다 한 번만)
     lines, now_keys = [], []
+    can_run = cant_run = False  # 알린 일 중 Bento 제안(승인하고 실행)이 있는 일·없는 일 (CI 실패·머지처럼 사람이 직접 할 일)
     done = _sent_marks(gh, "esc") if hook and notify else []
     for it in triage(st, settings.review_wait_hours):
         owner, age = own.owner_and_age(it, st, settings.review_wait_hours, now)
@@ -1042,12 +1043,22 @@ def _agent_repo(repo: str, gh, st) -> dict:
         k = _h6(f"{it['id']}:{lv}")
         now_keys.append(k)
         if k not in done:
+            if it["options"]:
+                can_run = True
+            else:
+                cant_run = True
             lines.append(f"· {owner}님이 처리할 차례예요: {it['title']} ({prog.span(age)}째 그대로)" if lv == 1
                          else f"· {it['title']} ({prog.span(age)}째 그대로) · 이제 팀원 누구나 처리할 수 있어요")
     esc_ok = True
     if lines and hook and notify:
-        esc_ok = _post(hook, f"[{repo}] 처리를 기다리는 일\n" + "\n".join(lines)
-                       + "\n→ Bento가 해결 방법을 제안해 뒀어요. 앱 홈에서 제안을 확인하고 '승인하고 실행'을 누르면 바로 처리돼요."
+        # 전에는 제안이 없는 일(CI 실패 등)까지 '승인하고 실행을 누르면 바로 처리돼요'라고 알렸다
+        if can_run:
+            tail = "\n→ Bento가 해결 방법을 제안해 뒀어요. 앱 홈에서 제안을 확인하고 '승인하고 실행'을 누르면 바로 처리돼요."
+            if cant_run:
+                tail += " 제안이 없는 일은 앱에서 내용을 보고 직접 처리해 주세요."
+        else:
+            tail = "\n→ Bento가 대신 할 수 있는 일은 아니에요. 앱 홈에서 내용을 보고 직접 처리해 주세요."
+        esc_ok = _post(hook, f"[{repo}] 처리를 기다리는 일\n" + "\n".join(lines) + tail
                        + (f"\n{app_url}" if app_url else ""))
     if hook and notify and esc_ok and set(now_keys) != set(done):
         _save_marks(gh, "esc", now_keys)  # 지금 기다리는 일만 기억한다 (해결된 일은 지운다)

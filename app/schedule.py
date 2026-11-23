@@ -55,7 +55,8 @@ def work_plan(ex: NoticeExtract, now: datetime | None = None) -> list[dict]:
             elif title in BEFORE_DEADLINE_DAY and prev_night and at > prev_night:  # 영상·발표 완성은 마감 당일 아침으로 밀리지 않게 전날 밤까지. 당일 오전은 최종 점검만
                 at = prev_night
             raw.append((title, at, "step", note))
-    raw.append(("최종 점검", due - max(timedelta(hours=3), span * 0.03), "step", "제출물 링크·README·권한(공개 여부) 확인"))
+    # 마감 3시간 전 (마감이 23:59면 20:59, 12:00이면 09:00). 전에는 기간의 3%를 빼서 기간이 길면 '마감 당일 01:57'처럼 어중간한 새벽 시각이 나왔다
+    raw.append(("최종 점검", due - timedelta(hours=3), "step", "제출물 링크·README·권한(공개 여부) 확인"))
     raw.append(("제출 마감", due, "due", ex.submit_deadline or ""))
     seen, out = set(), []
     for title, at, kind, note in sorted(raw, key=lambda x: x[1]):
