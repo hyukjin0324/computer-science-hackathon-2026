@@ -381,7 +381,8 @@ def plan(ex: NoticeExtract, state: RepoState | None, milestone_title: str = "해
     desc = f"{no_mention(ex.title)} 제출 · Bento가 공고에서 만든 마일스톤" + (f"\n\n{embed(ex, h)}" if h else "") + (f"\n<!-- bento-src:{src} -->" if safe_src(src) else "")
     actions: list = [CreateMilestone(title=milestone_title, due_on=_utc(ex.submit_deadline_iso), description=desc)]
     linked: list[int] = []
-    existing = [i for i in (state.issues if state else []) if not is_suspicious(i.body)]
+    # 계획 단계 할 일('[계획] 시연 영상 촬영')은 제출물로 묶지 않는다: 낱말이 겹쳐도 그 단계 마일스톤에서 '해커톤 제출'로 끌려갔다
+    existing = [i for i in (state.issues if state else []) if not is_suspicious(i.body) and not i.title.startswith("[계획]")]
     # 저장소에 저장해 둔 예전 분석 결과에 같은 제출물이 두 번 있어도, 같은 제목의 이슈를 두 번 만들려다 제안 전체가 실패하지 않게
     for d in unique_deliverables(ex.deliverables):
         if _is_repo_item(d.name) or is_submit_act(d.name):

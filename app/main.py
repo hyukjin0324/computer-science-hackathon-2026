@@ -452,8 +452,8 @@ def analyze_notice(body: NoticeIn, request: Request, x_bento_code: str | None = 
     if body.submit_deadline_iso:
         try:
             iso = notice_mod.aware_iso(body.submit_deadline_iso)
-            from .rules import human as _human
-            ex = ex.model_copy(update={"submit_deadline_iso": iso, "submit_deadline": _human(datetime.fromisoformat(iso))})
+            from .rules import KST as _KST, human as _human
+            ex = ex.model_copy(update={"submit_deadline_iso": iso, "submit_deadline": _human(datetime.fromisoformat(iso).astimezone(_KST))})  # 화면은 UTC(Z)로 보낸다: 그대로 쓰면 23:59가 14:59로 적혔다
         except (ValueError, TypeError) as e:
             raise HTTPException(422, "날짜 형식이 맞지 않아요") from e
     team = len(st.members) if st else None
@@ -462,9 +462,26 @@ def analyze_notice(body: NoticeIn, request: Request, x_bento_code: str | None = 
     out = {"extract": ex.model_dump(), "dropped": dropped, "source": source, "usage": usage, "team_size": team, "team_ok": team_ok, "repo": gh.repo if gh else None}
     if gh and st:
         actions, linked = notice_mod.plan(ex, st, h=notice_mod.notice_hash(notice_mod.clean_text(body.text)), src=body.url)
-        if not st.milestone("해커톤 제출"):
+        ms = st.milestone("해커톤 제출")
+        if not ms:
             out["plan"] = _proposal(gh.repo, "대회 일정을 GitHub에 적어 두기", actions, "notice")
             out["linked"] = linked
+        else:
+            # 이미 다른 대회가 연결된 저장소: 전에는 제안을 만들지 않아서, 잘못 고른 대회를 바꿀 길이 없었다(저장소에는 옛 대회가 남음).
+            # 다른 대회면 '해커톤 제출' 마일스톤의 마감·설명(숨겨 둔 공고 분석)을 새 대회로 바꾸는 제안. 팀 전체 변경이라 다른 팀원 승인이 필요하다.
+            old = notice_mod.from_descriptions([ms.description])
+            same = old is not None and old.title == ex.title and (old.submit_deadline_iso or "") == (ex.submit_deadline_iso or "")
+            if not same:
+                swap = UpdateMilestone(title="해커톤 제출", due_on=notice_mod._utc(ex.submit_deadline_iso) or ms.due_on or "",
+                                       reason=f"대회를 '{(old.title if old else '이전 대회')[:30]}'에서 '{ex.title[:30]}'(으)로 바꿔요",
+                                       expect_due=ms.due_on, description=actions[0].description)
+                # 옛 대회의 제출물 이슈 중 새 대회에 쓰이지 않는 것은 닫는다 (다시 열 수 있다)
+                gone = [CloseIssue(issue=i.number, comment=f"연결된 대회를 '{ex.title[:30]}'(으)로 바꿔서, 새 대회에 없는 제출물이라 닫아요. 필요하면 다시 열어 주세요.")
+                        for i in st.issues if i.milestone == "해커톤 제출" and i.title.startswith("[제출물]") and i.number not in linked and not is_suspicious(i.body)]
+                if swap.due_on:  # 마감을 전혀 모르면(새 공고에도, 저장소에도 없음) 바꾸지 않는다
+                    out["plan"] = _proposal(gh.repo, "연결된 대회 바꾸기", [swap, *actions[1:], *gone], "notice")
+                    out["linked"] = linked
+                    out["replaces"] = old.title if old else None
     return out
 
 
@@ -706,6 +723,9 @@ def schedule_to_github(body: ScheduleGitHubIn):
             raise HTTPException(400, f"날짜를 읽지 못했어요: {s.due}") from e
         if title not in have:
             actions.append(CreateMilestone(title=title, due_on=due, description="Bento가 공고 마감에서 거꾸로 짠 작업 계획"))
+        elif (old_ms := st.milestone(title)) and (old_ms.due_on or "")[:10] != (due or "")[:10]:
+            # 대회를 바꾸거나 마감이 바뀌어 계획을 다시 짜면, 이미 있는 같은 단계의 날짜도 새 계획에 맞춰 옮긴다 (전에는 옛 날짜가 그대로 남았다)
+            actions.append(UpdateMilestone(title=title, due_on=due, reason="다시 짠 계획에 맞춰요", expect_due=old_ms.due_on))
         issue_title = f"[계획] {s.title.strip()[:60]}"
         if issue_title not in titles:
             owner = own.pick_by_role(st.members, st.roles, load, s.title)[0] if load else None
