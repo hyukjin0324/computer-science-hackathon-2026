@@ -197,6 +197,10 @@ def test_role_picker_edits_only_my_roles_without_limiting_count(page, app_url):
 
     seoyeon = page.get_by_role("group", name="내 역할")
     expect(seoyeon).to_be_visible()
+    jiwoo = page.get_by_role("group", name="jiwoo 역할")
+    expect(jiwoo).to_be_visible()
+    jiwoo.get_by_role("button", name="기획·PM", exact=True).click()
+    expect(page.get_by_text("본인 역할만 수정할 수 있어요", exact=True)).to_be_visible()
     seoyeon.get_by_role("button", name="팀장", exact=True).click()
     expect(seoyeon.locator('[data-role="lead"]')).to_have_attribute("aria-pressed", "true")
 
