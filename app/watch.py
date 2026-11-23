@@ -12,7 +12,7 @@ import re
 import shlex
 from datetime import datetime, timedelta
 
-from .actions import Comment, CreateIssue, is_suspicious
+from .actions import Comment, CreateIssue, ReassignIssue, is_suspicious
 from .state import RepoState, hours, ms_due, parse_ts
 from .triage import issue_link
 
@@ -20,6 +20,7 @@ QUIET_H = 72  # 이만큼 활동이 없으면 '연락이 끊긴 팀원'
 STALE_H = 72  # 맡은 할 일이 이만큼 그대로면 '손을 안 댄 할 일'
 CHANGES_H = 24  # 수정 요청 뒤 이만큼 새 커밋이 없으면
 INVITE_H = 12
+CHECKIN_WAIT_H = 24  # 안부를 물은 뒤 이만큼은 답을 기다린다. 지나도 답이 없으면 일을 다시 나누자고 한다
 SUBMIT_MS = "해커톤 제출"
 
 
@@ -30,6 +31,20 @@ def _mb(n: int) -> str:
 def deadline_of(state: RepoState) -> datetime | None:
     m = state.milestone(SUBMIT_MS)
     return ms_due(m.due_on) if m and m.due_on else None
+
+
+def checkin_of(state: RepoState, m: str) -> dict | None:
+    """Bento가 m 님께 안부를 물었고 아직 답이 없으면 {at, issue, url, hours, overdue}. 답했거나 그 뒤에 움직였으면 None."""
+    sig = state.signals or {}
+    ck = (sig.get("checkins") or {}).get(m)
+    at = parse_ts(ck.get("at")) if ck else None
+    if not at:
+        return None
+    moved = parse_ts((sig.get("activity") or {}).get(m))
+    if ck.get("replied") or (moved and moved > at):
+        return None  # 답장을 달았거나, 그 뒤에 커밋·PR 등으로 움직였다
+    h = hours(at, state.now)
+    return {**ck, "hours": h, "overdue": h >= CHECKIN_WAIT_H}
 
 
 def watch(state: RepoState) -> list[dict]:
@@ -83,6 +98,7 @@ def watch(state: RepoState) -> list[dict]:
 
     # 4. 연락이 끊긴 팀원: 다른 팀원은 움직이는데 혼자 3일 넘게 조용함
     act = sig.get("activity")
+    waiting = set()  # 안부를 묻고 답을 기다리는 사람: 그 사람 할 일로 또 조르지 않는다
     if team and act is not None:
         recent = [m for m in state.members if (t := parse_ts(act.get(m))) and hours(t, now) < QUIET_H]
         if recent:
@@ -105,6 +121,21 @@ def watch(state: RepoState) -> list[dict]:
                     continue  # 맡은 일이 없으면 조용해도 괜찮다
                 since = f"{int(hours(t, now) // 24)}일째 활동이 없어요" if t else "저장소에서 활동한 기록이 없어요"
                 target = mine[0].number if mine else prs[0].number
+                ck = checkin_of(state, m)
+                if ck and not ck["overdue"]:
+                    waiting.add(m)
+                    continue  # 이미 안부를 물었다: 하루는 답을 기다린다 (홈 팀원 목록에 '답 기다리는 중'으로만)
+                if ck:  # 물은 지 하루가 지나도 답도 활동도 없으면: 맡은 일을 지금 움직이는 사람에게 넘기기
+                    to = sorted((x for x in recent if x != m), key=lambda x: (load.get(x, 0), x))[0]
+                    acts = [ReassignIssue(issue=i.number, users=[to], expect_assignees=i.assignees) for i in mine if i.assignees == [m]]
+                    if not acts:
+                        continue  # 넘길 수 있는 할 일이 없으면(PR만 있거나 여럿이 함께 맡은 일) 더 조르지 않는다
+                    items.append({"id": f"quiet-{m}", "sev": "주의", "who": who, "age": 0,
+                                  "title": f"{m} 님이 안부에 하루 넘게 답이 없음",
+                                  "why": f"안부를 물었는데 답도 활동도 없어요. 맡은 할 일 {len(acts)}개를 지금 움직이는 {to} 님께 넘겨 마감을 지켜요",
+                                  "evidence": [{"label": f"안부 댓글 #{ck.get('issue') or target}", "url": ck.get("url") or f"{gh_url}/issues/{target}"}],
+                                  "options": [{"label": "일 다시 나누기", "recommended": True, "sub": f"{m} → {to} · {len(acts)}개", "actions": acts}]})
+                    continue
                 items.append({"id": f"quiet-{m}", "sev": "주의", "who": who, "age": 0,
                               "title": f"{m} 님이 {since.replace('어요', '음')}",
                               "why": f"맡은 할 일 {len(mine)}개 · 열린 PR {len(prs)}개. 바쁜 사정이 있는지 먼저 물어보고, 어려우면 일을 다시 나눠요",
@@ -114,7 +145,7 @@ def watch(state: RepoState) -> list[dict]:
 
     # 5. 맡기만 하고 손을 안 댄 할 일
     from .notice import is_submit_act
-    quiet_people = {it["id"][6:] for it in items if it["id"].startswith("quiet-")}
+    quiet_people = {it["id"][6:] for it in items if it["id"].startswith("quiet-")} | waiting
     pr_text = " ".join(f"{p.title} {p.body} {p.branch}" for p in state.prs)
     stale = []
     for i in state.issues:

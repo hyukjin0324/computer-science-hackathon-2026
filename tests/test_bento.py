@@ -1169,6 +1169,33 @@ def test_watch_does_not_ask_lead_about_themselves():
     assert "quiet-jiwoo" not in w or w["quiet-jiwoo"]["who"] not in (None, "jiwoo")
 
 
+def _checkin(d, hours_ago, reply_hours_ago=None):
+    """#12(doyoon 담당)에 Bento 안부 댓글, 원하면 doyoon의 답장까지."""
+    d["comments"].setdefault(12, []).append({"id": 8001, "user": {"login": "bento[bot]"}, "created_at": _ts(hours_ago),
+                                             "body": "@doyoon 님, 요즘 어떠세요? 맡은 일 중에 막히거나 바쁜 게 있으면 편하게 말씀해 주세요."})
+    if reply_hours_ago is not None:
+        d["comments"][12].append({"id": 8002, "user": {"login": "doyoon"}, "body": "괜찮아요, 오늘 올릴게요!", "created_at": _ts(reply_hours_ago)})
+
+
+def test_quiet_member_already_asked_waits_a_day_then_suggests_rebalance():
+    from app.watch import checkin_of
+    w, st = _w(lambda d: _checkin(d, 2))
+    assert "quiet-doyoon" not in w  # 이미 물었으면 하루는 팀장이 정할 일에 다시 올리지 않는다
+    ck = checkin_of(st, "doyoon")
+    assert ck and not ck["overdue"] and ck["issue"] == 12  # 홈 팀원 목록에 '답 기다리는 중'
+    w, _ = _w(lambda d: _checkin(d, 30))
+    opt = w["quiet-doyoon"]["options"][0]  # 하루가 지나도 답이 없으면 일 다시 나누기
+    assert opt["label"] == "일 다시 나누기" and opt["actions"]
+    assert all(a.type == "reassign_issue" and a.users != ["doyoon"] and a.expect_assignees == ["doyoon"] for a in opt["actions"])
+
+
+def test_reply_to_checkin_clears_it():
+    from app.watch import checkin_of
+    w, st = _w(lambda d: _checkin(d, 30, reply_hours_ago=1))
+    assert checkin_of(st, "doyoon") is None  # 답장이 오면 '답 기다리는 중'도 사라진다
+    assert "quiet-doyoon" not in w  # 답장도 활동이라 다시 안부를 묻지 않는다
+
+
 def test_watch_main_ci_broken():
     def broken(d):
         d["checks"][d["head"]] = [{"name": "test", "status": "completed", "conclusion": "failure", "completed_at": _ts(3)}]
