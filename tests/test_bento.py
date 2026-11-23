@@ -423,6 +423,19 @@ def test_confirm_locks_version_detects_changes_and_records_proof():
     assert done["closed"] and done["proof"] == "접수번호 HK-0042"
 
 
+def test_submit_check_shows_confirm_issue_closed_directly_on_github():
+    """GitHub에서 확인 이슈를 직접 닫아도(제출 증거 없이) 점검 화면이 그 사실을 알고 '기록하러 가기'로 이어 가게 한다."""
+    head = main._demo.d["head"]
+    p = client.post("/api/submit/confirm", json={"title": "2026 해커톤", "head_sha": head}).json()["proposal"]
+    assert client.post("/api/execute", json={"token": p["token"]}).json()["ok"]
+    n = client.get("/api/submit/status").json()["issue"]
+    assert client.post("/api/submit-check", json={"deliverables": []}).json()["confirm"]["closed"] is False
+    iss = next(i for i in main._demo.d["issues"] if i["number"] == n)
+    iss["state"], iss["closed_at"] = "closed", "2999-01-01T00:00:00Z"  # 사람이 GitHub에서 직접 닫음 (증거 댓글 없음)
+    conf = client.post("/api/submit-check", json={"deliverables": []}).json()["confirm"]
+    assert conf and conf["issue"] == n and conf["closed"] is True and conf["proof"] is None
+
+
 def test_apply_check_counts_team_and_keeps_privacy_for_humans():
     r = client.post("/api/apply-check", json={"extract": SAMPLE_EXTRACT.model_dump(), "members": ["가", "나", "다", "라", "마"]}).json()
     team = next(x for x in r["rows"] if x["name"] == "팀 인원")

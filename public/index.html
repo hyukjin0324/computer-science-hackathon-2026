@@ -3613,6 +3613,12 @@ async function runSubmitCheck(journeyState) {
     s1.appendChild(rb); if (who.length) open2();
   } else {
     if (conf && !conf.closed) s1.appendChild(h("div", "note", "! 예전 버전으로 받은 확인이 있어요. 지금 버전으로 다시 받아야 해요."));
+    if (conf && conf.closed) {  // 확인 요청이 GitHub에서 이미 닫혀 있다 (Bento로 기록하지 않고 직접 닫았거나, 이미 기록했거나): 막다른 화면 대신 바로 이어 가게
+      const closedNote = h("div", "note", conf.proof ? `✓ #${conf.issue} 확인 요청이 닫혀 있고 제출 증거가 기록돼 있어요 · ${conf.proof}` : `#${conf.issue} 확인 요청이 GitHub에서 닫혔어요. 이미 제출했다면 바로 '제출 완료로 기록'해 주세요. 팀원 화면도 함께 바뀌어요.`);
+      closedNote.setAttribute("role", "status"); s1.appendChild(closedNote);
+      const jb = h("div", "row-btns"); const jump = h("button", "btn primary", "제출 완료로 기록하러 가기"); jump.type = "button";
+      jump.onclick = () => { jump.disabled = true; open2(); openProof(); }; jb.appendChild(jump); s1.appendChild(jb);
+    }
     s1.appendChild(h("div", "note", solo ? "혼자 하는 팀이라 이 단계는 건너뛰어도 돼요." : "팀원에게 지금 버전을 봐 달라고 부탁해요. 그 뒤에 코드가 바뀌면 Bento가 알려요."));
     const rb = h("div", "row-btns"); const ask = h("button", "btn primary", "확인 요청 보내기"); ask.type = "button"; rb.appendChild(ask);
     const skip = h("button", "btn", solo ? "건너뛰기" : "확인 없이 진행"); skip.type = "button"; rb.appendChild(skip); s1.appendChild(rb);
