@@ -2668,6 +2668,8 @@ function refreshIfStale() { if (Date.now() - homeLoadedAt > 30000 && !$("v-home"
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshIfStale(); });
 function syncSubmitted() {  // 다른 팀원이 제출 완료를 기록했으면(저장소의 [제출 확인] 이슈에 증거를 남기고 닫음) 이 기기도 제출 완료로
   if (curDraft() || !extract || stageOf() >= 3) return;
+  const cp = (projects || []).find((x) => x.repo === curRepo());
+  if (cp && cp.submitted && !new Set(store.get("reopenedProjects", [])).has(projKey())) { store.set(doneKey("submit"), { at: Date.now(), shared: true }); renderHome(); return; }  // 확인 요청 없이 제출 완료를 기록해도 팀원 화면이 끝으로
   api("/submit/status").then((s) => { if (s && s.closed && s.proof) { store.set(doneKey("submit"), { at: Date.now(), proof: s.proof, shared: true }); setProjectHidden(projKey(), true); renderHome(); } }).catch(() => {});  // 팀원 기기도 보관함으로
 }
 function refreshHome() { homeLoadedAt = Date.now(); syncSubmitted(); if (curDraft()) return renderHome(); api("/triage").then((t) => { lastTriage = t; notifyRoleRequests(t.items); renderHome(); }).catch(() => renderHome()); loadBoard(); }
@@ -2976,6 +2978,9 @@ function setProjectHidden(key, hidden) {
 function hiddenProjectKeys() {
   const keys = new Set(store.get("hiddenProjects", [])), back = new Set(store.get("reopenedProjects", []));
   try { Object.keys(localStorage).forEach((k) => { const m = /^bento:done:(r:.+):submit$/.exec(k); if (m && !back.has(m[1])) keys.add(m[1]); }); } catch (e) { /* 기기 저장소를 못 읽으면 보관 목록만 */ }
+  // 팀원 누군가 제출 완료를 기록한 저장소(서버가 주는 submitted)도 보관: 다른 사람이 제출해도 내 목록에서 빠지게
+  const listed = (typeof projects !== "undefined" && projects.length) ? projects : store.get("projects:" + ((typeof ME !== "undefined" && ME.login) || ""), []);
+  listed.forEach((p) => { const k = "r:" + p.repo; if (p.submitted && !back.has(k)) keys.add(k); });
   return keys;
 }
 function isProjectHidden(p, keys = hiddenProjectKeys()) { return !p.error && keys.has(repoProjectKey(p.repo)); }
@@ -3681,7 +3686,7 @@ function markDone(kind, proof, journeyState) {
     if (d) { d.applied = at; saveDrafts(); }
     try { localStorage.removeItem("bento:applyTodo:" + projKey()); } catch (e) { /* 무시 */ }
   }
-  if (kind === "submit" && !d) setProjectHidden(projKey(), true);
+  if (kind === "submit" && !d) { setProjectHidden(projKey(), true); api("/submit/done", { method: "POST", body: JSON.stringify({ repo: curRepo() }) }).catch(() => {}); }  // 저장소에도 남겨 팀원 목록에서도 빠지게
   if (journeyState) journeyState.set(journeyState.n);
   renderCal(); renderHome();
   if (kind === "submit") { bot("제출 완료로 기록했어요. 이 팀플은 마이페이지 → 보관함 → 팀플로 옮겼어요."); return; }
@@ -4036,7 +4041,7 @@ function renderArchivedProjects(body) {
     const c = h("div", "li"); const top = h("div", "li-top"); top.appendChild(h("b", null, repo.split("/")[1] || repo)); top.appendChild(h("span", "tag done", "제출 완료")); c.appendChild(top);
     c.appendChild(h("small", null, [(ex && ex.title) || p.notice || "연결된 대회 없음", done && done.at ? `제출 완료 기록 ${new Date(done.at).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""].filter(Boolean).join(" · ")));
     const b = h("button", "btn", "다시 진행하기"); b.type = "button"; b.style.marginTop = "8px";
-    b.onclick = () => { setProjectHidden(k, false); useProject({ repo }, true); snack("팀플을 다시 진행 중으로 옮겼어요"); showTab("home"); };
+    b.onclick = () => { setProjectHidden(k, false); api("/submit/done", { method: "POST", body: JSON.stringify({ repo, done: false }) }).catch(() => {}); (projects || []).forEach((x) => { if (x.repo === repo) x.submitted = null; }); useProject({ repo }, true); snack("팀플을 다시 진행 중으로 옮겼어요"); showTab("home"); };
     c.appendChild(b); l.appendChild(c);
   });
   body.appendChild(l);
