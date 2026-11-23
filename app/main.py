@@ -306,6 +306,36 @@ def github_installed(installation_id: int = 0, setup_action: str = ""):
     return RedirectResponse("/?installed=" + quote(",".join(repos[:20]), safe=",/") + "#chat", status_code=302)
 
 
+SUBMITTED_LABEL = "bento-submitted"  # 설명: "기록 시각|기록한 사람" (제출 완료를 팀 전체가 알게)
+
+
+class SubmitDoneIn(BaseModel):
+    repo: str | None = None
+    done: bool = True  # False면 '다시 진행하기' (팀 전체에서 보관 풀기)
+
+
+@app.post("/api/submit/done")
+def submit_done(body: SubmitDoneIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    """제출 완료 기록을 저장소에 남긴다. 전에는 기록한 사람 기기에만 남아서, 팀원 화면에서는 끝난 팀플이 계속 진행 중으로 남았다.
+    확인 요청 없이('확인 없이 진행') 기록해도 팀원 모두의 목록에서 보관한 팀플로 옮겨진다. 되돌리기(done=False)는 라벨을 지운다."""
+    _check_code(x_bento_code, request)
+    gh, st = state_for(body.repo)
+    actor = _member_actor(request, st, "제출 완료를 기록할") or _ASKER.get() or ""
+    try:
+        if not body.done:
+            if any(lb.get("name") == SUBMITTED_LABEL for lb in gh.labels()):
+                gh.delete_label(SUBMITTED_LABEL)
+            return {"ok": True, "submitted": None}
+        desc = f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}|{actor}"[:100]
+        try:
+            gh.update_label(SUBMITTED_LABEL, desc)
+        except GitHubError:
+            gh.create_label(SUBMITTED_LABEL, "0E8A16", desc)
+    except GitHubError as e:
+        raise HTTPException(502, f"제출 완료를 저장소에 남기지 못했어요: {e}") from e
+    return {"ok": True, "submitted": desc.split("|")[0]}
+
+
 @app.get("/api/projects")
 def projects(request: Request):
     """진행 중인 팀플 = Bento 앱이 설치된 저장소. 저장소마다 연결된 공고와 제출 마일스톤을 함께 준다.
@@ -342,6 +372,11 @@ def projects(request: Request):
         ex = notice_mod.from_descriptions([m.get("description") or "" for m in ms])
         sub = next((m for m in ms if m["title"] == "해커톤 제출"), None)
         p["notice"] = ex.title if ex else None
+        try:  # 팀원 누군가 제출 완료를 기록했으면(저장소 라벨) 모든 팀원 목록에서 보관한 팀플로 보인다
+            mark = next((lb for lb in gh_for(r).labels() if lb.get("name") == SUBMITTED_LABEL), None)
+            p["submitted"] = (mark.get("description") or "").split("|")[0] or True if mark else None
+        except Exception:  # noqa: BLE001 - 라벨을 못 읽어도 목록은 보여 준다
+            p["submitted"] = None
         if sub:
             done, left = sub.get("closed_issues", 0), sub.get("open_issues", 0)
             p.update(due=sub.get("due_on"), done=done, total=done + left)
