@@ -3262,6 +3262,7 @@ $("composer").addEventListener("submit", (e) => { e.preventDefault(); const inpu
   if (/신청/.test(n) && extract) { return (me(t), applyFlow(extract)); }
   if (/공고|대회|신청|^https?:/.test(n)) return notice();
   if (/제출|점검/.test(n)) return submit();
+  if (/나눠|나누|분배|배정/.test(n) && !/계획|일정|무슨|뭐야|뭔데|뜻|왜|어떻게|\?/.test(n)) return afterTasks();  // '나중에 나눠 줘'가 AI로 새던 것: 담당 나누기로 바로
   if (/할일|오늘|뭐부터|리뷰|담당|머지|닫|PR|이슈/i.test(n)) return today();
   me(t); freeChat(t);
 });
@@ -3273,13 +3274,17 @@ function chatContext() {  // 팀 상황 요약: 단계 이름과 숫자만. 공�
   const stage = st >= 3 ? "제출 완료" : (!extract && !d) ? "대회 고르기 전" : d ? ((d.applied || store.get(doneKey("apply"), null)) ? "신청 완료" : "신청 전") : st === 0 ? "신청 전" : "협업 중";
   const late = lastProgress && lastProgress.findings ? lastProgress.findings.length : 0;
   // 신청을 마친 뒤에는 신청 마감을 알려 주지 않는다(AI가 이미 끝낸 신청을 서두르라고 하지 않게). 제출을 마쳤으면 마감도 보내지 않는다
-  return { stage, apply_days: stage === "신청 전" ? ddays(ex.apply_deadline_iso) : null, submit_days: stage === "제출 완료" ? null : ddays(ex.submit_deadline_iso), late: stage === "제출 완료" ? 0 : late };
+  // 방금 화면에 오간 말(Bento 말 포함) 최근 4줄: '그때 나눠 준다는 게 무슨 말이야'처럼 앞 말을 묻는 걸 AI가 알아듣게. 줄마다 120자로 잘라 토큰을 아낀다
+  let recent = []; try { recent = store.get("log:" + projKey(), []).slice(-5, -1).map((x) => ({ w: x.w, t: String(x.t || "").slice(0, 120) })); } catch (e) { /* 기록이 없어도 된다 */ }
+  const members = (lastTriage && lastTriage.members && lastTriage.members.length) || null;
+  return { stage, apply_days: stage === "신청 전" ? ddays(ex.apply_deadline_iso) : null, submit_days: stage === "제출 완료" ? null : ddays(ex.submit_deadline_iso), late: stage === "제출 완료" ? 0 : late,
+    submit_deadline: stage === "제출 완료" ? null : (ex.submit_deadline_iso ? ((d) => `${d.getMonth() + 1}월 ${d.getDate()}일(${"일월화수목금토"[d.getDay()]}) ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`)(new Date(ex.submit_deadline_iso)) : null), members, notice: !!extract, recent };
 }
 async function freeChat(t) {
   const dunno = () => { bot("무슨 뜻인지 정확히 모르겠어요. 지금은 대회 찾기, 신청, 계획 짜기, 오늘 할 일, 진행 점검, 제출 점검, 그리고 '취소'를 알아들어요. 아래에서 골라 주세요."); chip("할 수 있는 일 보기", openPicks); };
   if (!(H && H.ai)) return dunno();
   let r;
-  try { r = await thinking("생각하는 중…", api("/chat", { method: "POST", body: JSON.stringify({ message: t.slice(0, 500), history: chatHist.slice(-6), context: chatContext() }) })); }
+  try { r = await thinking("생각하는 중…", api("/chat", { method: "POST", body: JSON.stringify({ message: t.slice(0, 500), history: chatHist.slice(-4), context: chatContext() }) })); }
   catch (e) { bot(e.message || "AI가 답하지 못했어요."); chip("할 수 있는 일 보기", openPicks); return; }
   if (!r || !r.ai) return dunno();
   chatHist.push({ role: "user", text: t.slice(0, 500) }, { role: "assistant", text: r.reply }); chatHist = chatHist.slice(-12);

@@ -6,6 +6,7 @@
 """
 
 import json
+import re
 import os
 import threading
 import time
@@ -44,19 +45,21 @@ kind(말의 종류)를 먼저 정한다:
 - ask: 팀플·대회와 관련된 질문이나 상담. 아래 규칙대로 짧게 답한다.
 - offtopic: 팀플·대회·Bento와 관계없는 말(날씨, 잡담, 코딩 질문, 상식 질문 등). action은 none이고, reply는 쓰지 않아도 된다(화면이 정해진 안내를 보여 준다). 이런 말에 답을 지어내거나 이야기를 이어 가지 않는다.
 규칙:
-- 한국어 존댓말로 1~3문장, 쉬운 말로 짧게 답한다.
+- 한국어 존댓말로 1~3문장, 쉬운 말로 짧게, 대화하듯 답한다. 물은 것에 먼저 바로 답한다.
 - 먼저 action을 하나 고른다. 지금 사용자에게 가장 먼저 필요한 기능 하나이고, 맞는 게 없으면 none이다.
 - 답 아래에 그 action이 버튼 하나로 붙는다. 그래서 reply에서 권하는 기능은 고른 action 하나뿐이어야 한다.
   다른 기능 이름(대회 찾기, 공고 읽기, 신청, 계획 짜기, 오늘 할 일, 진행 점검, 제출 점검)은 reply에 쓰지 않는다.
-- action이 none이 아니면 reply 끝을 그 버튼을 눌러 보라는 말로 맺는다. none이면 기능을 권하지 않는다.
+- 버튼은 화면이 답 아래에 붙인다. '~을 눌러 보세요'를 매번 쓰지 않는다. none이면 기능을 권하지 않는다.
+- Bento 동작: 팀원이 한 명이면 할 일은 모두 그 사람 몫이고, 팀원이 들어오면 역할·맡은 일 수에 맞춰 담당을 나눠 준다(나누기 = 담당자 정하기, 승인해야 실행). 팀 전체 변경은 팀장이나 다른 팀원이 한 번 더 승인한다.
 - Bento는 머지·푸시·코드 수정을 하지 않고, 모든 실행은 사람이 승인한다. 이걸 넘는 일을 해 주겠다고 말하지 않는다.
-- 대회 일정·상금 같은 사실을 지어내지 않는다. 모르면 공고를 붙여 넣거나 대회 찾기를 써 보라고 안내한다.
+- 대회 일정·상금 같은 사실을 지어내지 않는다. 모르면 공고를 붙여 넣거나 대회 찾기를 써 보라고 안내한다(공고가 이미 연결돼 있으면 다시 달라고 하지 않는다).
 - 비밀번호·API 키·개인정보를 달라고 하지 않는다."""
 
 STAGES = ("대회 고르기 전", "신청 전", "신청 완료", "협업 중", "제출 완료")
 CONTEXT_RULE = """
 - [팀 상황]이 주어지면 답에 자연스럽게 활용한다(예: 마감이 가까우면 서두르자고, 늦어진 일이 있으면 먼저 챙기자고). 상황에 없는 대회 이름·일정·팀원은 지어내지 않는다.
-- 상황을 그대로 읊지 말고, 사용자가 물은 것에 먼저 답한 뒤 필요할 때만 덧붙인다.
+- 상황을 그대로 읊지 말고, 사용자가 물은 것에 먼저 답한 뒤 필요할 때만 덧붙인다. 마감(D-몇)은 일정·마감을 물었거나 3일 안일 때만 말한다. 날짜를 물으면 '제출 마감 날짜'로 정확히 답한다.
+- [방금 화면]은 바로 전에 화면에 오간 말이다(Bento 말 포함). '그때', '아까', '그거', '무슨 말이야'는 여기서 찾아 풀어서 설명한다.
 - 단계별로 권할 기능: 대회 고르기 전은 discover, 신청 전은 apply, 신청 완료·협업 중은 today나 progress(마감이 가깝거나 늦어진 일이 있으면 progress), 제출 완료는 수고했다고 말하고 새 대회를 찾는 discover. 이미 마친 단계의 기능(예: 제출을 마쳤는데 submit)은 권하지 않는다."""
 
 SCHEMA = {
@@ -134,7 +137,23 @@ def situation(ctx) -> str:
     late = _days(ctx.get("late"))
     if late:
         parts.append(f"늦어진 일 {late}개")
-    return "[팀 상황] " + ", ".join(parts)
+    due = ctx.get("submit_deadline")  # '12월 1일(화) 23:59' 꼴만 받는다 (날짜를 물으면 D-day 대신 정확히 답하게)
+    if isinstance(due, str) and re.fullmatch(r"\d{1,2}월 \d{1,2}일\([월화수목금토일]\) \d{2}:\d{2}", due):
+        parts.append(f"제출 마감 날짜 {due}")
+    n = ctx.get("members")
+    if isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= 30:
+        parts.append(f"팀원 {n}명")
+    if ctx.get("notice") is True:
+        parts.append("공고 연결됨")
+    out = "[팀 상황] " + ", ".join(parts)
+    # 방금 화면에 오간 말(Bento 말 포함). 토큰을 아끼려고 최대 4줄, 줄마다 120자, 줄바꿈은 지운다
+    lines = []
+    for r in (ctx.get("recent") or [])[-4:] if isinstance(ctx.get("recent"), list) else []:
+        if isinstance(r, dict) and r.get("w") in ("b", "m") and isinstance(r.get("t"), str) and r["t"].strip():
+            lines.append(("Bento: " if r["w"] == "b" else "나: ") + " ".join(r["t"].split())[:120])
+    if lines:
+        out += "\n[방금 화면] " + " / ".join(lines)
+    return out
 
 
 def _history(hist) -> list[dict]:
@@ -167,7 +186,7 @@ def ask(message: str, history=None, who: str = "anon", client=None, context=None
     try:
         resp = client.messages.create(
             model=MODEL,
-            max_tokens=1024,
+            max_tokens=400,  # 답은 1~3문장 JSON이라 짧게 (토큰·비용 아끼기)
             system=SYSTEM + (CONTEXT_RULE + "\n" + sit if (sit := situation(context)) else ""),
             thinking={"type": "disabled"},
             output_config={"effort": "low", "format": {"type": "json_schema", "schema": SCHEMA}},
