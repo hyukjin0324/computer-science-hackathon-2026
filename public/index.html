@@ -3652,7 +3652,8 @@ function reminders() {
   const now = Date.now();
   // 마감 알림은 지금 보는 팀플과, 서버가 아는 팀플·준비 중인 대회만. 이 기기에 남은 예전 데모 기록(knu-matzip 등)으로는 알리지 않는다
   const known = Array.isArray(projects) && projects.length ? new Set(projects.map((p) => p.repo)) : null;
-  allProjects().filter((p) => p.draft || p.key === projKey() || (known && known.has(p.repo))).forEach((p) => {
+  // 대화방은 팀플마다 따로라, 다른 팀플의 마감 알림을 이 방에 띄우지 않는다 (IE 공고 방에 컴커톤 마감 알림이 뜨던 것)
+  allProjects().filter((p) => p.key === projKey() && (p.draft || !known || known.has(p.repo))).forEach((p) => {
     const ex = p.extract; if (!ex) return;
     [["apply", ex.apply_deadline_iso, "신청"], ["submit", ex.submit_deadline_iso, "제출"]].forEach(([k, iso, nm]) => {
       if (!iso || store.get(doneKey(k, p.key), null)) return;
