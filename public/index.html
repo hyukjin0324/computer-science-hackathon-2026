@@ -262,6 +262,7 @@ button.bigrow.chosen { box-shadow: inset 0 0 0 1.5px var(--ink); }
 .path-acts { margin-top: 10px; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--chat-related-gap); }
 /* 버튼 두 개가 나란히 좁아지면 글이 두 줄이 된다: 낱말 중간('저장/소')이 아니라 띄어쓰기에서, 라벨의 줄바꿈(\n)은 그대로 */
 .path-acts .btn { justify-content: center; padding-inline: 8px; text-align: center; line-height: 1.25; word-break: keep-all; white-space: pre-line; }
+.path-acts.mid { display: flex; justify-content: center; }  /* 버튼 하나뿐인 단계는 가운데 */
 .path-acts .btn.primary { font-weight: 600; }  /* 나란히 놓인 두 버튼(검정·흰색) 글자 굵기를 같게 */
 details.more summary { cursor: pointer; font-size: var(--fs-small); color: var(--muted); min-height: 32px; display: flex; align-items: center; }
 .journey { background: var(--surface); border: 1.5px solid var(--ink); border-radius: var(--r-card); padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
@@ -891,6 +892,7 @@ details.teamall summary::after { content: '›'; margin-left: auto; color: var(-
 .contest-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--notice-gap); margin-top: 4px; }
 .contest-meta .dchip, .contest-meta .contest-source { display: inline-flex; align-items: center; padding: 2px var(--notice-gap); border-radius: var(--r-badge); font-size: var(--fs-caption); font-weight: 700; }
 .contest-meta .dchip { color: var(--pop-deep); background: var(--pop-soft); font-variant-numeric: tabular-nums; }
+.frow2 .fav-star { color: var(--pop); margin-left: 4px; }  /* 관심 분야 대회: 행사명 뒤 별 */
 .contest-meta .dchip.crit { background: var(--crit-soft); color: var(--crit); }
 .contest-meta .dchip.none, .contest-meta .contest-source { background: var(--surface-2); color: var(--muted); }
 .contest-highlight { display: flex; gap: var(--notice-gap); align-items: flex-start; }
@@ -1976,6 +1978,7 @@ function startPath(d) {
         } else {
           body.appendChild(h("small", null, "앱 설치 화면에서 돌아오면 자동으로 연결돼요. 안 됐으면 눌러 주세요."));
           const b = h("button", "btn primary", "저장소 연결하기"); b.type = "button"; b.onclick = () => { b.disabled = true; connectDraft(); }; acts.appendChild(b);
+          acts.classList.add("mid");  // 연결 완료: 버튼 하나라 가운데
         }
         body.appendChild(acts); if (tail) body.appendChild(tail);
       } else if (state === "") body.appendChild(h("small", null, st.who === "직접" ? "직접" : `${st.who}에서`));
@@ -2374,7 +2377,7 @@ function homeBoard(v, me2, items) {
   const lateP = people.filter((p) => p.late > 0);
   const leads = b ? (b.leads || []).filter(Boolean) : [];
   const showUnassigned = unassigned.length && leads.includes(me2);  // 담당 없는 할 일은 팀장에게만
-  if (leadItems.length || showUnassigned || (b && b.rebalance) || lateP.length) {
+  if (leadItems.some((i) => i.id !== "assign") || showUnassigned) {  // 보여 줄 게 없으면 칸째 숨김
     const lsec = h("section", "hsec"); v.appendChild(lsec);
     const sh = h("div", "sech"); sh.appendChild(h("h2", null, "팀장이 정할 일")); sh.appendChild(h("span", null, leads.length ? `팀장 ${leads.join(", ")}${leads.includes(me2) ? " (나)" : ""}` : "")); lsec.appendChild(sh);
     leadItems.filter((i) => i.id !== "assign").forEach((it) => lsec.appendChild(hItemRow(it)));
@@ -2394,17 +2397,6 @@ function homeBoard(v, me2, items) {
       if (assignItem) { const bt = h("button", "btn primary", Object.keys(roles).length ? "추천대로 나눠 주기" : "맡은 일이 적은 사람에게 나눠 주기"); bt.type = "button"; bt.onclick = () => { showTab("chat"); openItem(assignItem); }; c.appendChild(bt); }
       lsec.appendChild(c);
     }
-    if (lateP.length || (b && b.rebalance)) {
-      const c = h("div", "lead-late");
-      lateP.forEach((p) => { const r = h("div", "prow"); r.appendChild(h("b", null, p.login + (p.login === me2 ? " (나)" : ""))); r.appendChild(h("span", null, `${roles[p.login] || "역할 없음"} · ${p.open}개`)); r.appendChild(h("span", "late", `늦음 ${p.late}`)); c.appendChild(r); });
-      if (b.rebalance) {
-        c.appendChild(h("div", "note", `일이 몰렸어요 · ${b.rebalance.why}`));
-        const bt = h("button", "btn", "다시 나누기"); bt.type = "button";
-        bt.onclick = () => { showTab("chat"); me("일이 몰린 사람 다시 나눠 줘"); bot("역할이 맞고 일이 적은 사람에게 몇 개를 넘길게요. 팀 전체에 영향을 주는 변경이라, 제안한 사람이 아닌 팀원이나 팀장이 승인해야 실행돼요."); approval(b.rebalance.proposal, (ok) => { if (ok) { lastBoard = null; refreshHome(); } }); };
-        c.appendChild(bt);
-      }
-      lsec.appendChild(c);
-    }
   }
   if (!b) return;
   // 팀원 할 일: 사람별로 접어 둔다. 펼치면 그 사람의 PR·이슈 일과 GitHub 할 일
@@ -2419,6 +2411,20 @@ function homeBoard(v, me2, items) {
       det.appendChild(sm); g.items.forEach((it) => det.appendChild(hItemRow(it, true))); g.tasks.forEach((t) => det.appendChild(hTaskRow(t)));
       tsec.appendChild(det);
     });
+  }
+  // 일이 몰렸을 때 다시 나누기: 팀원 별 할 일 밑에 따로
+  if (lateP.length || b.rebalance) {
+    const lsec = h("section", "hsec"); v.appendChild(lsec);
+    const sh = h("div", "sech"); sh.appendChild(h("h2", null, "일 다시 나누기")); lsec.appendChild(sh);
+    const c = h("div", "lead-late");
+    lateP.forEach((p) => { const r = h("div", "prow"); r.appendChild(h("b", null, p.login + (p.login === me2 ? " (나)" : ""))); r.appendChild(h("span", null, `${roles[p.login] || "역할 없음"} · ${p.open}개`)); r.appendChild(h("span", "late", `늦음 ${p.late}`)); c.appendChild(r); });
+    if (b.rebalance) {
+      c.appendChild(h("div", "note", `일이 몰렸어요 · ${b.rebalance.why}`));
+      const bt = h("button", "btn", "다시 나누기"); bt.type = "button";
+      bt.onclick = () => { showTab("chat"); me("일이 몰린 사람 다시 나눠 줘"); bot("역할이 맞고 일이 적은 사람에게 몇 개를 넘길게요. 팀 전체에 영향을 주는 변경이라, 제안한 사람이 아닌 팀원이나 팀장이 승인해야 실행돼요."); approval(b.rebalance.proposal, (ok) => { if (ok) { lastBoard = null; refreshHome(); } }); };
+      c.appendChild(bt);
+    }
+    lsec.appendChild(c);
   }
 }
 function refreshHome() { if (curDraft()) return renderHome(); api("/triage").then((t) => { lastTriage = t; renderHome(); }).catch(() => renderHome()); loadBoard(); }
@@ -2567,8 +2573,20 @@ function renderHome() {
 let lastDiscover = null;
 const INTERESTS = ["AI", "웹", "앱", "보안", "데이터", "게임", "블록체인", "핀테크", "클라우드"];
 function interests() { return store.get("interests", ["AI"]); }
-async function loadDiscover(force) {
-  try { lastDiscover = await api(`/discover?interests=${encodeURIComponent(interests().join(","))}${force ? "&force=true" : ""}`); } catch (e) { lastDiscover = null; }
+// '클라우드 해커톤 찾아 줘'처럼 말에 분야가 있으면 그 분야 대회만 보여 준다 (전에는 분야를 무시하고 전부 보여 줬다)
+const TOPIC_WORDS = {
+  AI: /\bAI\b|인공지능|머신러닝|딥러닝|\bLLM\b|생성형|에이아이/i, 웹: /웹|\bweb\b|프론트|백엔드|풀스택/i, 앱: /앱|\bapp\b|모바일|안드로이드|android|\bios\b/i,
+  보안: /보안|security|해킹|\bCTF\b|시큐리티/i, 데이터: /데이터|\bdata\b|빅데이터|데이터분석/i, 게임: /게임|\bgame\b/i, 블록체인: /블록체인|blockchain|web3|\bNFT\b/i,
+  핀테크: /핀테크|fintech|금융/i, 클라우드: /클라우드|cloud|\bAWS\b|azure|\bGCP\b|쿠버네티스|kubernetes|\bk8s\b|devops|데브옵스|인프라|오픈스택|openstack/i,
+};
+function topicsIn(text) {
+  // '내 관심 분야 대회 찾아 줘'는 마이페이지에서 고른 관심 분야로만 찾는다
+  if (/관심\s*분야|관심\s*있는|내\s*분야/.test(text || "")) return interests().filter((k) => TOPIC_WORDS[k]);
+  return Object.keys(TOPIC_WORDS).filter((k) => TOPIC_WORDS[k].test(text || ""));
+}
+function matchesTopic(x, topics) { const text = [x.title, (x.tags || []).join(" "), x.host || ""].join(" "); return topics.some((k) => TOPIC_WORDS[k].test(text)); }
+async function loadDiscover(force, topics) {
+  try { lastDiscover = await api(`/discover?interests=${encodeURIComponent((topics && topics.length ? topics : interests()).join(","))}${force ? "&force=true" : ""}`); } catch (e) { lastDiscover = null; }
   // 같은 사이트는 10초 간격이라, 아직 못 읽은 곳이 있으면 11초 뒤에 한 번 더 묻는다
   if (lastDiscover && lastDiscover.pending && lastDiscover.pending.length && !loadDiscover.retrying) { loadDiscover.retrying = true; setTimeout(() => { loadDiscover().finally(() => { loadDiscover.retrying = false; }); }, 11000); }
   renderHome(); return lastDiscover;
@@ -2601,29 +2619,52 @@ function contestMeta(x) {
   meta.appendChild(contestDeadline(x.deadline_iso));
   const source = (x.source_name || "").replace(/ \(.*\)$/, "");
   if (source) meta.appendChild(h("span", "contest-source", source));
+  const topics = Object.keys(TOPIC_WORDS).filter((k) => matchesTopic(x, [k]));
+  meta.appendChild(h("span", "contest-source", topics.length ? topics.join("·") : (x.tags || []).includes("기술일반") ? "기술일반" : "기타"));  // 분야 칩: 모든 대회에, 출처 칩과 같은 모양, 분야는 한 칩에
   return meta;
 }
-function foundRow(x) {
+function foundRow(x, fav) {  // fav: 내 관심 분야와 맞는 분야 이름들 (있으면 행사명 뒤에 별)
   const b = h("button", "arow frow2"); b.type = "button";
   const tx = h("span");
-  tx.append(h("b", null, x.title), contestMeta(x));
+  const title = h("b", null, x.title);
+  if (fav && fav.length) { const st = h("span", "fav-star", "★"); st.title = st.ariaLabel = "관심 분야"; title.appendChild(st); }  // 관심 분야 대회: 행사명 맨 뒤에 별
+  tx.append(title, contestMeta(x));
   const match = (x.why || []).find((w) => !w.startsWith("마감") && w !== "우리 학과 공지");
   if (match) tx.appendChild(h("small", null, match));
   const arrow = h("span", "chev", "›"); arrow.setAttribute("aria-hidden", "true");
   b.append(contestMark(), tx, arrow); b.onclick = () => startFound(x); return b;
 }
-async function discoverChat(said) {
-  me(typeof said === "string" ? said : "나갈 만한 대회 찾아 줘");
-  const r = await working("대회를 찾고 있어요", ["학과 공지·행사 게시판 읽기", "Dev-Event 해커톤 목록 읽기", "마감·관심 분야로 고르기"], loadDiscover(true).then((x) => { if (!x) throw new Error("대회 목록을 불러오지 못했어요"); return x; })).catch((e) => { fail(e); return null; });
+async function discoverChat(said, topics) {
+  topics = topics || [];
+  me(typeof said === "string" ? said : topics.length ? `${topics.join("·")} 대회 찾아 줘` : "나갈 만한 대회 찾아 줘");
+  const r = await working("대회를 찾고 있어요", ["학과 공지·행사 게시판 읽기", "Dev-Event 해커톤 목록 읽기", topics.length ? `${topics.join("·")} 분야로 고르기` : "마감·관심 분야로 고르기"], loadDiscover(true, topics).then((x) => { if (!x) throw new Error("대회 목록을 불러오지 못했어요"); return x; })).catch((e) => { fail(e); return null; });
   if (!r) return;
-  const list = freshFinds();
+  const all = freshFinds();
   const byLink = () => { me("공고 링크로 추가할래"); noticeForm(null); };
-  if (!list.length) { bot("지금은 새로 나갈 만한 대회가 없어요. 매일 다시 찾아볼게요. 나갈 대회가 따로 있으면 공고 링크로 추가할 수 있어요."); chip("공고 링크로 추가", byLink); return; }
+  if (!all.length) { bot("지금은 새로 나갈 만한 대회가 없어요. 매일 다시 찾아볼게요. 나갈 대회가 따로 있으면 공고 링크로 추가할 수 있어요."); chip("공고 링크로 추가", byLink); return; }
   const FIRST = 8;
-  bot(list.length > FIRST ? `마감이 지나지 않은 대회 ${list.length}개를 찾았어요. 관심 분야(${interests().join(", ")})와 마감이 가까운 ${FIRST}개를 먼저 보여 드려요. 나갈 대회를 눌러 주세요.`
-    : `마감이 지나지 않은 대회 ${list.length}개를 찾았어요. 나갈 대회를 눌러 주세요.`);
-  const box = add(h("div", "big")); list.slice(0, FIRST).forEach((x) => box.appendChild(foundRow(x)));
-  if (list.length > FIRST) { const more = h("button", "btn", `나머지 ${list.length - FIRST}개 더 보기`); more.type = "button"; more.onclick = () => { more.remove(); list.slice(FIRST).forEach((x) => box.appendChild(foundRow(x))); }; box.appendChild(more); }
+  const mine = topics.length ? [] : interests().filter((k) => TOPIC_WORDS[k]);  // 분야를 말하지 않았을 때만 내 관심 분야를 표시
+  const row = (x) => foundRow(x, mine.filter((k) => matchesTopic(x, [k])));
+  const show = (list) => {
+    const box = add(h("div", "big")); list.slice(0, FIRST).forEach((x) => box.appendChild(row(x)));
+    if (list.length > FIRST) { const more = h("button", "btn", `나머지 ${list.length - FIRST}개 더 보기`); more.type = "button"; more.onclick = () => { more.remove(); list.slice(FIRST).forEach((x) => box.appendChild(row(x))); }; box.appendChild(more); }
+  };
+  const topic = topics.join("·");
+  // 관심 분야 대회 먼저, 그 안에서 마감 가까운 순 (마감 미정은 뒤로)
+  const due = (x) => (x.deadline_iso ? Date.parse(x.deadline_iso) : Infinity);
+  const isMine = (x) => (mine.length && matchesTopic(x, mine) ? 0 : 1);
+  const list = (topics.length ? all.filter((x) => matchesTopic(x, topics)) : all).slice().sort((p, q) => isMine(p) - isMine(q) || due(p) - due(q));
+  if (topics.length && !list.length) {
+    bot(`지금 찾은 대회 중에는 ${topic} 관련 대회가 없어요. 매일 다시 찾아볼게요. 다른 대회 ${all.length}개를 볼까요?`);
+    chip("다른 대회 보기", () => { me("다른 대회도 보여 줘"); bot("마감이 지나지 않은 대회예요. 나갈 대회를 눌러 주세요."); show(all); });
+    chip("공고 링크로 추가", byLink);
+    return;
+  }
+  if (topics.length) bot(`${topic} 관련 대회 ${list.length}개를 찾았어요. 나갈 대회를 눌러 주세요.`);
+  else bot(list.length > FIRST ? `마감이 지나지 않은 대회 ${list.length}개를 찾았어요. 관심 분야(${interests().join(", ")})에 맞는 대회는 ★로 표시했어요. 나갈 대회를 눌러 주세요.`
+    : `마감이 지나지 않은 대회 ${list.length}개를 찾았어요. 관심 분야(${interests().join(", ")})에 맞는 대회는 ★로 표시했어요. 나갈 대회를 눌러 주세요.`);
+  show(list);
+  if (topics.length && all.length > list.length) chip(`다른 분야 대회 ${all.length - list.length}개도 보기`, () => { me("다른 대회도 보여 줘"); show(all.filter((x) => !list.includes(x))); });
   const own = h("button", "link", "목록에 없는 대회예요 · 공고 링크로 추가"); own.type = "button"; own.style.alignSelf = "flex-start"; own.onclick = byLink; add(own);
   const err = Object.keys(r.errors || {}); if (err.length) bot(`일부 출처를 읽지 못했어요: ${err.join(", ")}. 다음에 다시 시도할게요.`);
 }
@@ -2785,7 +2826,7 @@ function openProjectSheet() {  // 위쪽 팀플 이름 버튼: 옆에서 서랍�
   const close = () => { bg.remove(); document.removeEventListener("keydown", esc); };
   bg.onclick = (e) => { if (e.target === bg) close(); }; document.addEventListener("keydown", esc);
   sh.appendChild(h("h2", null, "팀플 바꾸기")); const box = h("div"); sh.appendChild(box);
-  document.querySelector(".phone").appendChild(bg); fillProjectList(box, close).catch(() => {});
+  document.querySelector(".phone").appendChild(bg); fillProjectList(box, close, true).catch(() => {});  // 팀플만 바꾸고 지금 화면(홈 등)에 머문다
 }
 function fillProjectList(box, close, stay) {  // stay: 고른 뒤에도 지금 화면에 머문다 (마이페이지 팀플 목록)  // 서랍·시트·마이페이지 팀플 목록이 같이 쓰는 목록 (진행 중인 팀플 + 준비 중인 대회)
   const dw = box;
@@ -2802,9 +2843,11 @@ function fillProjectList(box, close, stay) {  // stay: 고른 뒤에도 지금 �
   });
   const nb = h("button", "btn primary", "+ 새 대회 준비하기"); nb.type = "button"; nb.style.marginTop = "12px"; nb.onclick = () => { close(); showTab("chat"); notice(true); }; dw.appendChild(nb);
 
-  return (async () => {
-  try {
-    await loadProjects(); live.innerHTML = "";
+  // 저장소 목록은 GitHub를 여러 번 읽어 느리다: 지난번 목록을 바로 보여 주고, 새 목록이 오면 바꿔 그린다
+  const cached = projects.length ? projects : store.get("projects:" + (ME.login || ""), []);
+  if (cached.length) { const keep = projects; projects = cached; drawLive(); projects = keep; }
+  function drawLive() {
+    live.innerHTML = "";
     if (!projects.length) live.appendChild(h("div", "note", ME.logged_in ? "Bento 앱이 설치된 내 저장소가 아직 없음" : "Bento 앱이 설치된 저장소가 없음"));
     projects.forEach((p) => {  // 진행 중인 팀플 옆 연필: 연결된 대회 바꾸기 (잘못 고른 대회를 대화로만 바꾸던 것)
       const row = h("div", "dw-row"); row.appendChild(proj(p.repo.split("/")[1], projSub(p), colorOf("r:" + p.repo), !curDraft() && curRepo() === p.repo, () => useProject({ repo: p.repo }, stay)));
@@ -2816,7 +2859,11 @@ function fillProjectList(box, close, stay) {  // stay: 고른 뒤에도 지금 �
       live.appendChild(h("div", "note dw-hint", "내 저장소가 안 보이면, 그 저장소에 Bento 앱 설치 필요"));
       const ins = link("내 저장소에 Bento 설치", H.install_url); ins.target = "_self"; live.appendChild(ins);
     }
-  } catch (e) { live.innerHTML = ""; live.appendChild(h("div", "note", e.message)); }
+  }
+  return (async () => {
+  try {
+    await loadProjects(); store.set("projects:" + (ME.login || ""), projects); drawLive();
+  } catch (e) { if (!cached.length) { live.innerHTML = ""; live.appendChild(h("div", "note", e.message)); } }
   })();
 }
 async function openProjects() {  // ☰ 메뉴: 왼쪽에서 나오는 서랍. 화면 이동과 팀플 바꾸기를 한곳에서
@@ -3455,7 +3502,7 @@ $("composer").addEventListener("submit", (e) => { e.preventDefault(); const inpu
   saidByUser = t; setTimeout(() => { saidByUser = null; }, 0);  // 바로 이어지는 첫 '내 말'에만 쓴다
   if (/마감/.test(n) && /고치|고칠|고쳐|바꾸|바꿀|바꿔|수정|변경/.test(n) && extract) return editDeadline();  // 제출 마감 고치기는 대화에서만 (홈 카드에는 두지 않는다)
   if (/대회|해커톤|공모전|공고/.test(n) && /바꿔|바꾸|바꿀|교체|변경/.test(n)) return swapContest();  // '해커톤 바꿔 줘'를 AI가 못 알아듣던 것: 연결된 대회 바꾸기로 바로
-  if (/나갈만한|해커톤있|공모전있|새대회/.test(n) || (/찾아|추천/.test(n) && /대회|공모전|해커톤|행사|나갈/.test(n))) return discoverChat();  // '노래 추천'·'아이디어 추천'은 대회 찾기가 아니다
+  if (/나갈만한|해커톤있|공모전있|새대회/.test(n) || (/찾아|추천/.test(n) && /대회|공모전|해커톤|행사|나갈/.test(n))) return discoverChat(undefined, topicsIn(t));  // '노래 추천'·'아이디어 추천'은 대회 찾기가 아니다
   if (/늦|지연|진행|재계획|다시계획/.test(n)) return progressCheck(false);
   if (/계획|일정짜|스케줄/.test(n)) return planFlow();
   if (/신청/.test(n) && extract) { return (me(t), applyFlow(extract)); }
@@ -3467,7 +3514,8 @@ $("composer").addEventListener("submit", (e) => { e.preventDefault(); const inpu
 });
 // 정해진 낱말로 못 알아들은 말: AI 키가 있으면 Claude가 짧게 답하고 맞는 기능을 버튼으로 권한다 (누르기 전엔 실행하지 않는다)
 let chatHist = [];  // 이 자유 대화에서 오간 말만 보낸다. 공고·저장소 내용은 보내지 않는다
-const FREE_ACTIONS = { discover: () => discoverChat(), notice: () => notice(), apply: () => (extract ? applyFlow(extract) : notice()), plan: () => planFlow(), today: () => today(), progress: () => progressCheck(false), submit: () => submit() };
+let lastFreeText = "";
+const FREE_ACTIONS = { discover: () => discoverChat(undefined, topicsIn(lastFreeText)), notice: () => notice(), apply: () => (extract ? applyFlow(extract) : notice()), plan: () => planFlow(), today: () => today(), progress: () => progressCheck(false), submit: () => submit() };
 function chatContext() {  // 팀 상황 요약: 단계 이름과 숫자만. 공고·저장소 내용과 이름은 보내지 않는다
   const ex = extract || {}, d = curDraft(), st = stageOf();
   const stage = st >= 3 ? "제출 완료" : (!extract && !d) ? "대회 고르기 전" : d ? ((d.applied || store.get(doneKey("apply"), null)) ? "신청 완료" : "신청 전") : st === 0 ? "신청 전" : "협업 중";
@@ -3480,6 +3528,7 @@ function chatContext() {  // 팀 상황 요약: 단계 이름과 숫자만. 공�
     submit_deadline: stage === "제출 완료" ? null : (ex.submit_deadline_iso ? ((d) => `${d.getMonth() + 1}월 ${d.getDate()}일(${"일월화수목금토"[d.getDay()]}) ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`)(new Date(ex.submit_deadline_iso)) : null), members, notice: !!extract, recent };
 }
 async function freeChat(t) {
+  lastFreeText = t;
   const dunno = () => { bot("무슨 뜻인지 정확히 모르겠어요. 지금은 대회 찾기, 신청, 계획 짜기, 오늘 할 일, 진행 점검, 제출 점검, 그리고 '취소'를 알아들어요. 아래에서 골라 주세요."); chip("할 수 있는 일 보기", openPicks); };
   if (!(H && H.ai)) return dunno();
   let r;
