@@ -4040,8 +4040,27 @@ function buildRoles(v, closeSheet) {
       row.appendChild(chips); body.appendChild(row);
     });
     const sv = h("button", "btn primary", "내 역할 저장"); sv.type = "button"; sv.style.marginTop = "12px";
-    sv.onclick = async () => { sv.disabled = true; try { const out = await api("/roles", { method: "POST", body: JSON.stringify({ repo: curRepo(), roles: { [me2]: pick } }) }); snack(out.saved ? "내 역할을 저장했어요" : out.message, true); if (closeSheet) closeSheet(); lastTriage = null; await loadBoard(); refreshHome(); if (mePage === "roles") renderMe(); } catch (e) { sv.disabled = false; fail(e); } };
+    sv.onclick = async () => { sv.disabled = true; try { const out = await api("/roles", { method: "POST", body: JSON.stringify({ repo: curRepo(), roles: { [me2]: pick } }) }); snack(out.saved ? "내 역할을 저장했어요" : out.message, true); if (closeSheet) closeSheet(); lastTriage = null; await loadBoard(); refreshHome(); if (mePage === "roles") renderMe(); } catch (e) { sv.disabled = false; snack(e.message, true); } };  // 오류는 이 창에서 바로 (전에는 대화 탭에 떠서 아무 일 없는 것처럼 보였다)
     body.appendChild(sv);
+    // 팀장 넘기기·되찾기: 지금 팀장은 다른 팀원에게 넘기고, 저장소 관리자는 되찾는다 (전에는 팀장이 스스로 내려놓는 것 말고 바꿀 길이 없었다)
+    const lb = h("div", "rolelead"); lb.style.marginTop = "18px";
+    lb.appendChild(h("b", null, `지금 팀장: ${r.lead || "없음"}${r.lead === me2 ? " (나)" : ""}`));
+    const move = (to, title, text) => confirmSheet({ title, body: text, ok: title, onOk: async () => {
+      try { const out = await api("/roles/lead", { method: "POST", body: JSON.stringify({ repo: curRepo(), to }) }); snack(out.saved ? `이제 ${to}님이 팀장이에요` : out.message, true); if (closeSheet) closeSheet(); lastTriage = null; await loadBoard(); refreshHome(); if (mePage === "roles") renderMe(); }
+      catch (e) { snack(e.message, true); }
+    } });
+    if (r.lead === me2) {
+      const others = ex.filter((m) => m !== me2);
+      if (others.length) {
+        lb.appendChild(h("div", "note", "팀장을 다른 팀원에게 넘길 수 있어요. 넘기면 팀 전체 변경을 혼자 승인하는 권한도 함께 넘어가요."));
+        const row = h("div", "chips"); others.forEach((m) => { const b = h("button", "chiptog", `${m}에게 넘기기`); b.type = "button"; b.onclick = () => move(m, "팀장 넘기기", `팀장을 ${m}님에게 넘길까요? 넘긴 뒤에는 ${m}님이 다시 넘기거나 저장소 관리자가 되찾을 수 있어요.`); row.appendChild(b); });
+        lb.appendChild(row);
+      }
+    } else if ((r.admins || []).includes(me2)) {
+      lb.appendChild(h("div", "note", "저장소 관리자라서 팀장을 되찾을 수 있어요."));
+      const b = h("button", "btn", "팀장 되찾기"); b.type = "button"; b.onclick = () => move(me2, "팀장 되찾기", `${r.lead || "지금 팀장"}님 대신 내가 팀장이 될까요? 팀원 모두에게 바로 바뀌어요.`); lb.appendChild(b);
+    } else if (r.lead) lb.appendChild(h("div", "note", `팀장은 ${r.lead}님이 넘기거나 저장소 관리자가 되찾을 수 있어요.`));
+    body.appendChild(lb);
   }).catch((e) => { body.textContent = e.message; });
 }
 function openRolesSheet() {

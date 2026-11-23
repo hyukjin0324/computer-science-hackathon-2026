@@ -844,7 +844,47 @@ class RolesIn(BaseModel):
 def roles_get(repo: str | None = None):
     """팀 역할표와 고를 수 있는 역할."""
     gh, st = state_for(repo)
-    return {"roles": st.roles, "members": st.members, "choices": own.ROLES}
+    return {"roles": st.roles, "members": st.members, "choices": own.ROLES, "lead": st.leads[0] if st.leads else None, "admins": _admins(gh)}
+
+
+def _admins(gh) -> list[str]:
+    """저장소 관리자(GitHub admin). 팀장을 역할표에서 골랐어도 관리자는 팀장을 되찾을 수 있다."""
+    try:
+        return list(gh.leads()) if hasattr(gh, "leads") else []
+    except Exception:  # noqa: BLE001 - 못 읽으면 되찾기 버튼만 안 보인다
+        return []
+
+
+class LeadIn(BaseModel):
+    repo: str | None = None
+    to: str
+
+
+@app.post("/api/roles/lead")
+def roles_lead(body: LeadIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    """팀장 넘기기·되찾기. 전에는 지금 팀장이 스스로 내려놓는 것 말고는 바꿀 길이 없어서, 팀장이 떠나면 아무도 바꿀 수 없었다.
+    - 지금 팀장은 다른 팀원에게 넘길 수 있다 (팀장 본인이 누르는 것이 동의)
+    - 저장소 관리자(GitHub admin)는 언제든 팀장을 자기에게 되찾을 수 있다"""
+    _check_code(x_bento_code, request)
+    gh, st = state_for(body.repo, fresh=True)  # 다른 기기에서 막 바뀐 팀장을 놓치지 않게 새로 읽는다
+    actor = _member_actor(request, st, "팀장을 바꿀") or _ASKER.get()
+    if not actor or actor not in st.members:
+        raise HTTPException(400, "먼저 내 GitHub 아이디를 선택해 주세요")
+    if body.to not in st.members:
+        raise HTTPException(400, "이 저장소 팀원에게만 넘길 수 있어요")
+    cur = st.leads[0] if st.leads else None
+    if body.to == cur:
+        return {"saved": False, "message": f"{cur}님이 이미 팀장이에요", "lead": cur, "roles": st.roles}
+    if not (actor == cur or (body.to == actor and actor in _admins(gh))):
+        raise HTTPException(403, f"팀장은 지금 팀장({cur or '없음'})만 넘길 수 있어요. 저장소 관리자는 팀장을 되찾을 수 있어요")
+    lead = own.LEAD_ROLE
+    changes = {m: [c for c in rs if c != lead] for m, rs in st.roles.items() if lead in rs and m != body.to}
+    changes[body.to] = list(dict.fromkeys([*st.roles.get(body.to, []), lead]))
+    try:
+        own.write_roles(gh, changes)
+    except GitHubError as e:
+        raise HTTPException(502, f"팀장을 바꾸지 못했어요: {e}") from e
+    return {"saved": True, "lead": body.to, "by": actor, "roles": {**st.roles, **changes}}
 
 
 @app.post("/api/roles")
