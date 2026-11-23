@@ -3241,7 +3241,14 @@ function aboutMe() {
   const b = lastBoard, role = b && b.roles ? b.roles[u] : "", lead = b && (b.people || []).some((p) => p.login === u && p.lead);
   bot(`${u} 님이에요.` + (lead ? " 팀장이고," : "") + (role ? ` 맡은 역할은 ${role}이에요.` : " 아직 정해진 역할이 없어요. 마이페이지에서 팀 역할을 정할 수 있어요."));
 }
-$("composer").addEventListener("submit", (e) => { e.preventDefault(); const input = $("msg"); const t = input.value.trim(); if (!t || $("todayBtn").disabled) return; input.value = ""; if (touchPointer.matches) input.blur(); showTab("chat"); const n = t.replace(/\s/g, "");
+// 자주 나는 오타를 바로잡은 뒤 낱말 규칙에 넣는다 ('헤커톤 바꿔줘'·'공모저 찾아줘'를 못 알아듣던 것). 화면에 보이는 내 말은 그대로
+const TYPOS = [
+  [/[해헤][커카][톤턴돈]/g, "해커톤"], [/공[모무][전저젼잔]/g, "공모전"], [/대휘|데회/g, "대회"],
+  [/마[깜검]/g, "마감"], [/[재제]출|제츨|재츨/g, "제출"], [/싱청|신쳥|싱쳥/g, "신청"], [/[게개]획|계휙|게휙/g, "계획"],
+  [/일졍|일쩡/g, "일정"], [/점[검겸]|졈검/g, "점검"], [/리[부뷰]|리뷰/g, "리뷰"], [/[바받][꿔꿰궈]/g, "바꿔"],
+];
+function fixTypos(n) { return TYPOS.reduce((x, [rx, to]) => x.replace(rx, to), n); }
+$("composer").addEventListener("submit", (e) => { e.preventDefault(); const input = $("msg"); const t = input.value.trim(); if (!t || $("todayBtn").disabled) return; input.value = ""; if (touchPointer.matches) input.blur(); showTab("chat"); const n = fixTypos(t.replace(/\s/g, ""));
   if (/취소|그만|안할래|안해|하지마|멈춰|중단|포기|지워|삭제/.test(n)) return cancelFlow(t);  // 멈추는 말이 먼저
   if (ABOUT_ME_RX.test(t)) { me(t); return aboutMe(); }  // '나는 누구야'가 먼저: 내 이름·역할
   if (ABOUT_BOT_RX.test(n)) { me(t); bot(ABOUT_BOT_MSG); chip("할 수 있는 일 보기", openPicks); return; }  // '너 이름이 뭐야'·'뭐 하는 앱이야': 정해진 소개
