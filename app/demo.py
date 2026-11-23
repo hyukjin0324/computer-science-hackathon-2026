@@ -104,6 +104,7 @@ class DemoGitHub:
     def check_runs(self, sha): return copy.deepcopy(self.d["checks"].get(sha, []))
     def file_authors(self, path): return list(self.d["authors"].get(path, []))
     def open_issues(self): return [i for i in copy.deepcopy(self.d["issues"]) if i.get("state", "open") == "open"]
+    def closed_issues(self, since): return [i for i in copy.deepcopy(self.d["issues"]) if i.get("state") == "closed" and (i.get("closed_at") or "") >= since]
 
     def milestones(self):
         out = []
@@ -148,6 +149,7 @@ class DemoGitHub:
         i = self._issue(n)
         if "state" in fields:
             i["state"] = fields["state"]
+            i["closed_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if fields["state"] == "closed" else None  # GitHub처럼 닫은 시각
         if "assignees" in fields:
             i["assignees"] = [{"login": u} for u in fields["assignees"]]
         if "milestone" in fields:

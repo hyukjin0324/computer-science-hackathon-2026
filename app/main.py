@@ -126,6 +126,7 @@ async def _remember_asker(request: Request, call_next):
         resp = await call_next(request)
         if request.method != "GET":  # 무언가를 바꾸는 요청 뒤에는 저장된 저장소 상태를 버려서 다음에 바로 새로 읽는다
             _STATE_CACHE.clear()
+            _CLOSED_CACHE.clear()  # 방금 닫은 일이 홈에 바로 줄 그어 보이게
         return resp
     finally:
         _ASKER.reset(tok)
@@ -398,6 +399,19 @@ def _why_assigned(title: str, who: str, st) -> str:
     return " · ".join(parts)
 
 
+_CLOSED_CACHE: dict[str, tuple[float, list]] = {}
+
+
+def _closed_cached(gh, since: str) -> list:
+    """닫힌 이슈는 60초 동안 기억한다 (홈을 열 때마다 GitHub를 한 번 더 읽지 않게)."""
+    hit = _CLOSED_CACHE.get(gh.repo)
+    if hit and time.time() - hit[0] < 60:
+        return hit[1]
+    items = gh.closed_issues(since)
+    _CLOSED_CACHE[gh.repo] = (time.time(), items)
+    return items
+
+
 @app.get("/api/board")
 def board(repo: str | None = None):
     from .notice import is_submit_act
@@ -424,6 +438,18 @@ def board(repo: str | None = None):
                 people[who]["tasks"].append({**t, "why": _why_assigned(i.title, who, st)})
         if not i.assignees and t["safe"] and not is_submit_act(re.sub(r"^\[[^\]]*\]\s*", "", i.title)):
             unassigned.append(t)  # 의심 지시가 있는 이슈·제출 행동은 담당을 나누지 않는다 ('이슈 정리'에서 따로 다룬다)
+    # 최근 3일 안에 닫힌 할 일: 홈에서 없애지 않고 줄 그어 아래에 보여 준다 (GitHub에서 닫았거나 캘린더 '끝났어요'로 닫힌 것)
+    for p in people.values():
+        p["done"] = []
+    try:
+        since = (now - timedelta(days=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        for i in sorted(_closed_cached(gh, since), key=lambda x: x.get("closed_at") or "", reverse=True):
+            for who in [a["login"] for a in (i.get("assignees") or [])]:
+                if who in people and len(people[who]["done"]) < 5:
+                    people[who]["done"].append({"number": i["number"], "title": i.get("title") or "", "url": i.get("html_url") or gh.html(f"/issues/{i['number']}"),
+                                                "closed_at": i.get("closed_at")})
+    except Exception:  # noqa: BLE001 - 못 읽어도 남은 일은 그대로 보여 준다
+        pass
     key = lambda t: (t["due"] is None, t["due"] or "")
     for p in people.values():
         p["tasks"].sort(key=key)

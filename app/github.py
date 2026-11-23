@@ -106,6 +106,11 @@ class GitHub:
         items = self.api_all(self._r("/issues"), {"state": "open"})
         return [i for i in items if "pull_request" not in i]
 
+    def closed_issues(self, since: str):
+        """since(ISO) 뒤에 바뀐 닫힌 이슈 (홈에서 끝낸 일을 줄 그어 보여 주려고). 한 쪽(100개)만 읽는다"""
+        items = self.api("GET", self._r("/issues"), params={"state": "closed", "since": since, "per_page": 100})
+        return [i for i in items if "pull_request" not in i]
+
     def milestones(self):
         return self.api_all(self._r("/milestones"), {"state": "open"})
 
