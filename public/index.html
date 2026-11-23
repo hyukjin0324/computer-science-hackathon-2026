@@ -477,16 +477,16 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 
 /* 캘린더 */
 .dday { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: 16px; display: flex; flex-direction: column; gap: 6px; }
-.dday .big-d { font-family: var(--f-logo); font-size: var(--fs-display); font-weight: 800; line-height: 1; color: var(--ink); letter-spacing: -1px; }
+.dday .big-d { font-family: var(--f-logo); font-size: var(--fs-display); font-weight: 800; line-height: 1; color: var(--ink); letter-spacing: -1px; white-space: nowrap; flex: none; }  /* D-숫자는 무조건 한 줄 */
 .dday-top { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .dday-top span { color: var(--muted); font-size: var(--fs-body); }
 .dday { gap: 10px; padding-left: 20px; }  /* 카드는 그대로, 안의 글자만 살짝 오른쪽으로 */
 .dday-label { color: var(--muted); font-size: var(--fs-small); font-weight: 600; }
 .dday-row { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .dday .big-d.nodate { font-size: var(--fs-title-l); letter-spacing: -.5px; white-space: nowrap; flex: none; }  /* '마감 기한 미정'은 D-숫자보다 작게 */
-.dday-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.dday-info b { font-size: var(--fs-body-l); font-weight: 700; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dday-info span { color: var(--muted); font-size: var(--fs-small); }
+.dday-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }  /* 대회명이 길면 이 칸만 옆으로 스크롤 */
+.dday-info b { font-size: var(--fs-body-l); font-weight: 700; color: var(--ink); white-space: nowrap; }
+.dday-info span { color: var(--muted); font-size: var(--fs-small); white-space: nowrap; }
 .month { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 4px 12px; }
 .month b { font-size: var(--fs-body-l); }
 .week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
@@ -689,6 +689,7 @@ details.teamall summary { gap: 8px; } details.teamall summary .gsub { color: var
   :root[data-frame="on"] body { background: transparent; padding-block: 30px; display: flex; align-items: center; justify-content: center; }  /* 틀 바깥 테두리(10px)를 빼고 위아래 20px씩, 창이 크면 세로 가운데 */
   :root[data-frame="on"] body .sheet-bg, :root[data-frame="on"] body .drawer-bg { margin: 0; }  /* 틀 안에서는 틀 자체가 화면 가장자리라, 좁은 화면용 바깥으로 내미는 여백이 안쪽 16px를 잘라 먹는다 */
   :root[data-frame="on"] body .drawer { padding-top: 26px; }  /* 둥근 모서리에 로고가 걸리지 않게 */
+  :root[data-frame="on"] .dock { left: 16px; right: 16px; }  /* 아래 바 크기를 대화 화면과 같게 (틀 안쪽 여백 16px 안에) */
   :root[data-frame="on"] .phone { width: 393px; max-width: none; height: 852px; transform: scale(var(--phone-k, 1)); transform-origin: center; background: var(--bg); border-radius: 40px; padding: 0 16px; overflow: hidden; box-shadow: 0 0 0 10px #17181C, 0 28px 70px rgb(23 24 28 / .28); }
 }
 details.teamall { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-box); padding: 4px 14px; }
