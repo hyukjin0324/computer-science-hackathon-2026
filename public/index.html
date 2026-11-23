@@ -1069,7 +1069,6 @@ function projName() { const d = curDraft(); return d ? d.title : (extract && ext
 function setExtract(ex) { extract = ex; const d = curDraft(); if (d) { d.extract = ex; saveDrafts(); } else store.set("extract:" + projKey(), ex); renderCal(); }
 function renderHead() {
   const d = curDraft(); const b = $("projBtn"); b.textContent = ""; const dot = h("span", "pdot"); dot.style.background = "var(--blue)"; b.appendChild(dot); if (d) b.appendChild(h("small", null, "준비 중")); else if (H.mode === "demo") b.appendChild(h("small", "demo-badge", "데모 데이터")); b.appendChild(h("span", "pname", projName() + " ▾"));
-  const pp = $("panelProj"); if (pp) pp.textContent = (d ? "준비 중 · " : "") + projName();
 }
 async function loadSaved() {  // 팀원이 이미 분석해 저장소에 저장한 공고가 있으면 다시 분석하지 않고 가져온다
   const key = projKey();
@@ -1253,7 +1252,8 @@ function intro() {
   add(h("div", "stamp", `${d.getMonth() + 1}월 ${d.getDate()}일 ${d.getHours() < 12 ? "오전" : "오후"} ${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}`));
   add(h("div", null)).id = "history";  // 지난 대화 (팀플을 불러온 뒤 채운다)
   if (typeof projName === "function" && cur) add(h("div", "bub", `'${projName()}' 대화방이에요. 이 대회 이야기만 여기 모여요.`));
-  const p = h("div", "panel"); const ph = h("div", "panel-h"); ph.appendChild(h("b", null, "바로 맡겨 보기")); const pp = h("button", "more"); pp.type = "button"; pp.id = "panelProj"; pp.onclick = openProjects; ph.appendChild(pp); p.appendChild(ph);
+  // 제목만: 지금 대회 이름은 위 팀플 칩과 '이어서 하기' 카드에 이미 있다 (긴 이름이 제목을 밀어 세로로 쌓이던 것도 없앰)
+  const p = h("div", "panel"); const ph = h("div", "panel-h"); ph.appendChild(h("b", null, "바로 맡겨 보기")); p.appendChild(ph);
   const picks = h("div", "picks");
   const all = PICKS(), find = (name) => all.find((x) => x[1].includes(name));
   // 처음 보이는 건 흐름 네 가지만: 대회 → 오늘 할 일 → 계획·점검 → 제출. 공고 파일·심사 기준 채점은 각 흐름 안에서(＋ 시트에도 있어요)
