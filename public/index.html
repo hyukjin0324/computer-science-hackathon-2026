@@ -650,7 +650,7 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .evt .acts2 .bigrow { grid-template-columns: 1fr auto; min-height: 56px; }
 
 /* 보관함 */
-.seg { display: grid; grid-template-columns: 1fr 1fr; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 4px; }
+.seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 4px; }
 .seg button { height: 44px; border-radius: var(--r-pill); font-weight: 600; color: var(--muted); }
 .seg button.sel { background: var(--surface-2); color: var(--ink); }
 .empty { text-align: center; padding: 70px 20px; display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--muted); }
@@ -1050,7 +1050,7 @@ body.onboarding .dock { display: none; }  /* 첫 화면 뒤로 아래 막대가 
   <!-- 보관함 -->
   <section class="view" id="v-box" hidden>
     <h1>보관함</h1>
-    <div class="seg" role="tablist"><button type="button" class="sel" data-seg="tasks">맡긴 일</button><button type="button" data-seg="docs">문서</button></div>
+    <div class="seg" role="tablist"><button type="button" class="sel" data-seg="tasks">맡긴 일</button><button type="button" data-seg="docs">문서</button><button type="button" data-seg="projects">보관한 팀플</button></div>
     <div id="boxBody"></div>
   </section>
 
@@ -2668,7 +2668,7 @@ function refreshIfStale() { if (Date.now() - homeLoadedAt > 30000 && !$("v-home"
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshIfStale(); });
 function syncSubmitted() {  // 다른 팀원이 제출 완료를 기록했으면(저장소의 [제출 확인] 이슈에 증거를 남기고 닫음) 이 기기도 제출 완료로
   if (curDraft() || !extract || stageOf() >= 3) return;
-  api("/submit/status").then((s) => { if (s && s.closed && s.proof) { store.set(doneKey("submit"), { at: Date.now(), proof: s.proof, shared: true }); renderHome(); } }).catch(() => {});
+  api("/submit/status").then((s) => { if (s && s.closed && s.proof) { store.set(doneKey("submit"), { at: Date.now(), proof: s.proof, shared: true }); setProjectHidden(projKey(), true); renderHome(); } }).catch(() => {});  // 팀원 기기도 보관함으로
 }
 function refreshHome() { homeLoadedAt = Date.now(); syncSubmitted(); if (curDraft()) return renderHome(); api("/triage").then((t) => { lastTriage = t; notifyRoleRequests(t.items); renderHome(); }).catch(() => renderHome()); loadBoard(); }
 function resumeChat() {
@@ -2997,6 +2997,7 @@ async function chooseProjectForAction(label, action, { requiresRepo = false, req
   let linked = projects;
   let failed = false;
   try { linked = await loadProjects({ selectDefault: false }); } catch (e) { failed = true; }
+  linked = (linked || []).filter((p) => !isProjectHidden(p));  // 보관한(제출 완료) 팀플은 고르는 목록에서 뺀다
   if (!card.parentElement || card.inert) return;
   loading.remove();
 
@@ -3121,12 +3122,8 @@ function fillProjectList(box, close, stay) {  // stay: 고른 뒤에도 지금 �
       ed.onclick = () => { close(); if (curDraft() || curRepo() !== p.repo) useProject({ repo: p.repo }, true); showTab("chat"); swapContest(); };
       row.appendChild(ed); live.appendChild(row);
     });
-    if (hidden.length) {
-      hiddenProjects.appendChild(h("div", "dw-lab", `숨긴 팀플 ${hidden.length}개`));
-      hidden.forEach((p) => hiddenProjects.appendChild(proj(p.repo.split("/")[1], `${projSub(p)} · 다시 표시`, colorOf("r:" + p.repo), false, () => {
-        setProjectHidden(repoProjectKey(p.repo), false); useProject({ repo: p.repo }, stay); snack("팀플을 다시 표시했어요");
-      })));
-    }
+    // 제출 완료로 보관한 팀플은 여기 보이지 않는다: 마이페이지 → 보관함 → 팀플에서만 보고 다시 진행한다
+    if (hidden.length) hiddenProjects.appendChild(h("div", "note dw-hint", `보관한 팀플 ${hidden.length}개는 마이페이지 → 보관함 → 팀플에 있어요`));
     if (H.install_url) {  // 내 GitHub 저장소가 목록에 없으면: 그 저장소에 Bento 앱을 설치하면 여기에 생긴다 (전에는 이 화면에 방법이 없었다)
       live.appendChild(h("div", "note dw-hint", "내 저장소가 안 보이면, 그 저장소에 Bento 앱 설치 필요"));
       const ins = link("내 저장소에 Bento 설치", H.install_url); ins.target = "_self"; live.appendChild(ins);
@@ -3681,7 +3678,7 @@ function markDone(kind, proof, journeyState) {
   if (kind === "submit" && !d) setProjectHidden(projKey(), true);
   if (journeyState) journeyState.set(journeyState.n);
   renderCal(); renderHome();
-  if (kind === "submit") { bot("제출 완료로 기록했어요. 팀플 목록의 숨긴 팀플로 옮겼어요."); return; }
+  if (kind === "submit") { bot("제출 완료로 기록했어요. 이 팀플은 마이페이지 → 보관함 → 팀플로 옮겼어요."); return; }
   resumeChat();
   if (d) { bot("신청 완료로 기록했어요. 이제 팀 저장소를 준비해요."); startPath(d); }
   else { bot("신청 완료로 기록했어요. 이제 팀에서 할 일을 나눠요."); chip("할 일 나누기", afterTasks); }
@@ -4022,9 +4019,26 @@ function renderCal() {
 /* ---------- 보관함 ---------- */
 let seg = "tasks";
 document.querySelectorAll(".seg button").forEach((b) => (b.onclick = () => { seg = b.dataset.seg; renderBox(); }));
+function renderArchivedProjects(body) {
+  // 보관함 → 팀플: 제출 완료로 보관한 팀플. 위 팀플 바꾸기·진행 중인 팀플에서는 빠지고 여기서만 보고 다시 진행한다 (데이터는 지우지 않는다)
+  const keys = [...hiddenProjectKeys()].filter((k) => k.startsWith("r:"));
+  if (!keys.length) { const e = h("div", "empty"); e.innerHTML = MASCOT(72, true); e.appendChild(h("b", null, "보관한 팀플 없음")); e.appendChild(h("span", null, "제출 완료를 기록한 팀플이 여기에 보관돼요")); body.appendChild(e); return; }
+  const l = h("div", "list");
+  keys.forEach((k) => {
+    const repo = k.slice(2); const p = (projects.length ? projects : store.get("projects:" + (ME.login || ""), [])).find((x) => x.repo === repo) || {};
+    const ex = store.get("extract:" + k, null); const done = store.get(doneKey("submit", k), null);
+    const c = h("div", "li"); const top = h("div", "li-top"); top.appendChild(h("b", null, repo.split("/")[1] || repo)); top.appendChild(h("span", "tag done", "제출 완료")); c.appendChild(top);
+    c.appendChild(h("small", null, [(ex && ex.title) || p.notice || "연결된 대회 없음", done && done.at ? `제출 완료 기록 ${new Date(done.at).toLocaleString("ko-KR", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : ""].filter(Boolean).join(" · ")));
+    const b = h("button", "btn", "다시 진행하기"); b.type = "button"; b.style.marginTop = "8px";
+    b.onclick = () => { setProjectHidden(k, false); useProject({ repo }, true); snack("팀플을 다시 진행 중으로 옮겼어요"); showTab("home"); };
+    c.appendChild(b); l.appendChild(c);
+  });
+  body.appendChild(l);
+}
 function renderBox() {
   document.querySelectorAll(".seg button").forEach((b) => b.classList.toggle("sel", b.dataset.seg === seg));
   const body = $("boxBody"); body.innerHTML = "";
+  if (seg === "projects") return renderArchivedProjects(body);
   const list = seg === "tasks" ? tasks : docs;
   if (!list.length) { const e = h("div", "empty"); e.innerHTML = MASCOT(72, true); e.appendChild(h("b", null, seg === "tasks" ? "아직 맡긴 일 없음" : "아직 만든 문서 없음")); e.appendChild(h("span", null, seg === "tasks" ? "승인해서 실행한 일이 여기에 쌓임" : "신청서·제출 초안이 여기에 모임")); body.appendChild(e); return; }
   const l = h("div", "list");
