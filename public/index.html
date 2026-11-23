@@ -59,7 +59,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-html, body { height: 100%; }
+html, body { height: 100%; height: 100dvh; overflow: hidden; overscroll-behavior: none; }  /* 휴대폰 브라우저: 주소창·툴바가 접혀도 화면 높이를 따라가 아래 탭바가 바닥에 붙어 있게, 페이지 전체가 튕기며 들리지 않게 (스크롤은 각 화면 안에서) */
 :root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: 0; }
 [hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: var(--fs-body); line-height: 1.5;
