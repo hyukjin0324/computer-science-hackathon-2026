@@ -2930,12 +2930,14 @@ function isPast(iso) {  // 날짜만 있거나 GitHub 마일스톤처럼 자정(
   const dayOnly = /^\d{4}-\d{2}-\d{2}(T00:00:00(\.000)?Z)?$/.test(iso);
   return (dayOnly ? new Date(iso.slice(0, 10) + "T23:59:59").getTime() : Date.parse(iso)) < Date.now();
 }
+function repoProjectKey(repo) { return "r:" + repo; }
+function hiddenProjectKeys() { return new Set(store.get("hiddenProjects", [])); }
 function setProjectHidden(key, hidden) {
-  const keys = new Set(store.get("hiddenProjects", []));
+  const keys = hiddenProjectKeys();
   if (hidden) keys.add(key); else keys.delete(key);
   store.set("hiddenProjects", [...keys].slice(-100));
 }
-function projEnded(p) { return !p.error && new Set(store.get("hiddenProjects", [])).has("r:" + p.repo); }
+function isProjectHidden(p, keys = hiddenProjectKeys()) { return !p.error && keys.has(repoProjectKey(p.repo)); }
 function projSub(p) { if (p.error) return "저장소를 읽지 못했어요"; return [p.notice || "연결된 공고 없음", p.due ? `제출 ${dtxt(p.due)}` : "", p.total ? `제출물 ${p.done}/${p.total}` : ""].filter(Boolean).join(" · "); }
 function draftSub(d) { const ex = d.extract || {}; return [d.applied ? "신청 완료" : "신청 준비", ex.apply_deadline_iso ? `신청 ${dtxt(ex.apply_deadline_iso)}` : "", ex.submit_deadline_iso ? `제출 ${dtxt(ex.submit_deadline_iso)}` : ""].filter(Boolean).join(" · "); }
 async function loadProjects({ selectDefault = true } = {}) {
@@ -3075,8 +3077,8 @@ function fillProjectList(box, close, stay) {  // stay: 고른 뒤에도 지금 �
   function drawLive() {
     live.innerHTML = "";
     hiddenProjects.innerHTML = "";
-    const shown = projects.filter((p) => !projEnded(p));
-    const hidden = projects.filter(projEnded);
+    const shown = [], hidden = [], hiddenKeys = hiddenProjectKeys();
+    projects.forEach((p) => (isProjectHidden(p, hiddenKeys) ? hidden : shown).push(p));
     if (!shown.length) live.appendChild(h("div", "note", projects.length ? "진행 중인 팀플이 없어요" : ME.logged_in ? "Bento 앱이 설치된 내 저장소가 아직 없음" : "Bento 앱이 설치된 저장소가 없음"));
     shown.forEach((p) => {  // 진행 중인 팀플 옆 연필: 연결된 대회 바꾸기 (잘못 고른 대회를 대화로만 바꾸던 것)
       const row = h("div", "dw-row"); row.appendChild(proj(p.repo.split("/")[1], projSub(p), colorOf("r:" + p.repo), !curDraft() && curRepo() === p.repo, () => useProject({ repo: p.repo }, stay)));
@@ -3087,7 +3089,7 @@ function fillProjectList(box, close, stay) {  // stay: 고른 뒤에도 지금 �
     if (hidden.length) {
       hiddenProjects.appendChild(h("div", "dw-lab", `숨긴 팀플 ${hidden.length}개`));
       hidden.forEach((p) => hiddenProjects.appendChild(proj(p.repo.split("/")[1], `${projSub(p)} · 다시 표시`, colorOf("r:" + p.repo), false, () => {
-        setProjectHidden("r:" + p.repo, false); useProject({ repo: p.repo }, stay); snack("팀플을 다시 표시했어요");
+        setProjectHidden(repoProjectKey(p.repo), false); useProject({ repo: p.repo }, stay); snack("팀플을 다시 표시했어요");
       })));
     }
     if (H.install_url) {  // 내 GitHub 저장소가 목록에 없으면: 그 저장소에 Bento 앱을 설치하면 여기에 생긴다 (전에는 이 화면에 방법이 없었다)
