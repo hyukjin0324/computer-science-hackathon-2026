@@ -707,8 +707,8 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .toast { align-self: center; display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 6px 14px 6px 6px; font-size: var(--fs-small); max-width: 92%; box-shadow: var(--shadow); }
 .toast .bento { width: 24px; height: 24px; padding: 3px; gap: 2px; border-radius: 6px; }
 .toast span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.composer { display: grid; grid-template-columns: 40px 1fr 44px; align-items: center; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 5px 5px 5px 8px; box-shadow: var(--shadow); }
-.composer input { min-width: 0; background: none; border: 0; color: var(--ink); font: inherit; font-size: var(--fs-body); padding: 8px 4px; outline: none; }
+.composer { display: grid; grid-template-columns: 40px 1fr 44px; align-items: end; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 5px 5px 5px 8px; box-shadow: var(--shadow); }
+.composer textarea { min-width: 0; background: none; border: 0; color: var(--ink); font: inherit; font-size: var(--fs-body); line-height: 1.45; padding: 8px 4px; outline: none; resize: none; max-height: calc(1.45em * 5 + 16px); overflow-y: auto; display: block; }  /* Shift+Enter로 줄바꿈, 5줄까지 늘어남 */
 .composer .ic { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; color: var(--muted); }
 .composer .go { width: 44px; height: 44px; border-radius: 50%; background: var(--primary); color: var(--primary-ink); display: grid; place-items: center; }
 .composer { transition: border-color 120ms; }
@@ -718,7 +718,7 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .phone.chat-keyboard { height: calc(100% - var(--chat-keyboard-inset, 0px)); }
 .phone.chat-keyboard .dock { padding-bottom: var(--chat-related-gap); }
 .phone.chat-keyboard .tabs { display: none; }
-@media (pointer: coarse) { .composer input { font-size: max(16px, var(--fs-body)); } }
+@media (pointer: coarse) { .composer textarea { font-size: max(16px, var(--fs-body)); } }
 .tabs { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 5px 8px; box-shadow: var(--shadow); }
 .tabs button { height: 62px; border-radius: var(--r-pill); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; position: relative; color: var(--muted); font-size: var(--fs-body); font-weight: 600; }
 .tabs button svg { width: 28px; height: 28px; }
@@ -794,6 +794,12 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .htask-check.ok { border-color: var(--ok); } .htask-check.crit { border-color: var(--crit); } .htask-check.info { border-color: var(--info); } .htask-check.muted { border-color: #A3A5AA; }
 .htask.done .htask-go > span > b:first-child { text-decoration: line-through; color: #A3A5AA; } .htask.done .hdue { opacity: .5; }
 .htask.hcheckable { grid-template-columns: 18px minmax(0, 1fr); cursor: default; }
+.htask.dotrow .htask-check { width: 6px; height: 6px; border: 0; border-radius: 50%; justify-self: center; }  /* 팀원 별 할 일: 네모 대신 작은 점 (색은 대회 색, 스크립트에서) */
+.htask.dotrow { min-height: 52px; padding: 8px 0; }  /* 사람 이름(위 줄)과 구별되게 글자를 한 단계 작게 */
+.htask.dotrow b { font-size: var(--fs-small); font-weight: 500; }
+.htask.dotrow small, .htask.dotrow .hdue { font-size: var(--fs-caption); }
+.htask.dotrow .chev { font-size: 0; display: grid; place-items: center; }  /* 팀원 할 일 화살표: 작고 얇게 */
+.htask.dotrow .chev::before { content: ""; width: 6px; height: 6px; border-top: 1.4px solid #979AA1; border-right: 1.4px solid #979AA1; transform: rotate(45deg); margin-right: 3px; }
 .htask-go { display: grid; grid-template-columns: minmax(0, 1fr) 14px; gap: 12px; align-items: center; width: 100%; min-height: 44px; padding: 0; border: 0; background: none; color: inherit; text-align: left; text-decoration: none; font: inherit; cursor: pointer; }
 .htask-go > span:not(.chev) { padding-top: 4px; }
 button.htask-check { position: relative; padding: 0; background: none; cursor: pointer; display: grid; place-items: center; font-size: 13px; font-weight: 800; line-height: 1; color: var(--muted); }
@@ -1049,7 +1055,7 @@ body.onboarding .dock { display: none; }  /* 첫 화면 뒤로 아래 막대가 
     <button class="toast" type="button" id="toast" hidden><div class="bento"><i></i><i></i><i></i><i></i></div><span id="toastTxt"></span></button>
     <form class="composer" id="composer">
       <button class="ic" type="button" aria-label="바로 맡겨 보기 열기" id="plusBtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
-      <input id="msg" placeholder="Bento에게 맡기기…" autocomplete="off" aria-label="Bento에게 맡기기">
+      <textarea id="msg" rows="1" placeholder="Bento에게 맡기기…" autocomplete="off" aria-label="Bento에게 맡기기"></textarea>
       <button class="go" type="submit" aria-label="보내기" id="todayBtn" disabled><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
     </form>
     <nav class="tabs" aria-label="탭">
@@ -2551,25 +2557,29 @@ function homeBoard(v, me2, items) {
   if (!b) return;
   // 팀원 할 일: 사람별로 접어 둔다. 펼치면 그 사람의 PR·이슈 일과 GitHub 할 일
   const others = (people.length ? people.map((p) => p.login) : Object.keys(byOwner)).filter((m) => m !== me2);
-  const groups = others.map((m) => ({ m, items: byOwner[m] || [], tasks: (people.find((p) => p.login === m) || { tasks: [] }).tasks, late: (people.find((p) => p.login === m) || {}).late || 0 }))
+  // 같은 승인 요청이 두 번 올라오면(다시 나누기를 두 번 누른 경우 등) 제목이 같은 건 최근 것 하나만
+  const oneEach = (list) => [...new Map(list.map((i) => [i.title, i])).values()];
+  const groups = others.map((m) => ({ m, items: oneEach(byOwner[m] || []), tasks: (people.find((p) => p.login === m) || { tasks: [] }).tasks, late: (people.find((p) => p.login === m) || {}).late || 0 }))
     .filter((g) => g.items.length || g.tasks.length);
+  let tsec = null;
   if (groups.length) {
-    const tsec = h("section", "hsec hteam"); const sh = h("div", "sech"); sh.appendChild(h("h2", null, "팀원 별 할 일")); tsec.appendChild(sh); v.appendChild(tsec);
+    tsec = h("section", "hsec hteam"); const sh = h("div", "sech"); sh.appendChild(h("h2", null, "팀원 별 할 일")); tsec.appendChild(sh); v.appendChild(tsec);
     groups.sort((x, y) => y.late - x.late || (y.items.length + y.tasks.length) - (x.items.length + x.tasks.length)).forEach((g) => {
       const det = h("details", "teamall"); const sm = h("summary"); sm.appendChild(h("strong", null, g.m));
       sm.appendChild(h("span", "gsub", `${roles[g.m] || "역할 없음"} · 할 일 ${g.items.length + g.tasks.length}개`)); if (g.late) sm.appendChild(h("span", "late", `늦음 ${g.late}`));
-      det.appendChild(sm); g.items.forEach((it) => det.appendChild(hItemRow(it, true))); g.tasks.forEach((t) => det.appendChild(hTaskRow(t)));
+      det.appendChild(sm); [...g.items.map((it) => hItemRow(it, true)), ...g.tasks.map((t) => hTaskRow(t))].forEach((row) => { row.classList.add("dotrow"); const ck = row.querySelector(".htask-check"); if (ck) ck.style.background = projColor("var(--blue)"); det.appendChild(row); });  // 점 색 = 지금 대회 색 (위 대회 이름 앞 점과 같은 색)  // 팀원 할 일은 내가 체크할 게 아니라 네모 대신 작은 동그라미
       tsec.appendChild(det);
     });
   }
-  // 일이 몰렸을 때 다시 나누기: 팀원 별 할 일 밑에 따로
+  // 일이 몰렸을 때 다시 나누기: 팀원 별 할 일 칸 안, 맨 아래에 붙인다
   if (lateP.length || b.rebalance) {
-    const lsec = h("section", "hsec"); v.appendChild(lsec);
-    const sh = h("div", "sech"); sh.appendChild(h("h2", null, "일 다시 나누기")); lsec.appendChild(sh);
+    const lsec = tsec || v.appendChild(h("section", "hsec"));
+    // 서버는 GitHub 할 일만 세서, 위 '할 일 N개'(PR·이슈 일 포함)와 숫자가 달랐다: 같은 숫자로 맞춘다
+    const total = (m) => { const g = groups.find((x) => x.m === m); return g ? g.items.length + g.tasks.length : null; };
     const c = h("div", "lead-late");
-    lateP.forEach((p) => { const r = h("div", "prow"); r.appendChild(h("b", null, p.login + (p.login === me2 ? " (나)" : ""))); r.appendChild(h("span", null, `${roles[p.login] || "역할 없음"} · ${p.open}개`)); r.appendChild(h("span", "late", `늦음 ${p.late}`)); c.appendChild(r); });
+    lateP.forEach((p) => { const r = h("div", "prow"); r.appendChild(h("b", null, p.login + (p.login === me2 ? " (나)" : ""))); r.appendChild(h("span", null, `${roles[p.login] || "역할 없음"} · ${total(p.login) ?? p.open}개`)); r.appendChild(h("span", "late", `늦음 ${p.late}`)); c.appendChild(r); });
     if (b.rebalance) {
-      c.appendChild(h("div", "note", `일이 몰렸어요 · ${b.rebalance.why}`));
+      c.appendChild(h("div", "note", `일이 몰렸어요 · ${b.rebalance.why.replace(/(\S+) 님이 (\d+)개를/g, (all, m, n) => `${m} 님이 ${total(m) ?? n}개를`)}`));
       const bt = h("button", "btn", "다시 나누기"); bt.type = "button";
       bt.onclick = () => { showTab("chat"); me("일이 몰린 사람 다시 나눠 줘"); bot("역할이 맞고 일이 적은 사람에게 몇 개를 넘길게요. 팀 전체에 영향을 주는 변경이라, 제안한 사람이 아닌 팀원이나 팀장이 승인해야 실행돼요."); approval(b.rebalance.proposal, (ok) => { if (ok) { lastBoard = null; refreshHome(); } }); };
       c.appendChild(bt);
@@ -2862,6 +2872,13 @@ function onboarding() {
 
 /* ---------- 팀플 고르기 ---------- */
 function dtxt(iso) { if (!iso) return ""; const n = new Date(); n.setHours(0, 0, 0, 0); const d = new Date(iso); d.setHours(0, 0, 0, 0); const k = Math.round((d - n) / 864e5); return k >= 0 ? `D-${k}` : `D+${-k}`; }
+// 끝난 팀플: 제출물을 다 냈거나(제출 마일스톤의 이슈가 모두 닫힘) 제출 마감이 지났으면 목록에서 숨긴다
+function isPast(iso) {  // 날짜만 있거나 GitHub 마일스톤처럼 자정(00:00Z)이면 그날이 다 갈 때까지는 진행 중
+  if (!iso) return false;
+  const dayOnly = /^\d{4}-\d{2}-\d{2}(T00:00:00(\.000)?Z)?$/.test(iso);
+  return (dayOnly ? new Date(iso.slice(0, 10) + "T23:59:59").getTime() : Date.parse(iso)) < Date.now();
+}
+function projEnded(p) { return !p.error && (isPast(p.due) || (p.total > 0 && p.done >= p.total)); }
 function projSub(p) { if (p.error) return "저장소를 읽지 못했어요"; return [p.notice || "연결된 공고 없음", p.due ? `제출 ${dtxt(p.due)}` : "", p.total ? `제출물 ${p.done}/${p.total}` : ""].filter(Boolean).join(" · "); }
 function draftSub(d) { const ex = d.extract || {}; return [d.applied ? "신청 완료" : "신청 준비", ex.apply_deadline_iso ? `신청 ${dtxt(ex.apply_deadline_iso)}` : "", ex.submit_deadline_iso ? `제출 ${dtxt(ex.submit_deadline_iso)}` : ""].filter(Boolean).join(" · "); }
 async function loadProjects({ selectDefault = true } = {}) {
@@ -2984,8 +3001,9 @@ function fillProjectList(box, close, stay) {  // stay: 고른 뒤에도 지금 �
   dw.appendChild(h("div", "dw-lab", "진행 중인 팀플"));
   const live = h("div", "dw-live"); live.appendChild(h("div", "note", "불러오는 중…")); dw.appendChild(live);
   dw.appendChild(h("div", "dw-lab", "준비 중인 대회"));
-  if (!drafts.length) dw.appendChild(h("div", "note", "아직 없음. 홈에서 찾아온 대회를 고르면 여기에 생김"));
-  drafts.forEach((d) => {
+  const liveDrafts = drafts.filter((d) => !isPast((d.extract || {}).submit_deadline_iso));  // 제출 마감이 지난 대회는 숨긴다
+  if (!liveDrafts.length) dw.appendChild(h("div", "note", "아직 없음. 홈에서 찾아온 대회를 고르면 여기에 생김"));
+  liveDrafts.forEach((d) => {
     const row = h("div", "dw-row"); row.appendChild(proj(d.title, draftSub(d), colorOf("d:" + d.id), !!(cur && cur.draft === d.id), () => useProject({ draft: d.id }, stay)));
     const del = h("button", "dw-del"); del.type = "button"; del.setAttribute("aria-label", `${d.title} 지우기`); del.innerHTML = icon("trash");
     del.onclick = () => { if (!del.dataset.sure) { del.dataset.sure = "1"; del.classList.add("sure"); del.setAttribute("aria-label", "한 번 더 누르면 지워요"); snack("한 번 더 누르면 지워요"); return; } drafts.splice(drafts.indexOf(d), 1); saveDrafts(); try { localStorage.removeItem("bento:plan:d:" + d.id); } catch (e) { /* 무시 */ } if (cur && cur.draft === d.id) useProject({ repo: curRepo() }, true); row.remove(); snack("지웠어요"); renderHome(); };
@@ -2998,8 +3016,9 @@ function fillProjectList(box, close, stay) {  // stay: 고른 뒤에도 지금 �
   if (cached.length) { const keep = projects; projects = cached; drawLive(); projects = keep; }
   function drawLive() {
     live.innerHTML = "";
-    if (!projects.length) live.appendChild(h("div", "note", ME.logged_in ? "Bento 앱이 설치된 내 저장소가 아직 없음" : "Bento 앱이 설치된 저장소가 없음"));
-    projects.forEach((p) => {  // 진행 중인 팀플 옆 연필: 연결된 대회 바꾸기 (잘못 고른 대회를 대화로만 바꾸던 것)
+    const shown = projects.filter((p) => !projEnded(p));  // 제출을 마쳤거나 제출 마감이 지난 팀플은 숨긴다
+    if (!shown.length) live.appendChild(h("div", "note", projects.length ? "진행 중인 팀플 없음 · 끝난 팀플은 숨겼어요" : ME.logged_in ? "Bento 앱이 설치된 내 저장소가 아직 없음" : "Bento 앱이 설치된 저장소가 없음"));
+    shown.forEach((p) => {  // 진행 중인 팀플 옆 연필: 연결된 대회 바꾸기 (잘못 고른 대회를 대화로만 바꾸던 것)
       const row = h("div", "dw-row"); row.appendChild(proj(p.repo.split("/")[1], projSub(p), colorOf("r:" + p.repo), !curDraft() && curRepo() === p.repo, () => useProject({ repo: p.repo }, stay)));
       const ed = h("button", "dw-del"); ed.type = "button"; ed.setAttribute("aria-label", "이 팀플의 대회 바꾸기"); ed.title = "대회 바꾸기"; ed.innerHTML = icon("pencil");
       ed.onclick = () => { close(); if (curDraft() || curRepo() !== p.repo) useProject({ repo: p.repo }, true); showTab("chat"); swapContest(); };
@@ -3622,7 +3641,10 @@ function cancelFlow(t) {
   bot("하던 걸 멈췄어요. 승인하지 않은 제안은 실행되지 않아요. 저장소 팀플을 그만두려면 GitHub에서 Bento 앱 설치를 해제하면 돼요.");
   chip("다른 걸 할래요", openPicks);
 }
-$("msg").addEventListener("input", syncComposer);
+// 입력칸: 쓴 만큼 높이가 늘고, Enter는 보내기 · Shift+Enter는 줄바꿈 (한글 조합 중 Enter는 무시)
+function fitMsg() { const m = $("msg"); m.style.height = "auto"; m.style.height = m.scrollHeight + "px"; }
+$("msg").addEventListener("input", () => { fitMsg(); syncComposer(); });
+$("msg").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); $("composer").requestSubmit(); } });
 // 팀플·대회와 관계없는 말: 서버(chat.py)의 안내와 같은 문구. 팀플 낱말이 함께 있으면 잡담으로 보지 않는다
 const OFFTOPIC_MSG = "저는 대회 준비를 돕는 AI라 이 요청은 도와드리기 어려워요. 대회 찾기, 팀 일정·할 일 관리, 제출 준비와 관련된 질문을 해 주세요.";
 const OFFTOPIC_RX = /날씨|기온|미세먼지|주식|코인|비트코인|환율|로또|운세|농담|노래|영화|드라마|웹툰|뉴스|축구|야구|연애|레시피|맛집추천|번역해|심심/;
@@ -3644,7 +3666,7 @@ const TYPOS = [
   [/일졍|일쩡/g, "일정"], [/점[검겸]|졈검/g, "점검"], [/리[부뷰]|리뷰/g, "리뷰"], [/[바받][꿔꿰궈]/g, "바꿔"],
 ];
 function fixTypos(n) { return TYPOS.reduce((x, [rx, to]) => x.replace(rx, to), n); }
-$("composer").addEventListener("submit", (e) => { e.preventDefault(); const input = $("msg"); const t = input.value.trim(); if (!t || $("todayBtn").disabled) return; input.value = ""; if (touchPointer.matches) input.blur(); showTab("chat"); const n = fixTypos(t.replace(/\s/g, ""));
+$("composer").addEventListener("submit", (e) => { e.preventDefault(); const input = $("msg"); const t = input.value.trim(); if (!t || $("todayBtn").disabled) return; input.value = ""; fitMsg(); if (touchPointer.matches) input.blur(); showTab("chat"); const n = fixTypos(t.replace(/\s/g, ""));
   if (/취소|그만|안할래|안해|하지마|멈춰|중단|포기|지워|삭제/.test(n)) return cancelFlow(t);  // 멈추는 말이 먼저
   if (ABOUT_ME_RX.test(t)) { me(t); return aboutMe(); }  // '나는 누구야'가 먼저: 내 이름·역할
   if (ABOUT_BOT_RX.test(n)) { me(t); bot(ABOUT_BOT_MSG); chip("할 수 있는 일 보기", openPicks); return; }  // '너 이름이 뭐야'·'뭐 하는 앱이야': 정해진 소개
