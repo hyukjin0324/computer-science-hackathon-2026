@@ -718,6 +718,7 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .phone.chat-keyboard { height: calc(100% - var(--chat-keyboard-inset, 0px)); }
 .phone.chat-keyboard .dock { padding-bottom: var(--chat-related-gap); }
 .phone.chat-keyboard .tabs { display: none; }
+.composer textarea, .composer textarea:focus, .composer textarea:hover { min-height: 0; height: auto; border: 0; border-radius: 0; box-shadow: none; background: none; }  /* 다른 입력칸용 textarea 공통 모양(높이 80px·테두리·포커스 그림자)이 대화창에 묻던 것 */
 @media (pointer: coarse) { .composer textarea { font-size: max(16px, var(--fs-body)); } }
 .tabs { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-pill); padding: 5px 8px; box-shadow: var(--shadow); }
 .tabs button { height: 62px; border-radius: var(--r-pill); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; position: relative; color: var(--muted); font-size: var(--fs-body); font-weight: 600; }
