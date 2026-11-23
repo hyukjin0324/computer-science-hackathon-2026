@@ -387,10 +387,33 @@ def test_application_collaboration_and_submission_lifecycle(page, app_url):
     page.get_by_role("button", name="완료 기록하기", exact=True).click()
     page.get_by_role("button", name="제출 완료로 기록", exact=True).click()
 
-    expect(page.get_by_text("제출 완료로 기록했어요. 마감 알림을 멈출게요.")).to_be_visible()
+    expect(page.get_by_text("제출 완료로 기록했어요. 팀플 목록의 숨긴 팀플로 옮겼어요.")).to_be_visible()
     page.get_by_role("button", name="홈", exact=True).click()
     expect(page.locator('[aria-label^="지금 단계: 끝"]')).to_be_visible()
+
+    page.get_by_role("button", name="팀플 바꾸기").click()
+    sheet = page.get_by_role("dialog", name="팀플 바꾸기")
+    expect(sheet.get_by_text("숨긴 팀플 1개", exact=True)).to_be_visible()
+    hidden_repo = sheet.get_by_role("button").filter(has_text="knu-matzip")
+    expect(hidden_repo).to_contain_text("다시 표시")
+    hidden_repo.click()
+    expect(page.get_by_text("팀플을 다시 표시했어요")).to_be_visible()
+
+    page.get_by_role("button", name="팀플 바꾸기").click()
+    sheet = page.get_by_role("dialog", name="팀플 바꾸기")
+    expect(sheet.get_by_text("숨긴 팀플 1개", exact=True)).to_have_count(0)
     assert len(submit_requests) == 2
+
+
+def test_closed_issues_or_past_deadline_do_not_hide_project(page, app_url):
+    open_app(page, app_url)
+    project = {"repo": "team/finished-tasks", "error": False, "due": "2020-01-01", "total": 3, "done": 3}
+
+    assert page.evaluate("project => projEnded(project)", project) is False
+    page.evaluate("setProjectHidden('r:team/finished-tasks', true)")
+    assert page.evaluate("project => projEnded(project)", project) is True
+    page.evaluate("setProjectHidden('r:team/finished-tasks', false)")
+    assert page.evaluate("project => projEnded(project)", project) is False
 
 
 def test_late_progress_opens_today_tasks(page, app_url):
