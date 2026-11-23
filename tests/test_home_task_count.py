@@ -6,13 +6,13 @@ HTML = (Path(__file__).resolve().parents[1] / "public" / "index.html").read_text
 )
 
 
-def test_home_summary_and_task_list_share_the_same_work_collection():
+def test_home_task_list_uses_assigned_github_work():
     assert "function myHomeWork(me2, items)" in HTML
-    assert HTML.count("myHomeWork(me2, items)") >= 3
-    assert "mineWork.items.length + mineWork.tasks.length" in HTML
     assert "const ts = mineWork.tasks" in HTML
 
 
-def test_progress_findings_are_not_double_counted_as_my_tasks():
-    assert "me2 ? mineWork.items.length + mineWork.tasks.length" in HTML
-    assert "mineWork.tasks.length + finds.length" not in HTML
+def test_home_attention_count_is_separate_from_all_assigned_tasks():
+    assert "items.filter((i) => i.owner === me2 || i.level >= 2).length" in HTML
+    assert "(me2 ? mineN : items.length)) + finds.length" in HTML
+    assert '`${me2 ? "내가 " : "오늘 "}챙길 일 ${todo}개`' in HTML
+    assert "mineWork.items.length + mineWork.tasks.length" not in HTML

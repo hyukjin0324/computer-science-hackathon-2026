@@ -690,7 +690,7 @@ details.teamall summary { gap: 8px; } details.teamall summary .gsub { color: var
   :root[data-frame="on"] body .sheet-bg, :root[data-frame="on"] body .drawer-bg { margin: 0; }  /* 틀 안에서는 틀 자체가 화면 가장자리라, 좁은 화면용 바깥으로 내미는 여백이 안쪽 16px를 잘라 먹는다 */
   :root[data-frame="on"] body .drawer { padding-top: 26px; }  /* 둥근 모서리에 로고가 걸리지 않게 */
   :root[data-frame="on"] .dock { left: 16px; right: 16px; }  /* 아래 바 크기를 대화 화면과 같게 (틀 안쪽 여백 16px 안에) */
-  :root[data-frame="on"] .phone { position: absolute; left: 50%; top: 50%; width: 393px; max-width: none; height: 852px; transform: translate(-50%, -50%) scale(var(--phone-k, 1)); transform-origin: center; background: var(--bg); border-radius: 40px; padding: 0 16px; overflow: hidden; box-shadow: 0 0 0 10px #17181C, 0 28px 70px rgb(23 24 28 / .28); }
+  :root[data-frame="on"] .phone { position: absolute; left: calc(50% - 12px); top: 50%; width: 393px; max-width: none; height: 852px; transform: translate(-50%, -50%) scale(var(--phone-k, 1)); transform-origin: center; background: var(--bg); border-radius: 40px; padding: 0 16px; overflow: hidden; box-shadow: 0 0 0 10px #17181C, 0 28px 70px rgb(23 24 28 / .28); }
 }
 details.teamall { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-box); padding: 4px 14px; }
 details.teamall[open] { padding-bottom: 12px; } details.teamall summary { list-style: none; } details.teamall summary::-webkit-details-marker { display: none; }
@@ -2105,9 +2105,9 @@ function renderHome() {
   const v = $("v-home"); if (!v) return; v.innerHTML = "";
   const d = curDraft(); const now = new Date();
   const items = lastTriage ? lastTriage.items : []; const finds = lastProgress ? lastProgress.findings : [];
-  const me2 = meUser(); const mineWork = myHomeWork(me2, items);
-  // 상단 숫자와 아래 '내 할 일'은 같은 자료를 센다. 진행 점검 카드는 작업 요약이므로 중복해서 더하지 않는다.
-  const todo = d ? 0 : me2 ? mineWork.items.length + mineWork.tasks.length : items.length + finds.length;
+  const me2 = meUser(); const mineN = items.filter((i) => i.owner === me2 || i.level >= 2).length;
+  // '내가 챙길 일'은 전체 GitHub 담당 이슈가 아니라, 오늘 먼저 볼 Bento 점검·진행 위험의 수다.
+  const todo = (d ? 0 : (me2 ? mineN : items.length)) + finds.length;
   const subD = extract ? ddays(extract.submit_deadline_iso) : null, appD = extract ? ddays(extract.apply_deadline_iso) : null;
   v.appendChild(h("p", "h-date", now.toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "long" })));
   const t = h("h1", "h-title");
