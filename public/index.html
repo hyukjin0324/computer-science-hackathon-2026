@@ -705,7 +705,14 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .htask .hdue.warn { background: var(--warn-soft); color: var(--warn); } .htask .hdue.crit { background: var(--crit-soft); color: var(--crit); }
 .htask-check { width: 18px; height: 18px; border: 2px solid var(--warn); border-radius: 5px; }
 .htask-check.ok { border-color: var(--ok); } .htask-check.crit { border-color: var(--crit); } .htask-check.info { border-color: var(--info); } .htask-check.muted { border-color: #A3A5AA; }
-.htask.done b { text-decoration: line-through; color: #A3A5AA; }
+.htask.done .htask-go > span > b:first-child { text-decoration: line-through; color: #A3A5AA; } .htask.done .hdue { opacity: .5; }
+.htask.hcheckable { grid-template-columns: 18px minmax(0, 1fr); cursor: default; }
+.htask-go { display: grid; grid-template-columns: minmax(0, 1fr) 14px; gap: 12px; align-items: center; width: 100%; min-height: 44px; padding: 0; border: 0; background: none; color: inherit; text-align: left; text-decoration: none; font: inherit; cursor: pointer; }
+.htask-go > span:not(.chev) { padding-top: 4px; }
+button.htask-check { position: relative; padding: 0; background: none; cursor: pointer; display: grid; place-items: center; font-size: 13px; font-weight: 800; line-height: 1; color: var(--muted); }
+button.htask-check::after { content: ""; position: absolute; inset: -13px; }  /* 작은 상자도 손가락으로 누르기 쉽게 */
+.htask-check.done { background: var(--warn); color: var(--surface); }  /* 완료: 테두리와 같은 색으로 칸을 채우고 흰 체크 */
+.htask-check.done.ok { background: var(--ok); } .htask-check.done.crit { background: var(--crit); } .htask-check.done.info { background: var(--info); } .htask-check.done.muted { background: #A3A5AA; }
 .hsec .note { font-size: var(--fs-small); padding: 8px 0; }
 .hsec .lead-tasks { gap: 0; border-top: 1px solid var(--line); padding-top: 10px; }
 .hsec > .sech + .lead-tasks { border-top: 0; padding-top: 0; }
@@ -2048,23 +2055,32 @@ function itemRow(it, inGroup) {
   b.appendChild(tx); b.appendChild(h("span", "chev", "›")); b.onclick = () => { showTab("chat"); openItem(it); }; return b;
 }
 // 홈 카드 안의 한 줄: 체크 상자 · 제목 · 작은 설명 · ›
-function hTaskRow(t, suggest) {
-  const a = h("a", "htask"); a.href = t.url; a.target = "_blank"; a.rel = "noopener noreferrer";
+// 내 할 일(key 있음)은 체크 상자를 눌러 완료 표시(이 기기에만 저장, GitHub 이슈는 그대로), 글자·›를 누르면 해당 페이지로 간다
+const homeDone = () => store.get("homeDone:" + projKey(), []);
+function hRow(nav, tone, key) {
+  if (!key) { const ck = h("i", "htask-check " + tone); ck.setAttribute("aria-hidden", "true"); nav.prepend(ck); nav.classList.add("htask"); return nav; }
+  const done = homeDone().includes(key);
+  const row = h("div", "htask hcheckable" + (done ? " done" : ""));
+  const ck = h("button", "htask-check " + tone + (done ? " done" : ""), done ? "✓" : ""); ck.type = "button";
+  ck.setAttribute("aria-pressed", String(done)); ck.setAttribute("aria-label", done ? "완료 표시 지우기" : "완료로 표시");
+  ck.onclick = (e) => { e.stopPropagation(); const l = homeDone().filter((x) => x !== key); if (!done) l.push(key); store.set("homeDone:" + projKey(), l.slice(-300)); renderHome(); };
+  nav.classList.add("htask-go"); row.append(ck, nav); return row;
+}
+function hTaskRow(t, suggest, checkable) {
+  const a = h("a"); a.href = t.url; a.target = "_blank"; a.rel = "noopener noreferrer";
   const dd = t.due ? ddays(t.due) : null; const tone = t.late ? "crit" : dd != null && dd <= 2 ? "warn" : "ok";
-  const ck = h("i", "htask-check " + tone); ck.setAttribute("aria-hidden", "true"); a.appendChild(ck);
   const tx = h("span"); tx.appendChild(h("b", null, t.title));
   const sub = h("small", null, `GitHub 할 일 · #${t.number}`); const due = t.late ? "늦음" : dd == null ? "" : dd === 0 ? "오늘 마감" : `D-${dd}`;
   if (due) sub.appendChild(h("b", "hdue " + tone, due)); tx.appendChild(sub);  // 마감은 눈에 띄게
   if (suggest && t.suggest && t.suggest.who) tx.appendChild(h("small", "suggest", `추천: ${t.suggest.who}${t.suggest.why ? " · " + t.suggest.why : ""}`));
   else if (suggest && t.suggest && t.suggest.why) tx.appendChild(h("small", null, t.suggest.why));
-  a.appendChild(tx); a.appendChild(h("span", "chev", "›")); return a;
+  a.appendChild(tx); a.appendChild(h("span", "chev", "›")); return hRow(a, tone, checkable ? "t" + t.number : null);
 }
-function hItemRow(it, inGroup) {
-  const b = h("button", "htask"); b.type = "button"; const [tt, tc] = itemTag(it);
-  const ck = h("i", "htask-check " + tc); ck.setAttribute("aria-hidden", "true"); b.appendChild(ck);
+function hItemRow(it, inGroup, checkable) {
+  const b = h("button"); b.type = "button"; const [tt, tc] = itemTag(it);
   const tx = h("span"); tx.appendChild(h("b", null, it.title));
   tx.appendChild(h("small", null, [kindOf(it)[0], tt, inGroup ? "" : turnLabel(it)[0]].filter(Boolean).join(" · ")));
-  b.appendChild(tx); b.appendChild(h("span", "chev", "›")); b.onclick = () => { showTab("chat"); openItem(it); }; return b;
+  b.appendChild(tx); b.appendChild(h("span", "chev", "›")); b.onclick = () => { showTab("chat"); openItem(it); }; return hRow(b, tc, checkable ? "i" + it.id : null);
 }
 function myHomeWork(me2, items) {
   const people = lastBoard ? lastBoard.people || [] : [];
@@ -2090,9 +2106,10 @@ function homeBoard(v, me2, items) {
   if (me2) {
     const ts = mineWork.tasks;
     const sec = h("section", "hsec"); const sh = h("div", "sech"); sh.appendChild(h("h2", null, "내 할 일"));
-    sh.appendChild(h("span", null, [roles[me2], b ? `남은 일 ${myItems.length + ts.length}개` : ""].filter(Boolean).join(" · "))); sec.appendChild(sh);
-    myItems.forEach((it) => sec.appendChild(hItemRow(it, true)));
-    ts.slice(0, 5).forEach((t) => sec.appendChild(hTaskRow(t)));
+    const doneSet = new Set(homeDone()); const left = myItems.filter((it) => !doneSet.has("i" + it.id)).length + ts.filter((t) => !doneSet.has("t" + t.number)).length;
+    sh.appendChild(h("span", null, [roles[me2], b ? `남은 일 ${left}개` : ""].filter(Boolean).join(" · "))); sec.appendChild(sh);
+    const rows = [...myItems.map((it) => ["i" + it.id, () => hItemRow(it, true, true)]), ...ts.slice(0, 5).map((t) => ["t" + t.number, () => hTaskRow(t, false, true)])];
+    rows.filter(([k]) => !doneSet.has(k)).concat(rows.filter(([k]) => doneSet.has(k))).forEach(([, mk]) => sec.appendChild(mk()));  // 완료한 일은 아래로
     if (!ts.length && !myItems.length) sec.appendChild(h("div", "note", b ? "나에게 맡겨진 할 일이 없어요." : "할 일을 불러오고 있어요…"));
     if (ts.length > 5) sec.appendChild(h("div", "note", `${ts.length - 5}개 더 있어요 · 팀 전체에서 볼 수 있어요`));
     v.appendChild(sec);
