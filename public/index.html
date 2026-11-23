@@ -794,7 +794,7 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .htask .hdue.warn { color: var(--warn); } .htask .hdue.crit { color: var(--crit); }
 .htask-check { width: 18px; height: 18px; border: 2px solid var(--warn); border-radius: 5px; }
 .htask-check.ok { border-color: var(--ok); } .htask-check.crit { border-color: var(--crit); } .htask-check.info { border-color: var(--info); } .htask-check.muted { border-color: #A3A5AA; }
-.htask.done .htask-go > span > b:first-child { text-decoration: line-through; color: #A3A5AA; } .htask.done .hdue { opacity: .5; }
+.htask.done .htask-go > span > b:first-child { text-decoration: line-through; color: #A3A5AA; } .htask.closed > span > b:first-child { text-decoration: line-through; color: #A3A5AA; } .htask.closed small { color: #A3A5AA; } .hmore > summary { list-style: none; cursor: pointer; padding: 10px 0 4px; font-size: var(--fs-caption); color: var(--muted); } .hmore > summary::-webkit-details-marker { display: none; } .hmore > summary::after { content: " ›"; } .hmore[open] > summary::after { content: " ⌄"; }  /* GitHub에서 닫힌 일: 없애지 않고 줄 그어 아래에 */ .htask.done .hdue { opacity: .5; }
 .htask.hcheckable { grid-template-columns: 18px minmax(0, 1fr); cursor: default; }
 .hlead .htask-check { width: 8px; height: 8px; border: 0; border-radius: 50%; background: var(--warn); justify-self: center; }  /* 팀장이 정할 일: 네모 대신 작은 동그라미 (색은 급한 정도 그대로) */
 .hlead .htask-check.ok { background: var(--ok); } .hlead .htask-check.crit { background: var(--crit); } .hlead .htask-check.info { background: var(--info); } .hlead .htask-check.muted { background: #A3A5AA; }
@@ -2495,6 +2495,11 @@ function hRow(nav, tone, key) {
   ck.onclick = (e) => { e.stopPropagation(); const l = homeDone().filter((x) => x !== key); if (!done) l.push(key); store.set("homeDone:" + projKey(), l.slice(-300)); renderHome(); };
   nav.classList.add("htask-go"); row.append(ck, nav); return row;
 }
+function hDoneRow(t) {  // 최근 3일 안에 닫힌 할 일 한 줄 (줄 긋기). 누르면 GitHub 이슈로
+  const a = h("a"); a.href = t.url; a.target = "_blank"; a.rel = "noopener noreferrer";
+  const tx = h("span"); tx.appendChild(h("b", null, t.title)); tx.appendChild(h("small", null, `GitHub 할 일 · #${t.number} · 끝남`));
+  a.appendChild(tx); a.appendChild(h("span", "chev", "›")); const row = hRow(a, "ok", null); row.classList.add("closed"); return row;
+}
 function hTaskRow(t, suggest, checkable) {
   // 담당 정하기 목록: GitHub로 가지 않고 대화에서 사람을 골라 정한다 (팀장이 정할 일과 같은 흐름)
   let a; if (suggest && t.pick && t.pick.length) { a = h("button"); a.type = "button"; a.onclick = () => { showTab("chat"); assignOne(t); }; }
@@ -2556,10 +2561,16 @@ function homeBoard(v, me2, items) {
     const sec = h("section", "hsec"); const sh = h("div", "sech"); sh.appendChild(h("h2", null, "내 할 일"));
     const doneSet = new Set(homeDone()); const left = myItems.filter((it) => !doneSet.has("i" + it.id)).length + ts.filter((t) => !doneSet.has("t" + t.number)).length;
     sh.appendChild(h("span", null, [roles[me2], b ? `남은 일 ${left}개` : ""].filter(Boolean).join(" · "))); sec.appendChild(sh);
-    const rows = [...myItems.map((it) => ["i" + it.id, () => hItemRow(it, true, true)]), ...ts.slice(0, 5).map((t) => ["t" + t.number, () => hTaskRow(t, false, true)])];
-    rows.filter(([k]) => !doneSet.has(k)).concat(rows.filter(([k]) => doneSet.has(k))).forEach(([, mk]) => sec.appendChild(mk()));  // 완료한 일은 아래로
-    if (!ts.length && !myItems.length) sec.appendChild(h("div", "note", b ? "나에게 맡겨진 할 일이 없어요." : "할 일을 불러오고 있어요…"));
-    if (ts.length > 5) sec.appendChild(h("div", "note", `${ts.length - 5}개 더 있어요 · 팀 전체에서 볼 수 있어요`));
+    const rows = [...myItems.map((it) => ["i" + it.id, () => hItemRow(it, true, true)]), ...ts.map((t) => ["t" + t.number, () => hTaskRow(t, false, true)])];
+    const ordered = rows.filter(([k]) => !doneSet.has(k)).concat(rows.filter(([k]) => doneSet.has(k)));  // 완료한 일은 아래로
+    ordered.slice(0, 5).forEach(([, mk]) => sec.appendChild(mk()));
+    // 더보기: 남은 일이 5개를 넘거나 끝낸 일이 있으면 접어 둔다 (끝낸 일을 없애지 않으면서 목록이 길어지지 않게)
+    const more = (label, list) => { if (!list.length) return; const d = h("details", "hmore"); d.appendChild(h("summary", null, label)); list.forEach((row) => d.appendChild(row)); sec.appendChild(d); };
+    more(`${ordered.length - 5}개 더 보기`, ordered.slice(5).map(([, mk]) => mk()));
+    const myDone = (people.find((p) => p.login === me2) || {}).done || [];
+    more(`끝낸 일 ${myDone.length}개 보기`, myDone.map((t) => hDoneRow(t)));
+    if (!ts.length && !myItems.length && !myDone.length) sec.appendChild(h("div", "note", b ? "나에게 맡겨진 할 일이 없어요." : "할 일을 불러오고 있어요…"));
+    else if (!ordered.length) sec.appendChild(h("div", "note", "남은 일이 없어요. 수고했어요!"));
     v.appendChild(sec);
   }
   // 팀장이 정할 일: 담당 정하기 · 리뷰어 지정 · 일이 몰렸을 때 다시 나누기 (누구나 볼 수 있고, 오래 비면 누구나 승인)
@@ -2598,15 +2609,15 @@ function homeBoard(v, me2, items) {
   const others = (people.length ? people.map((p) => p.login) : Object.keys(byOwner)).filter((m) => m !== me2);
   // 같은 승인 요청이 두 번 올라오면(다시 나누기를 두 번 누른 경우 등) 제목이 같은 건 최근 것 하나만
   const oneEach = (list) => [...new Map(list.map((i) => [i.title, i])).values()];
-  const groups = others.map((m) => ({ m, items: oneEach(byOwner[m] || []), tasks: (people.find((p) => p.login === m) || { tasks: [] }).tasks, late: (people.find((p) => p.login === m) || {}).late || 0 }))
-    .filter((g) => g.items.length || g.tasks.length);
+  const groups = others.map((m) => ({ m, items: oneEach(byOwner[m] || []), tasks: (people.find((p) => p.login === m) || { tasks: [] }).tasks, done: (people.find((p) => p.login === m) || {}).done || [], late: (people.find((p) => p.login === m) || {}).late || 0 }))
+    .filter((g) => g.items.length || g.tasks.length || g.done.length);  // 다 끝낸 팀원도 무엇을 했는지 보이게
   let tsec = null;
   if (groups.length) {
     tsec = h("section", "hsec hteam"); const sh = h("div", "sech"); sh.appendChild(h("h2", null, "팀원 별 할 일")); tsec.appendChild(sh); v.appendChild(tsec);
     groups.sort((x, y) => y.late - x.late || (y.items.length + y.tasks.length) - (x.items.length + x.tasks.length)).forEach((g) => {
       const det = h("details", "teamall"); const sm = h("summary"); sm.appendChild(h("strong", null, g.m));
-      sm.appendChild(h("span", "gsub", `${roles[g.m] || "역할 없음"} · 할 일 ${g.items.length + g.tasks.length}개`)); if (g.late) sm.appendChild(h("span", "late", `늦음 ${g.late}`));
-      det.appendChild(sm); [...g.items.map((it) => hItemRow(it, true)), ...g.tasks.map((t) => hTaskRow(t))].forEach((row) => { row.classList.add("dotrow"); const ck = row.querySelector(".htask-check"); if (ck) ck.style.background = projColor("var(--blue)"); det.appendChild(row); });  // 점 색 = 지금 대회 색 (위 대회 이름 앞 점과 같은 색)  // 팀원 할 일은 내가 체크할 게 아니라 네모 대신 작은 동그라미
+      sm.appendChild(h("span", "gsub", `${roles[g.m] || "역할 없음"} · 할 일 ${g.items.length + g.tasks.length}개${g.done.length ? ` · 끝낸 일 ${g.done.length}개` : ""}`)); if (g.late) sm.appendChild(h("span", "late", `늦음 ${g.late}`));
+      det.appendChild(sm); [...g.items.map((it) => hItemRow(it, true)), ...g.tasks.map((t) => hTaskRow(t)), ...g.done.map((t) => hDoneRow(t))].forEach((row) => { row.classList.add("dotrow"); const ck = row.querySelector(".htask-check"); if (ck) ck.style.background = projColor("var(--blue)"); det.appendChild(row); });  // 점 색 = 지금 대회 색 (위 대회 이름 앞 점과 같은 색)  // 팀원 할 일은 내가 체크할 게 아니라 네모 대신 작은 동그라미
       tsec.appendChild(det);
     });
   }
