@@ -780,9 +780,12 @@ button.htask-check::after { content: ""; position: absolute; inset: -13px; }  /*
 .hsec .lead-tasks { gap: 0; border-top: 1px solid var(--line); padding-top: 10px; }
 .hsec > .sech + .lead-tasks { border-top: 0; padding-top: 0; }
 .hsec .lead-tasks-title { margin: 0 0 4px; font-size: var(--fs-body); }
-.hsec .lead-tasks .btn, .hsec .lead-late .btn { height: 36px; min-height: 36px; padding: 0 14px; font-size: var(--fs-small); font-weight: 600; margin: 6px 0 4px; align-self: flex-start; }
+.hsec .lead-tasks .btn, .hsec .lead-late .btn { height: 36px; min-height: 36px; padding: 0 14px; font-size: var(--fs-small); font-weight: 600; margin: 6px 0 4px; align-self: center; }  /* 나눠 주기 버튼은 가운데 */
+.hsec .lead-tasks > .btn { margin-top: -8px; margin-bottom: 16px; }  /* 추천대로 나눠 주기: 위로 살짝 붙이고 아래 여유 */
 .hsec .lead-tasks .linkbtn { font-size: var(--fs-small); margin: 4px 0; }
+.hsec .lead-tasks .linkbtn { transition: color .15s; } .hsec .lead-tasks .linkbtn:hover, .hsec .lead-tasks .linkbtn:focus-visible { background: none; color: var(--muted); }  /* 더 보기: 마우스를 올리면 글씨가 회색으로 */
 .hsec .lead-late { display: flex; flex-direction: column; border-top: 1px solid var(--line); padding-top: 4px; }
+.hsec .lead-late > .note { text-align: center; }  /* 일이 몰렸어요 안내는 가운데 */
 .hsec .lead-late .prow { min-height: 44px; align-items: center; font-size: var(--fs-small); } .hsec .lead-late .prow b { font-size: var(--fs-body); } .hsec .lead-late .prow span { font-size: var(--fs-small); }
 .hsec details.teamall { background: none; border: 0; border-radius: 0; padding: 0; gap: 0; border-top: 1px solid var(--line); }
 .hsec > .sech + details.teamall { border-top: 0; }
@@ -935,7 +938,7 @@ details.teamall summary::after { content: '›'; margin-left: auto; color: var(-
 @keyframes fadeout { from { opacity: 1; } to { opacity: 0; } }
 .onb .rise { animation: riseup .55s cubic-bezier(.2, .8, .2, 1) both; }
 .onb h1 .rise { display: block; }
-.onb .mascot-stage { animation: mascot-bounce .52s 1.18s cubic-bezier(.28, .84, .42, 1) both; }
+.onb .mascot-stage { animation: mascot-bounce .52s 1.05s cubic-bezier(.28, .84, .42, 1) both; }
 @keyframes popout { 0% { opacity: 0; transform: translateY(40px) scale(.4) rotate(-10deg); } 60% { opacity: 1; transform: translateY(-6px) scale(1.08) rotate(3deg); } 100% { opacity: 1; transform: none; } }
 @keyframes fillin { 0% { transform: scale(0); } 100% { transform: scale(1); } }
 @keyframes face-tile-pop { 0% { transform: scale(0); } 70% { transform: scale(1.08); } 100% { transform: scale(1); } }
@@ -2375,7 +2378,7 @@ function homeBoard(v, me2, items) {
       if (unassigned.length > FIRST_N) {
         const rest = h("div"); rest.className = "lead-rest"; rest.hidden = true;
         unassigned.slice(FIRST_N).forEach((t) => rest.appendChild(hTaskRow(t, true)));
-        const mb = h("button", "linkbtn", `${unassigned.length - FIRST_N}개 더 보기`); mb.type = "button"; mb.style.alignSelf = "flex-start";
+        const mb = h("button", "linkbtn", `${unassigned.length - FIRST_N}개 더 보기`); mb.type = "button"; mb.style.alignSelf = "flex-end";  // 더 보기는 오른쪽
         mb.onclick = () => { rest.hidden = !rest.hidden; mb.textContent = rest.hidden ? `${unassigned.length - FIRST_N}개 더 보기` : "접기"; };
         c.append(rest, mb);
       }
@@ -2630,10 +2633,10 @@ function onboarding() {
   const mid = h("div", "mid"); const stage = h("div", "mascot-stage"); stage.innerHTML = MASCOT(132, true, true); if (new URLSearchParams(location.search).get("mascot") === "eyes") stage.querySelector("svg").classList.add("eyes-version");
   mid.appendChild(stage);
   const rise = (el, delay) => { el.classList.add("rise"); el.style.animationDelay = delay + "s"; return el; };
-  const t = h("h1"); ["Bento,", "팀플을 대신", "챙겨주는 AI"].forEach((x, i) => t.appendChild(rise(h("span", null, x), 2.05 + i * .12))); mid.appendChild(t);
-  const pp = rise(h("p"), 2.4); pp.append("공고를 읽고, 계획을 짜고,", h("br"), "늦어지면 먼저 알려 드려요."); mid.appendChild(pp);
-  const ch = h("div", "chips2"); ["신청", "기획", "협업", "완료"].forEach((x, i) => ch.appendChild(rise(h("span", null, x), 2.65 + i * .07))); mid.appendChild(ch); o.appendChild(mid);
-  const bt = rise(h("div", "bot2"), 2.9);
+  const t = h("h1"); ["Bento,", "팀플을 대신", "챙겨주는 AI"].forEach((x, i) => t.appendChild(rise(h("span", null, x), .75 + i * .08))); mid.appendChild(t);
+  const pp = rise(h("p"), 1.0); pp.append("공고를 읽고, 계획을 짜고,", h("br"), "늦어지면 먼저 알려 드려요."); mid.appendChild(pp);
+  const ch = h("div", "chips2"); ["신청", "기획", "협업", "완료"].forEach((x, i) => ch.appendChild(rise(h("span", null, x), 1.12 + i * .05))); mid.appendChild(ch); o.appendChild(mid);
+  const bt = rise(h("div", "bot2"), 1.3);
   const done = (fn) => { o.remove(); document.body.classList.remove("onboarding"); fn && fn(); };
   let a;
   if (H.login && !ME.logged_in) {  // GitHub 로그인을 켠 서버: 로그인하면 누구인지 따로 고를 필요가 없다
