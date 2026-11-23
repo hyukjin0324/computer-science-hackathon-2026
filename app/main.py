@@ -779,7 +779,11 @@ def roles_set(body: RolesIn, request: Request, x_bento_code: str | None = Header
     _check_code(x_bento_code, request)
     gh, st = state_for(body.repo)
     actor = _discord_actor(request, st)
-    roles = {m: [c for c in dict.fromkeys(cs) if c in own.ROLES][:3] for m, cs in body.roles.items() if m in st.members}
+    roles = {m: [c for c in dict.fromkeys(cs) if c in own.ROLES] for m, cs in body.roles.items() if m in st.members}
+    effective = {**st.roles, **roles}
+    picked_leads = [m for m in st.members if own.LEAD_ROLE in effective.get(m, [])]
+    if len(picked_leads) > 1:
+        raise HTTPException(400, "팀장은 한 명만 선택해 주세요")
     changed = {m: c for m, c in roles.items() if sorted(c) != sorted(st.roles.get(m, []))}
     if not changed:
         return {"saved": False, "message": "바뀐 역할이 없어요", "roles": st.roles}

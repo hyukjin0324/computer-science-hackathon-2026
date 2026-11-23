@@ -173,6 +173,47 @@ def test_missing_github_installation_offers_recovery_actions(page, app_url):
     expect(page.get_by_role("button", name="다시 확인", exact=True)).to_be_visible()
 
 
+def test_role_picker_selects_one_lead_without_limiting_other_roles(page, app_url):
+    saved = []
+
+    def roles(route):
+        if route.request.method == "POST":
+            saved.append(route.request.post_data_json)
+            route.fulfill(status=200, content_type="application/json", body=json.dumps({"saved": True, "roles": {}}))
+            return
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({
+                "members": ["jiwoo", "seoyeon"],
+                "roles": {},
+                "choices": {"lead": "팀장", "pm": "기획·PM", "fe": "프론트엔드", "be": "백엔드", "ds": "디자인", "pt": "발표"},
+            }, ensure_ascii=False),
+        )
+
+    page.route("**/api/roles**", roles)
+    open_app(page, app_url)
+    page.evaluate("""() => { showTab("me"); openMe("roles"); }""")
+
+    jiwoo = page.get_by_role("group", name="jiwoo 역할")
+    seoyeon = page.get_by_role("group", name="seoyeon 역할")
+    expect(jiwoo).to_be_visible()
+    jiwoo.get_by_role("button", name="팀장", exact=True).click()
+    seoyeon.get_by_role("button", name="팀장", exact=True).click()
+    expect(jiwoo.locator('[data-role="lead"]')).to_have_attribute("aria-pressed", "false")
+    expect(seoyeon.locator('[data-role="lead"]')).to_have_attribute("aria-pressed", "true")
+
+    for code, name in (("pm", "기획·PM"), ("fe", "프론트엔드"), ("be", "백엔드"), ("ds", "디자인"), ("pt", "발표")):
+        seoyeon.get_by_role("button", name=name, exact=True).click()
+        expect(seoyeon.locator(f'[data-role="{code}"]')).to_have_attribute("aria-pressed", "true")
+
+    page.get_by_role("button", name="역할 저장", exact=True).click()
+    expect(page.get_by_text("팀 역할을 저장함", exact=True)).to_be_visible()
+    assert len(saved) == 1
+    assert saved[0]["roles"]["seoyeon"] == ["lead", "pm", "fe", "be", "ds", "pt"]
+    assert "lead" not in saved[0]["roles"]["jiwoo"]
+
+
 def test_existing_repository_path_reaches_repository_picker(page, app_url):
     draft = {
         "id": "e2e-repo",

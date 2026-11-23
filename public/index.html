@@ -3435,7 +3435,7 @@ function buildRoles(v, closeSheet) {
   // 설명은 위에 따로 한 카드, 역할 고르기는 아래 카드
   const ic = h("div", "card role-introcard");
   const ul = h("ul", "perm-list role-intro");
-  ["계획 단계와 할 일을 역할에 맞는 사람에게 배정함", "리뷰어도 같은 역할 팀원을 먼저 추천함", "한 사람당 역할은 최대 3개", "저장하면 팀 저장소에 바로 반영돼 팀원 모두 같은 역할표를 봄"].forEach((t) => { const li = h("li"); li.appendChild(h("span", "pm", "•")); li.appendChild(h("span", null, t)); ul.appendChild(li); });
+  ["팀장은 한 명만 선택하며, 선택하지 않으면 GitHub 저장소 관리자가 맡음", "계획 단계와 할 일을 역할에 맞는 사람에게 배정함", "리뷰어도 같은 역할 팀원을 먼저 추천함", "역할 개수 제한 없이 여러 역할을 함께 선택할 수 있음", "저장하면 팀 저장소에 바로 반영돼 팀원 모두 같은 역할표를 봄"].forEach((t) => { const li = h("li"); li.appendChild(h("span", "pm", "•")); li.appendChild(h("span", null, t)); ul.appendChild(li); });
   ic.appendChild(ul); v.appendChild(ic);
   const cr = h("div", "card rolecard");
   const body = h("div"); body.textContent = "역할표 불러오는 중…"; cr.appendChild(body); v.appendChild(cr);
@@ -3448,7 +3448,15 @@ function buildRoles(v, closeSheet) {
       const chips = h("div", "chips"); chips.setAttribute("role", "group"); chips.setAttribute("aria-label", `${m} 역할`);
       Object.entries(r.choices).forEach(([code, name]) => {
         const b = h("button", "chiptog", name); b.type = "button"; b.setAttribute("aria-pressed", String(pick[m].includes(code)));
-        b.onclick = () => { const on = pick[m].includes(code); if (!on && pick[m].length >= 3) return snack("3개까지 고를 수 있음"); pick[m] = on ? pick[m].filter((x) => x !== code) : [...pick[m], code]; b.setAttribute("aria-pressed", String(!on)); };
+        b.dataset.role = code;
+        b.onclick = () => {
+          const on = pick[m].includes(code);
+          if (code === "lead" && !on) {
+            Object.keys(pick).forEach((member) => (pick[member] = pick[member].filter((x) => x !== "lead")));
+            body.querySelectorAll('[data-role="lead"]').forEach((x) => x.setAttribute("aria-pressed", "false"));
+          }
+          pick[m] = on ? pick[m].filter((x) => x !== code) : [...pick[m], code]; b.setAttribute("aria-pressed", String(!on));
+        };
         chips.appendChild(b);
       });
       row.appendChild(chips); body.appendChild(row);
