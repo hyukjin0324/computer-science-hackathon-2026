@@ -699,8 +699,8 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .htask b { display: block; font-size: 12px; font-weight: 750; line-height: 1.35; }
 .htask small { display: block; font-size: 10px; color: var(--muted); margin-top: 3px; }
 .htask .chev { color: #979AA1; font-size: 20px; line-height: 1; }
-.hcheck { width: 16px; height: 16px; border: 2px solid var(--warn); border-radius: 5px; }
-.hcheck.ok { border-color: var(--ok); } .hcheck.crit { border-color: var(--crit); } .hcheck.info { border-color: var(--info); } .hcheck.muted { border-color: #A3A5AA; }
+.htask-check { width: 16px; height: 16px; border: 2px solid var(--warn); border-radius: 5px; }
+.htask-check.ok { border-color: var(--ok); } .htask-check.crit { border-color: var(--crit); } .htask-check.info { border-color: var(--info); } .htask-check.muted { border-color: #A3A5AA; }
 .htask.done b { text-decoration: line-through; color: #A3A5AA; }
 .hsec .note { font-size: 11px; padding: 8px 0; }
 .hsec .lead-tasks { gap: 0; border-top: 1px solid var(--line); padding-top: 10px; }
@@ -2040,7 +2040,7 @@ function itemRow(it, inGroup) {
 function hTaskRow(t, suggest) {
   const a = h("a", "htask"); a.href = t.url; a.target = "_blank"; a.rel = "noopener noreferrer";
   const dd = t.due ? ddays(t.due) : null; const tone = t.late ? "crit" : dd != null && dd <= 2 ? "warn" : "ok";
-  const ck = h("i", "hcheck " + tone); ck.setAttribute("aria-hidden", "true"); a.appendChild(ck);
+  const ck = h("i", "htask-check " + tone); ck.setAttribute("aria-hidden", "true"); a.appendChild(ck);
   const tx = h("span"); tx.appendChild(h("b", null, t.title));
   tx.appendChild(h("small", null, ["GitHub 할 일", `#${t.number}`, t.late ? "늦음" : dd == null ? "" : dd === 0 ? "오늘 마감" : `D-${dd}`].filter(Boolean).join(" · ")));
   if (suggest && t.suggest && t.suggest.who) tx.appendChild(h("small", "suggest", `추천: ${t.suggest.who}${t.suggest.why ? " · " + t.suggest.why : ""}`));
@@ -2049,7 +2049,7 @@ function hTaskRow(t, suggest) {
 }
 function hItemRow(it, inGroup) {
   const b = h("button", "htask"); b.type = "button"; const [tt, tc] = itemTag(it);
-  const ck = h("i", "hcheck " + tc); ck.setAttribute("aria-hidden", "true"); b.appendChild(ck);
+  const ck = h("i", "htask-check " + tc); ck.setAttribute("aria-hidden", "true"); b.appendChild(ck);
   const tx = h("span"); tx.appendChild(h("b", null, it.title));
   tx.appendChild(h("small", null, [kindOf(it)[0], tt, inGroup ? "" : turnLabel(it)[0]].filter(Boolean).join(" · ")));
   b.appendChild(tx); b.appendChild(h("span", "chev", "›")); b.onclick = () => { showTab("chat"); openItem(it); }; return b;
