@@ -140,6 +140,8 @@ def open_late_card(page, app_url):
 def test_tabs_calendar_and_mypage_keep_working(page, app_url):
     open_app(page, app_url)
 
+    expect(page.get_by_text("데모 데이터", exact=True)).to_be_visible()
+
     page.get_by_role("button", name="캘린더", exact=True).click()
     expect(page.get_by_role("heading", name="캘린더")).to_be_visible()
     expect(
@@ -155,6 +157,20 @@ def test_tabs_calendar_and_mypage_keep_working(page, app_url):
     expect(page.get_by_role("heading", name="팀플 목록")).to_be_visible()
     page.get_by_role("button", name=re.compile("knu-matzip")).click()
     expect(page).to_have_url(re.compile(r"#me-projects$"))
+
+
+def test_missing_github_installation_offers_recovery_actions(page, app_url):
+    open_app(page, app_url)
+
+    page.evaluate("""() => {
+        showTab("chat");
+        const error = new Error("team/missing에 Bento 앱이 설치되지 않았거나 저장소가 없어요");
+        error.status = 404;
+        fail(error);
+    }""")
+    expect(page.get_by_text("team/missing에 Bento 앱이 설치되지 않았거나 저장소가 없어요", exact=True).last).to_be_visible()
+    expect(page.get_by_role("button", name="다른 팀플 고르기", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="다시 확인", exact=True)).to_be_visible()
 
 
 def test_existing_repository_path_reaches_repository_picker(page, app_url):
