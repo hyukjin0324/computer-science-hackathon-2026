@@ -2748,7 +2748,7 @@ function renderHome() {
     if (!finds[0]) { const ec = evChip(top); if (ec) hm.appendChild(ec); }
     body.appendChild(hm);
     acts().appendChild(btn(finds[0] ? (lastProgress.proposal || lastProgress.moves.length ? "계획 다시 짜기" : "자세히") : "해결하기", true, () => { $("homeBadge").hidden = true; showTab("chat"); if (finds[0]) { me("늦어진 일 보여 줘"); progressCard(lastProgress, true); } else openItem(top); }));
-  } else if (soon.length) {
+  } else if (!extract && soon.length) {
     const x = soon[0]; heroId = x.id;
     lab("새 대회", "pop");
     const highlight = h("div", "contest-highlight");
