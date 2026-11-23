@@ -1570,8 +1570,11 @@ def submit_check(body: SubmitIn, request: Request, x_bento_code: str | None = He
         out = sub_mod.run_checks(gh, st, body.deliverables, body.deadline_iso, links)
     except GitHubError as e:
         raise HTTPException(502, f"GitHub에서 읽지 못했어요: {e}") from e
-    n = sub_mod.find_confirm_issue(st)
-    out["confirm"] = sub_mod.confirm_status(gh, n, st.members) if n else None
+    n = _confirm_issue_number(gh, st)  # 닫힌 확인 이슈도 보여 줘서, GitHub에서 직접 닫은 경우에도 화면이 이어지게
+    try:
+        out["confirm"] = sub_mod.confirm_status(gh, n, st.members) if n else None
+    except GitHubError:
+        out["confirm"] = None
     out["members"] = st.members
     return out
 
@@ -1667,18 +1670,23 @@ def submit_confirm(body: ConfirmIn):
     return {"proposal": _proposal(gh.repo, "다른 팀원에게 제출 확인 받기", actions, "confirm")}
 
 
+def _confirm_issue_number(gh, st) -> int | None:
+    """제출 확인 이슈 번호. 열린 것이 먼저, 없으면 최근 60일 안에 닫힌 것 (제출을 기록하거나 GitHub에서 직접 닫으면 닫힌다)."""
+    n = sub_mod.find_confirm_issue(st)
+    if n:
+        return n
+    try:
+        since = (datetime.now(timezone.utc) - timedelta(days=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        closed = [i for i in gh.closed_issues(since) if (i.get("title") or "").startswith(sub_mod.CONFIRM_PREFIX)]
+        return max(closed, key=lambda i: i.get("closed_at") or "")["number"] if closed else None
+    except Exception:  # noqa: BLE001 - 못 읽으면 지금처럼 확인 요청 없음
+        return None
+
+
 @app.get("/api/submit/status")
 def submit_status(repo: str | None = None, issue: int | None = None):
     gh, st = state_for(repo)
-    n = issue or sub_mod.find_confirm_issue(st)
-    if not n:  # 제출 완료를 기록하면 확인 이슈가 닫힌다: 팀원 화면도 '제출 완료'로 바뀌게 최근 60일 안에 닫힌 확인 이슈를 찾는다
-        try:
-            since = (datetime.now(timezone.utc) - timedelta(days=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
-            closed = [i for i in gh.closed_issues(since) if (i.get("title") or "").startswith(sub_mod.CONFIRM_PREFIX)]
-            if closed:
-                n = max(closed, key=lambda i: i.get("closed_at") or "")["number"]
-        except Exception:  # noqa: BLE001 - 못 읽으면 지금처럼 확인 요청 없음
-            n = None
+    n = issue or _confirm_issue_number(gh, st)
     if not n:
         return {"issue": None}
     try:
