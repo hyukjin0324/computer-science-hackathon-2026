@@ -318,6 +318,7 @@ textarea { width: 100%; min-height: 80px; resize: vertical; border: 1px solid va
 .btn { height: 44px; padding: 0 18px; border-radius: var(--r-pill); background: var(--surface); border: 1px solid var(--line); font-weight: 600; font-size: var(--fs-body); display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: var(--ink); }
 .btn.primary { background: var(--primary); color: var(--primary-ink); border-color: transparent; font-weight: 700; }
 .btn.lg { height: 54px; font-size: var(--fs-body-l); justify-content: center; }
+.task > .btn { justify-content: center; }  /* 카드 폭을 꽉 채우는 버튼('이 날짜로 계획 짜기' 등)은 글자를 가운데로 */
 .apply-actions { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--chat-related-gap); }
 .apply-actions .btn { justify-content: center; padding-inline: 8px; text-align: center; line-height: 1.25; }
 .btn:disabled { opacity: .5; cursor: default; }
@@ -522,6 +523,55 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .plan li { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center; padding: 10px 12px; border-radius: var(--r-box); background: var(--surface-2); }
 .plan li b { font-size: var(--fs-body); } .plan li small { grid-column: 1; color: var(--muted); font-size: var(--fs-small); }
 .plan input[type=date] { grid-row: 1 / span 2; grid-column: 2; height: 38px; border-radius: var(--r-badge); border: 1px solid var(--line); background: var(--bg); color: var(--ink); padding: 0 8px; font: inherit; font-size: var(--fs-small); }
+/* 날짜 고르기: 브라우저 기본 달력 대신 앱 모양. 고른 날짜 요약 → 달력(한 번 누르면 끝) → 자주 쓰는 마감 시간 칩 */
+.dp { display: flex; flex-direction: column; gap: 10px; }
+.dp.off, .dp-wrap.off { opacity: .6; }
+.dp-sum { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; padding: 0 14px; border-radius: var(--r-box); background: var(--surface-2); font-size: var(--fs-body-l); font-weight: 700; letter-spacing: -.2px; font-variant-numeric: tabular-nums; }
+.dp-sum .dd, .dp-field .dd { flex: none; font-size: var(--fs-caption); font-weight: 800; padding: 3px 9px; border-radius: var(--r-pill); background: var(--pop-soft); color: var(--pop-deep); }
+.dp-sum .dd.past, .dp-field .dd.past { background: var(--crit-soft); color: var(--crit); }
+.dp-cal { border: 1px solid var(--line); border-radius: var(--r-box); padding: 6px 6px 4px; background: var(--surface); }
+.dp-mh { display: flex; align-items: center; justify-content: space-between; padding: 0 0 2px 10px; }
+.dp-mh b { font-size: var(--fs-body); font-weight: 800; letter-spacing: -.2px; }
+.dp-nav { display: flex; gap: 2px; }
+.dp-nav button { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); }
+.dp-nav button:disabled { opacity: .25; cursor: default; }
+.dp-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.dp-dow { text-align: center; font-size: var(--fs-caption); color: var(--muted); padding: 4px 0 2px; }
+.dp-day { height: 40px; display: grid; place-items: center; color: var(--ink); font-size: var(--fs-body); font-variant-numeric: tabular-nums; }
+.dp-day span { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; transition: background-color .15s, color .15s, transform .1s; }
+.dp-day.past span { color: var(--muted); }
+.dp-day[aria-pressed="true"] span { background: var(--dpc, var(--primary)); color: var(--bg); font-weight: 700; box-shadow: none; }  /* 고른 날·시간 = 이 대회 색 */
+.dp-day:disabled { opacity: .25; cursor: default; }
+.dp-day:not(:disabled):active span { transform: scale(.92); }
+@media (hover: hover) { .dp-nav button:not(:disabled):hover, .dp-day:not(:disabled):not([aria-pressed="true"]):hover span { background: var(--surface-2); } }
+.dp-time { display: flex; flex-direction: column; gap: 6px; }
+/* 시간: 아이폰처럼 굴려서 고르는 휠 (오전/오후 · 시 · 분). 가운데 줄이 고른 값, 위아래는 흐리게 */
+.dp-wheel { position: relative; display: grid; grid-template-columns: 1.1fr 1fr 14px 1fr; height: 180px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r-box); background: var(--surface); overflow: hidden; }
+.dp-band { position: absolute; left: 8px; right: 8px; top: 72px; height: 36px; border-radius: 10px; background: color-mix(in srgb, var(--dpc, var(--primary)) 14%, var(--surface)); pointer-events: none; }
+.dp-wcol { position: relative; height: 180px; padding: 72px 0; overflow-y: auto; scroll-snap-type: y mandatory; overscroll-behavior: contain; scrollbar-width: none; outline: none;
+  -webkit-mask-image: linear-gradient(transparent, #000 34%, #000 66%, transparent); mask-image: linear-gradient(transparent, #000 34%, #000 66%, transparent); }
+.dp-wcol::-webkit-scrollbar { display: none; }
+.dp-wcol:focus-visible { box-shadow: inset 0 0 0 2px var(--blue); border-radius: 10px; }
+.dp-wit { height: 36px; display: grid; place-items: center; scroll-snap-align: center; font-size: var(--fs-body-l); color: var(--muted); font-variant-numeric: tabular-nums; cursor: pointer; user-select: none; transition: color .15s; }
+.dp-wit.on { color: var(--ink); font-weight: 700; font-size: 18px; }
+.dp-colon { position: relative; display: grid; place-items: center; font-size: 18px; font-weight: 700; color: var(--ink); }
+.dp-chip { height: 34px; padding: 0 12px; border-radius: var(--r-pill); border: 1px solid var(--line); background: var(--bg); color: var(--ink); font-size: var(--fs-small); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dp-wrap.open .dp-chip { border-color: var(--ink); }
+.dp-wrap.off .dp-chip { background: transparent; border-color: transparent; color: var(--muted); padding: 0 4px; }
+.plan .dp-wrap { grid-row: 1 / span 2; grid-column: 2; }
+/* 대화 카드에는 날짜 한 줄만. 누르면(또는 말풍선 뒤 바로) 아래에서 창이 올라와 달력·시간 휠로 고른다 */
+.dp-field { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 0 12px 0 14px; border-radius: var(--r-box); background: var(--surface-2); text-align: left; color: var(--ink); }
+.dp-field b { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-body-l); letter-spacing: -.2px; font-variant-numeric: tabular-nums; }
+.dp-field.dp-empty b { color: var(--muted); font-weight: 500; font-size: var(--fs-body); }
+.dp-field svg { flex: none; color: var(--muted); }
+.dp-field:disabled { opacity: .6; cursor: default; }
+.dp-sheet { gap: 12px; }
+.dp-sheet .dp-sum { display: none !important; }  /* 고른 값은 창 머리에 */
+.dp-sh { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 4px; }
+.dp-sh b { font-size: var(--fs-title); font-weight: 800; letter-spacing: -.4px; }
+.dp-sh span { font-size: var(--fs-small); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dp-acts { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 2px; }
+.plan li > .dp-cal { grid-column: 1 / -1; margin-top: 6px; }
 .urlrow { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 .urlrow input { min-width: 0; height: 44px; border-radius: var(--r-badge); border: 1px solid var(--line); background: var(--bg); color: var(--ink); padding: 0 12px; font: inherit; }
 .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: var(--fs-caption); color: var(--muted); }
@@ -1085,10 +1135,11 @@ function curRepo() { return repo || H.repo; }
 function projKey() { return cur && cur.draft ? "d:" + cur.draft : "r:" + curRepo(); }
 function projName() { const d = curDraft(); return d ? d.title : (extract && extract.title) || (curRepo() || "").split("/")[1] || "팀플"; }
 function setExtract(ex) { extract = ex; const d = curDraft(); if (d) { d.extract = ex; saveDrafts(); } else store.set("extract:" + projKey(), ex); renderCal(); renderHead(); }  // 위 팀플 이름도 바로 (공고를 연결·교체해도 옛 이름이 남아 있었다)
+// ☰ 메뉴·캘린더와 같은 대회별 색. 팀플을 아직 못 불러왔으면(키 없음) 색을 배정하지 않고 fallback
+function projColor(fallback) { const d = curDraft(); const k = d ? "d:" + d.id : curRepo() ? "r:" + curRepo() : null; return k ? `var(${colorOf(k)})` : fallback; }
 function renderHead() {
   const d = curDraft(); const b = $("projBtn"); b.textContent = ""; const dot = h("span", "pdot");
-  // ☰ 메뉴·캘린더와 같은 대회별 색. 팀플을 아직 못 불러왔으면(키 없음) 색을 배정하지 않고 기본 파랑
-  const ck = d ? "d:" + d.id : curRepo() ? "r:" + curRepo() : null; dot.style.background = ck ? `var(${colorOf(ck)})` : "var(--blue)"; b.appendChild(dot); if (d) b.appendChild(h("small", null, "준비 중")); else if (H.mode === "demo") b.appendChild(h("small", "demo-badge", "데모 데이터")); b.appendChild(h("span", "pname", projName() + " ▾"));
+  dot.style.background = projColor("var(--blue)"); b.appendChild(dot); if (d) b.appendChild(h("small", null, "준비 중")); else if (H.mode === "demo") b.appendChild(h("small", "demo-badge", "데모 데이터")); b.appendChild(h("span", "pname", projName() + " ▾"));
 }
 async function loadSaved() {  // 팀원이 이미 분석해 저장소에 저장한 공고가 있으면 다시 분석하지 않고 가져온다
   const key = projKey();
@@ -1652,12 +1703,135 @@ function showExtract(r) {
 let lastNoticeBody = null;  // 마지막으로 분석한 공고 (날짜를 직접 적은 뒤 다시 분석할 때 쓴다)
 function noticeApi(body) { const u = noticeUrl(); if (u && !body.url) body = { ...body, url: u }; lastNoticeBody = body; return api("/notice", { method: "POST", body: JSON.stringify(body) }); }  // 공고 주소를 같이 보내면 일정 만들 때 마일스톤에 적어 두고, 서버가 마감이 바뀌는지 지켜본다
 function repoNoticeSrc() { for (const m of (calState && calState.milestones) || []) { const x = /<!-- bento-src:(https:\/\/[^\s>]+) -->/.exec(m.description || ""); if (x) return x[1]; } return null; }  // 다른 기기에서도 저장소에 적힌 공고 주소로 지켜본다
+/* ---------- 날짜 고르기: 브라우저 기본 달력 대신 앱 모양 ----------
+   날짜는 달력에서 한 번 누르면 끝, 시간은 오전/오후·시·분 휠을 굴려서(누르면 그 줄로 감). 고른 날·가운데 줄은 이 대회 색.
+   <input>처럼 .value(날짜만 'YYYY-MM-DD', 시간까지 'YYYY-MM-DDTHH:MM')·.disabled·.focus()를 쓴다.
+   compact: 계획표 줄처럼 좁은 곳은 날짜 칩만 두고, 누르면 host(줄) 아래로 달력을 펼친다. */
+const DOW = "일월화수목금토";
+const pad2 = (n) => String(n).padStart(2, "0");
+const ymd = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const hmText = (hh, mm) => (hh === 23 && mm === 59 ? "밤 11:59" : `${hh < 12 ? "오전" : "오후"} ${hh % 12 || 12}:${pad2(mm)}`);
+let openDp = null;  // 계획표에서는 달력을 한 번에 하나만 펼친다
+function datePicker({ time = true, compact = false, host = null, value = "", max = "", label = "날짜" } = {}) {
+  let day = "", hm = "", dis = false;
+  const today = ymd(new Date());
+  let view = new Date(); view.setDate(1);
+  const root = h("div", compact ? "dp-wrap" : "dp"); root.setAttribute("role", "group"); root.setAttribute("aria-label", label);
+  const sum = h(compact ? "button" : "div", compact ? "dp-chip" : "dp-sum"); if (compact) { sum.type = "button"; sum.setAttribute("aria-label", label); } root.appendChild(sum);
+  const cal = h("div", "dp-cal"), tm = h("div", "dp-time");
+  const pc = projColor("var(--primary)"); root.style.setProperty("--dpc", pc); cal.style.setProperty("--dpc", pc);
+  let syncing = false, syncWheel = () => {};  // 휠을 코드로 맞추는 동안 생기는 스크롤은 '골랐다'로 치지 않는다
+  const fire = () => root.dispatchEvent(new Event("change"));
+  const parse = (v) => { const m = /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2}))?/.exec(v || ""); day = m ? m[1] : ""; hm = m && m[2] ? m[2] : ""; view = day ? new Date(day + "T00:00") : new Date(); view.setDate(1); };
+  const drawSum = () => {
+    sum.textContent = ""; if (!compact) sum.hidden = !day;  // 고르기 전에는 요약 줄 없이 달력부터
+    if (!day) { if (compact) sum.textContent = "날짜 고르기"; return; }
+    const d = new Date(day + "T00:00");
+    if (compact) { sum.textContent = `${d.getMonth() + 1}/${d.getDate()} (${DOW[d.getDay()]})`; return; }
+    const md = `${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW[d.getDay()]})`;
+    sum.appendChild(h("span", null, time && hm ? `${md} · ${hmText(+hm.slice(0, 2), +hm.slice(3))}` : md));
+    const n = Math.round((d - new Date(today + "T00:00")) / 864e5);
+    sum.appendChild(h("span", "dd" + (n < 0 ? " past" : ""), n > 0 ? `D-${n}` : n === 0 ? "D-day" : "지난 날짜"));
+  };
+  const navBtn = (lab, dir, path) => { const b = h("button"); b.type = "button"; b.setAttribute("aria-label", lab); b.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg>`; b.onclick = () => { view.setMonth(view.getMonth() + dir); drawCal(); }; return b; };
+  const drawCal = () => {
+    cal.textContent = "";
+    const mh = h("div", "dp-mh"); mh.appendChild(h("b", null, `${view.getFullYear()}년 ${view.getMonth() + 1}월`));
+    const nav = h("div", "dp-nav"); const prev = navBtn("이전 달", -1, "M15 6l-6 6 6 6"), next = navBtn("다음 달", 1, "M9 6l6 6-6 6");
+    if (max && ymd(new Date(view.getFullYear(), view.getMonth() + 1, 1)) > max) next.disabled = true;
+    nav.append(prev, next); mh.appendChild(nav); cal.appendChild(mh);
+    const g = h("div", "dp-grid"); for (const w of DOW) g.appendChild(h("span", "dp-dow", w));
+    for (let k = 0; k < view.getDay(); k++) g.appendChild(h("span"));
+    const last = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
+    for (let dd = 1; dd <= last; dd++) {
+      const dt = new Date(view.getFullYear(), view.getMonth(), dd), v = ymd(dt);
+      const b = h("button", "dp-day" + (v === today ? " today" : "") + (v < today ? " past" : "")); b.type = "button"; b.appendChild(h("span", null, String(dd)));
+      b.setAttribute("aria-label", `${dt.getMonth() + 1}월 ${dd}일 ${DOW[dt.getDay()]}요일${v === today ? " · 오늘" : ""}`); b.setAttribute("aria-pressed", String(v === day));
+      if (max && v > max) b.disabled = true;
+      b.onclick = () => { day = v; if (time && !hm) hm = "23:59"; drawSum(); drawCal(); fire(); if (compact) setTimeout(close, 140); };
+      g.appendChild(b);
+    }
+    cal.appendChild(g);
+  };
+  const WH = 36;  // 휠 한 줄 높이 (가운데 줄 = 위에서 두 줄 아래)
+  const wheelCol = (items, label, onPick) => {
+    const col = h("div", "dp-wcol"); col.tabIndex = 0; col.setAttribute("role", "spinbutton"); col.setAttribute("aria-label", label);
+    let idx = 0, timer = 0;
+    const mark = () => { [...col.children].forEach((x, i) => x.classList.toggle("on", i === idx)); col.setAttribute("aria-valuetext", items[idx][0]); };
+    const go = (i) => { idx = Math.max(0, Math.min(items.length - 1, i)); col.scrollTo({ top: idx * WH, behavior: "smooth" }); mark(); };
+    items.forEach(([txt], i) => { const it = h("div", "dp-wit", txt); it.setAttribute("aria-hidden", "true"); it.onclick = () => go(i); col.appendChild(it); });
+    col.addEventListener("scroll", () => {
+      if (syncing) return;
+      const i = Math.max(0, Math.min(items.length - 1, Math.round(col.scrollTop / WH))); if (i !== idx) { idx = i; mark(); }
+      clearTimeout(timer); timer = setTimeout(onPick, 120);  // 멈추면 그 줄로 정한다
+    });
+    col.addEventListener("keydown", (e) => { if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); go(idx + (e.key === "ArrowDown" ? 1 : -1)); } });
+    return { col, val: () => items[idx][1], set: (v) => { const i = items.findIndex((x) => x[1] === v); if (i >= 0) { idx = i; col.scrollTop = i * WH; mark(); } } };
+  };
+  const drawTime = () => {
+    if (!time) return;
+    tm.textContent = ""; tm.appendChild(h("span", "lab", "시간"));
+    const base = (hm || "23:59").split(":").map(Number);
+    const mins = [...new Set([...Array.from({ length: 12 }, (_, i) => i * 5), 59, base[1]])].sort((x, y) => x - y);  // 5분 단위 + 59분(마감에 흔함) + 이미 있던 분
+    const pick = () => { const hh = hr.val(); hm = `${pad2((hh % 12) + (ap.val() ? 12 : 0))}:${pad2(mn.val())}`; drawSum(); fire(); };
+    const ap = wheelCol([["오전", 0], ["오후", 1]], "오전 오후", pick);
+    const hr = wheelCol(Array.from({ length: 12 }, (_, i) => [String(i + 1), i + 1]), "시", pick);
+    const mn = wheelCol(mins.map((m) => [pad2(m), m]), "분", pick);
+    const wheel = h("div", "dp-wheel"); wheel.appendChild(h("div", "dp-band")); wheel.append(ap.col, hr.col, h("div", "dp-colon", ":"), mn.col); tm.appendChild(wheel);
+    syncWheel = () => { const [h24, m] = (hm || "23:59").split(":").map(Number); syncing = true; ap.set(h24 >= 12 ? 1 : 0); hr.set(h24 % 12 || 12); mn.set(m); setTimeout(() => { syncing = false; }, 100); };
+    // 화면에 붙어 크기가 생긴 뒤에야 스크롤 위치를 맞출 수 있다
+    const ro = new ResizeObserver(() => { if (wheel.clientHeight) { syncWheel(); ro.disconnect(); } }); ro.observe(wheel);
+  };
+  const api = { close: () => {} };
+  const close = () => { cal.remove(); root.classList.remove("open"); if (openDp === api) openDp = null; };
+  const open = () => { if (dis) return; if (openDp && openDp !== api) openDp.close(); drawCal(); (host || root).appendChild(cal); root.classList.add("open"); openDp = api; cal.scrollIntoView({ block: "nearest", behavior: "smooth" }); };
+  api.close = close;
+  if (compact) sum.onclick = () => (cal.isConnected ? close() : open());
+  else { root.appendChild(cal); if (time) root.appendChild(tm); }
+  Object.defineProperty(root, "value", { get: () => (day ? (time ? `${day}T${hm || "23:59"}` : day) : ""), set: (v) => { parse(v); drawSum(); if (!compact || cal.isConnected) drawCal(); drawTime(); } });
+  Object.defineProperty(root, "disabled", { get: () => dis, set: (x) => { dis = !!x; root.inert = dis; root.classList.toggle("off", dis); if (dis && compact) close(); } });
+  root.focus = () => { if (compact) open(); const b = cal.querySelector('.dp-day[aria-pressed="true"]') || cal.querySelector(".dp-day:not(:disabled)"); if (b) b.focus({ preventScroll: true }); root.scrollIntoView({ block: "nearest", behavior: "smooth" }); };
+  parse(value); drawSum(); if (!compact) { drawCal(); drawTime(); }
+  return root;
+}
+function dateLine(day, hm) { const d = new Date(day + "T00:00"); const md = `${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW[d.getDay()]})`; return hm ? `${md} · ${hmText(+hm.slice(0, 2), +hm.slice(3))}` : md; }
+// 아래에서 올라오는 날짜 창 (승인 창·바로 맡겨 보기와 같은 시트). '확인'을 눌러야 onPick, 바깥·취소·Esc면 그냥 닫힌다
+function dateSheet({ value = "", time = true, title = "날짜 고르기", onPick }) {
+  const bg = h("div", "sheet-bg"); const sh = h("div", "sheet dp-sheet"); sh.setAttribute("role", "dialog"); sh.setAttribute("aria-modal", "true"); sh.setAttribute("aria-label", title); bg.appendChild(sh);
+  const hd = h("div", "dp-sh"); hd.appendChild(h("b", null, title)); const now = h("span"); now.style.color = projColor("var(--ink)"); hd.appendChild(now); sh.appendChild(hd);
+  const dp = datePicker({ time, value, label: title }); sh.appendChild(dp);
+  const rb = h("div", "dp-acts"); const no = h("button", "btn lg", "취소"), ok = h("button", "btn primary lg", "확인"); no.type = ok.type = "button"; rb.append(no, ok); sh.appendChild(rb);
+  const show = () => { const v = dp.value; now.textContent = v ? dateLine(v.slice(0, 10), time ? v.slice(11, 16) : "") : ""; ok.disabled = !v; };
+  dp.addEventListener("change", show); show();
+  const esc = (e) => { if (e.key === "Escape") close(); };
+  const close = () => { bg.remove(); document.removeEventListener("keydown", esc); };
+  bg.onclick = (e) => { if (e.target === bg) close(); }; document.addEventListener("keydown", esc);
+  no.onclick = close; ok.onclick = () => { const v = dp.value; if (!v) return; close(); onPick(v); };
+  document.querySelector(".phone").appendChild(bg);
+  setTimeout(() => { const b = dp.querySelector('.dp-day[aria-pressed="true"]') || dp.querySelector(".dp-day:not(:disabled)"); if (b) b.focus({ preventScroll: true }); }, 60);
+  return { close };
+}
+// 대화 카드의 한 줄 날짜 칸: <input>처럼 .value·.disabled·.focus()(= 창 열기)를 쓰고, 고르면 'change'
+function dateField({ value = "", time = true, title = "날짜 고르기", label = "날짜" } = {}) {
+  let val = "";
+  const b = h("button", "dp-field"); b.type = "button"; b.setAttribute("aria-label", label);
+  const draw = () => {
+    b.textContent = ""; b.classList.toggle("dp-empty", !val);
+    b.appendChild(h("b", null, val ? dateLine(val.slice(0, 10), time ? val.slice(11, 16) : "") : "날짜 고르기"));
+    if (val) { const n = Math.round((new Date(val.slice(0, 10) + "T00:00") - new Date(ymd(new Date()) + "T00:00")) / 864e5); b.appendChild(h("span", "dd" + (n < 0 ? " past" : ""), n > 0 ? `D-${n}` : n === 0 ? "D-day" : "지난 날짜")); }
+    b.insertAdjacentHTML("beforeend", '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>');
+  };
+  const open = () => { if (b.disabled) return; dateSheet({ value: val, time, title, onPick: (v) => { val = v; draw(); b.dispatchEvent(new Event("change")); } }); };
+  b.onclick = open; b.focus = open;
+  Object.defineProperty(b, "value", { get: () => val, set: (v) => { val = v || ""; draw(); } });
+  val = value; draw(); return b;
+}
 function askNoticeDeadline(r, next) {
   // 공고에서 제출 마감을 못 찾았으면, 사용자가 직접 적을 수 있게 먼저 묻는다 (모르면 날짜 없이 만들 수도 있어요)
   bot("공고에서 제출 마감을 찾지 못했어요. 아는 날짜가 있으면 적어 주세요. 몰라도 날짜 없이 일정을 만들 수 있어요.");
-  const c = add(h("div", "task")); const id = "nd" + Date.now(); const lb = h("label", "lab", "제출 마감"); lb.htmlFor = id;
-  const i = h("input", "finput"); i.type = "datetime-local"; i.id = id; const rb = h("div", "row-btns"); rb.style.marginTop = "8px";
-  const ok = h("button", "btn primary", "이 날짜로 일정 만들기"); ok.type = "button";
+  const c = add(h("div", "task")); const id = "nd" + Date.now(); const lb = h("label", "lab", "날짜"); lb.htmlFor = id;
+  const i = dateField({ label: "제출 마감", title: "제출 마감" }); i.id = id; const rb = h("div", "row-btns"); rb.style.marginTop = "8px";
+  const ok = h("button", "btn primary", "이 날짜로 일정 만들기"); ok.type = "button"; ok.hidden = true; i.addEventListener("change", () => { ok.hidden = !i.value; });
   const no = h("button", "btn", "날짜 없이 만들기"); no.type = "button";
   rb.appendChild(ok); rb.appendChild(no); c.appendChild(lb); c.appendChild(i); c.appendChild(rb);
   ok.onclick = () => {
@@ -1669,6 +1843,7 @@ function askNoticeDeadline(r, next) {
     }, () => { ok.disabled = no.disabled = i.disabled = false; i.focus(); });
   };
   no.onclick = () => { ok.disabled = no.disabled = i.disabled = true; c.remove(); offerPlan(r, next, true); };
+  scroll(); setTimeout(() => i.focus(), 250);  // 말풍선 뒤 바로 날짜 창
 }
 function swapContest() {  // 진행 중인 팀플에 연결된 대회를 다른 대회로 바꾸기: 새 공고를 받아 '연결된 대회 바꾸기' 제안으로 이어진다
   me("연결된 대회 바꿀래");
@@ -1682,10 +1857,12 @@ function askSwapDeadline(r, next) {
   const ex = r.extract || {};
   bot(`대회를 '${ex.title || "새 대회"}'(으)로 바꾸면 팀 전체의 제출 마감도 바뀌어요. 공고에서 확인해서 새 제출 마감을 골라 주세요.`);
   const c = add(h("div", "task")); const id = "sd" + Date.now();
-  const l = h("label", "lab", "새 제출 마감"); l.htmlFor = id; const i = h("input", "finput"); i.id = id; i.type = "datetime-local";
+  const l = h("label", "lab", "날짜"); l.htmlFor = id; const i = dateField({ label: "새 제출 마감", title: "새 제출 마감" }); i.id = id;
   if (ex.submit_deadline_iso) { const d = new Date(ex.submit_deadline_iso); i.value = new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16); }
   const src = noticeUrl(); if (src) c.appendChild(link("공고 원문 보기", src));
-  const b = h("button", "btn primary", "이 날짜로 바꾸기"); b.type = "button"; c.append(l, i, b); scroll(); i.focus();
+  const b = h("button", "btn primary", "이 날짜로 바꾸기"); b.type = "button"; b.hidden = !i.value; c.append(l, i, b);
+  i.addEventListener("change", () => { b.hidden = !i.value; });  // 날짜를 고르면 버튼이 나온다
+  scroll(); setTimeout(() => i.focus(), 250);  // 말풍선 뒤 바로 '새 제출 마감' 창 (공고에서 읽은 날짜가 골라진 채로)
   b.onclick = () => {
     if (!i.value) { snack("날짜와 시간을 골라 주세요"); return i.focus(); }
     b.disabled = i.disabled = true;
@@ -1855,17 +2032,18 @@ function needRepo(ask) {
 
 /* ---------- 마감까지 계획 ---------- */
 function askDeadline() {
-  bot("제출 마감 날짜를 공고에서 찾지 못했어요. 공고에서 확인해서 넣어 주시면 그 날짜에서 거꾸로 계획을 짤게요.");
+  bot("제출 마감 날짜를 공고에서 찾지 못했어요. 날짜를 넣어 주시면 거꾸로 계획을 짤게요.");
   const c = add(h("div", "task")); const id = "dl" + Date.now();
-  const l = h("label", "lab", "제출 마감"); l.htmlFor = id; const i = h("input", "finput"); i.id = id; i.type = "datetime-local";
+  const l = h("label", "lab", "날짜"); l.htmlFor = id; const i = dateField({ label: "제출 마감", title: "제출 마감" }); i.id = id;
   const src = noticeUrl(); if (src) c.appendChild(link("공고 원문 보기", src));
-  const b = h("button", "btn primary", "이 날짜로 계획 짜기"); b.type = "button"; c.append(l, i, b);
+  const b = h("button", "btn primary", "이 날짜로 계획 짜기"); b.type = "button"; b.hidden = true; c.append(l, i, b);
+  i.addEventListener("change", () => { b.hidden = !i.value; });  // 날짜를 고르면 버튼이 나온다
   b.onclick = () => {
     if (!i.value) return i.focus(); b.disabled = i.disabled = true;
     confirmDeadline(i.value, (k) => { setExtract({ ...extract, submit_deadline_iso: k.iso, submit_deadline: deadlineLabel(i.value) }); Promise.resolve(planFlow()).then(() => syncGithubDeadline(k.iso)); },
       () => { b.disabled = i.disabled = false; i.focus(); });
   };
-  scroll();
+  scroll(); setTimeout(() => i.focus(), 250);  // 말풍선 뒤 바로 날짜 창
 }
 
 /* ---------- 제출 마감: 넣을 때 한 번 확인하고, 나중에도 고칠 수 있게 ----------
@@ -1875,7 +2053,8 @@ function deadlineCheck(value) {
   const d = new Date(value); const now = new Date();
   const days = Math.round((new Date(d).setHours(0, 0, 0, 0) - new Date(now).setHours(0, 0, 0, 0)) / 864e5);
   const text = `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일(${"일월화수목금토"[d.getDay()]}) ${fmtTime(d)} · ${days > 0 ? "D-" + days : days === 0 ? "D-day" : "이미 지난 날짜"}`;
-  const warn = d < now ? "이미 지난 날짜예요." : d.getFullYear() > now.getFullYear() + 1 ? `${d.getFullYear()}년이에요. 연도를 다시 봐 주세요.` : days > 180 ? "6개월보다 더 남은 날짜예요. 연도를 다시 봐 주세요." : "";
+  // 지난 날짜는 위 글에 '이미 지난 날짜'로 이미 나와서 경고 줄을 따로 두지 않는다
+  const warn = d.getFullYear() > now.getFullYear() + 1 ? `${d.getFullYear()}년이에요. 연도를 다시 봐 주세요.` : days > 180 ? "6개월보다 더 남은 날짜예요. 연도를 다시 봐 주세요." : "";
   return { iso: d.toISOString(), text, warn };
 }
 function confirmDeadline(value, onYes, onBack) {
@@ -1891,10 +2070,10 @@ function editDeadline() {
   me("제출 마감 고칠래");
   bot("제출 마감을 고칠게요. 공고에서 다시 확인해서 골라 주세요.");
   const c = add(h("div", "task")); const id = "ed" + Date.now();
-  const l = h("label", "lab", "제출 마감"); l.htmlFor = id; const i = h("input", "finput"); i.id = id; i.type = "datetime-local";
+  const l = h("label", "lab", "날짜"); l.htmlFor = id; const i = dateField({ label: "제출 마감", title: "제출 마감" }); i.id = id;
   if (extract && extract.submit_deadline_iso) { const d = new Date(extract.submit_deadline_iso); i.value = new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 16); }
   const src = noticeUrl(); if (src) c.appendChild(link("공고 원문 보기", src));
-  const b = h("button", "btn primary", "이 날짜로 고치기"); b.type = "button"; c.append(l, i, b); scroll();
+  const b = h("button", "btn primary", "이 날짜로 고치기"); b.type = "button"; c.append(l, i, b); scroll(); setTimeout(() => i.focus(), 250);  // 지금 마감이 골라진 창부터
   b.onclick = () => {
     if (!i.value) return i.focus(); b.disabled = i.disabled = true;
     confirmDeadline(i.value, (k) => {
@@ -1940,7 +2119,7 @@ async function planFlow() {
   const c = add(h("div", "task")); const hd = h("div", "task-h"); hd.appendChild(h("b", null, `${projName()} · 작업 계획`)); const tg = h("span", "tag skip", "초안"); hd.appendChild(tg); c.appendChild(hd);
   const ol = h("ol", "plan"); const rows = r.steps.map((s, i) => {
     const li = h("li"); li.style.borderLeft = `4px solid var(${colorOf(projKey())})`; li.appendChild(h("b", null, s.title));
-    const inp = h("input"); inp.type = "date"; inp.value = s.due.slice(0, 10); inp.id = `plan${Date.now()}_${i}`; inp.setAttribute("aria-label", `${s.title} 날짜`); inp.max = r.steps[r.steps.length - 1].due.slice(0, 10);
+    const inp = datePicker({ time: false, compact: true, host: li, value: s.due.slice(0, 10), max: r.steps[r.steps.length - 1].due.slice(0, 10), label: `${s.title} 날짜` }); inp.id = `plan${Date.now()}_${i}`;
     if (s.kind !== "step") { inp.disabled = true; inp.title = "공고에 적힌 날짜예요"; }
     li.appendChild(inp); li.appendChild(h("small", null, s.note + (s.kind === "step" ? "" : " · 공고 날짜"))); ol.appendChild(li); return { s, inp };
   });

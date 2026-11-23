@@ -313,4 +313,11 @@ def test_late_progress_opens_replanning(page, app_url):
     open_late_card(page, app_url)
     page.get_by_role("button", name="계획 다시 짜기").click()
     expect(page.get_by_text("제출 마감 날짜를 공고에서 찾지 못했어요.", exact=False)).to_be_visible(timeout=10_000)
+    # 말풍선 뒤에 날짜 고르는 창이 바로 올라오고, 날짜를 골라 '확인'하면 '이 날짜로 계획 짜기'가 나온다
+    sheet = page.get_by_role("dialog", name="제출 마감")
+    expect(sheet).to_be_visible()
+    expect(page.get_by_role("button", name="이 날짜로 계획 짜기")).to_be_hidden()
+    sheet.locator(".dp-day:not(.past):not([disabled])").first.click()
+    sheet.get_by_role("button", name="확인").click()
+    expect(sheet).to_be_hidden()
     expect(page.get_by_role("button", name="이 날짜로 계획 짜기")).to_be_visible()
