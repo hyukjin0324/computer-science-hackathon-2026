@@ -985,22 +985,33 @@ def test_github_milestone_dates_are_korean_dates():
     assert ms_due("2026-11-16T00:00:00Z").isoformat() == "2026-11-16T14:59:00+00:00"  # 그 날짜 한국 시간 23:59
 
 
-def test_roles_are_saved_directly_then_used_for_tasks_and_reviewers():
+def test_roles_need_each_recipient_approval_then_feed_tasks_and_reviewers():
     import dataclasses
     from app import ownership as own
     from app.triage import triage
     r = client.get("/api/roles").json()
     m = r["members"]
     assert set(r["choices"]) == {"lead", "pm", "fe", "be", "ds", "pt"}
-    one = client.post("/api/roles", json={"roles": {m[0]: ["pm", "x"]}}).json()  # 없는 역할은 빼고, 승인 없이 바로 저장
-    assert one["saved"] and one["roles"][m[0]] == ["pm"] and "proposal" not in one
-    out = client.post("/api/roles", json={"roles": {m[0]: ["be"], m[1]: ["fe"], m[2]: ["pt", "ds"]}}).json()
-    assert out["saved"] and sorted(out["changed"]) == sorted([m[0], m[1], m[2]])
+    one = client.post("/api/roles", json={"roles": {m[0]: ["pm", "x"]}}, headers={"X-Bento-User": m[0]}).json()
+    assert one["requested"] and one["requests"][0]["target"] == m[0]
+    assert m[0] not in client.get("/api/roles").json()["roles"]  # 승인 전에는 저장하지 않는다
+    assert not any(i.get("target") == m[0] for i in client.get("/api/triage", headers={"X-Bento-User": m[1]}).json()["items"])
+    mine = next(i for i in client.get("/api/triage", headers={"X-Bento-User": m[0]}).json()["items"] if i.get("target") == m[0])
+    assert client.post("/api/execute", json={"token": mine["proposal"]["token"]}, headers={"X-Bento-User": m[1]}).status_code == 403
+    assert client.post("/api/execute", json={"token": mine["proposal"]["token"]}, headers={"X-Bento-User": m[0]}).json()["ok"]
+    assert client.get("/api/roles").json()["roles"][m[0]] == ["pm"]  # 없는 역할 코드는 요청 전에 빠진다
+
+    out = client.post("/api/roles", json={"roles": {m[0]: ["be"], m[1]: ["fe"], m[2]: ["pt", "ds"]}},
+                      headers={"X-Bento-User": m[3]}).json()
+    assert out["requested"] and sorted(x["target"] for x in out["requests"]) == sorted([m[0], m[1], m[2]])
+    for who in (m[0], m[1], m[2]):
+        it = next(i for i in client.get("/api/triage", headers={"X-Bento-User": who}).json()["items"] if i.get("target") == who)
+        assert client.post("/api/execute", json={"token": it["proposal"]["token"]}, headers={"X-Bento-User": who}).json()["ok"]
     roles = client.get("/api/roles").json()["roles"]
     assert roles[m[0]] == ["be"] and roles[m[2]] == ["pt", "ds"]
     again = client.post("/api/roles", json={"roles": roles}).json()
-    assert again["saved"] is False  # 바뀐 게 없으면 저장하지 않는다
-    assert client.post("/api/roles", json={"roles": {"stranger": ["be"]}}).json()["saved"] is False  # 팀원이 아닌 아이디는 무시
+    assert again["requested"] is False  # 바뀐 게 없으면 요청하지 않는다
+    assert client.post("/api/roles", json={"roles": {"stranger": ["be"]}}).json()["requested"] is False  # 팀원이 아닌 아이디는 무시
     # 할 일 제목으로 역할 고르기
     assert own.role_codes_for("[계획] README·배포 정리") == ["be"] and own.role_codes_for("[제출물] 발표 자료") == ["pt", "ds"]
     who, why = own.pick_by_role(m, roles, {}, "[제출물] 발표 자료")
@@ -1027,16 +1038,45 @@ def test_selected_team_lead_overrides_repo_admin_and_roles_have_no_limit():
 
     all_roles = list(own.ROLES)
     assert validate([SetRoles(roles={m[1]: all_roles})], main.build_state(main._demo)) == []
-    saved = client.post("/api/roles", json={"roles": {m[1]: all_roles}})
-    assert saved.status_code == 200 and saved.json()["roles"][m[1]] == all_roles
+    saved = client.post("/api/roles", json={"roles": {m[1]: all_roles}}, headers={"X-Bento-User": m[0]})
+    assert saved.status_code == 200 and saved.json()["requests"][0]["target"] == m[1]
+    assert main.build_state(main._demo).leads == [m[0]]  # 받을 사람이 승인하기 전에는 기존 관리자
+    req = next(i for i in client.get("/api/triage", headers={"X-Bento-User": m[1]}).json()["items"] if i.get("target") == m[1])
+    assert client.post("/api/execute", json={"token": req["proposal"]["token"]}, headers={"X-Bento-User": m[1]}).json()["ok"]
+    assert client.get("/api/roles").json()["roles"][m[1]] == all_roles
     assert main.build_state(main._demo).leads == [m[1]]
 
     many = client.post("/api/roles", json={"roles": {m[0]: ["lead"], m[1]: ["lead"]}})
     assert many.status_code == 400 and "한 명만" in many.json()["detail"]
 
-    cleared = client.post("/api/roles", json={"roles": {m[1]: [c for c in all_roles if c != "lead"]}})
-    assert cleared.status_code == 200
+    transfer = client.post("/api/roles", json={"roles": {m[1]: [c for c in all_roles if c != "lead"], m[2]: ["lead"]}},
+                           headers={"X-Bento-User": m[0]})
+    assert transfer.status_code == 200 and [x["target"] for x in transfer.json()["requests"]] == [m[2]]  # 팀장 교체는 새 팀장 승인 한 번으로 원자적으로
+    req = next(i for i in client.get("/api/triage", headers={"X-Bento-User": m[2]}).json()["items"] if i.get("target") == m[2])
+    assert client.post("/api/execute", json={"token": req["proposal"]["token"]}, headers={"X-Bento-User": m[2]}).json()["ok"]
+    assert main.build_state(main._demo).leads == [m[2]]
+
+    cleared = client.post("/api/roles", json={"roles": {m[2]: []}}, headers={"X-Bento-User": m[0]})
+    assert cleared.status_code == 200 and cleared.json()["requests"][0]["target"] == m[2]
+    req = next(i for i in client.get("/api/triage", headers={"X-Bento-User": m[2]}).json()["items"] if i.get("target") == m[2])
+    assert client.post("/api/execute", json={"token": req["proposal"]["token"]}, headers={"X-Bento-User": m[2]}).json()["ok"]
     assert main.build_state(main._demo).leads == [m[0]]  # 선택을 지우면 기존 저장소 관리자로 복귀
+
+
+def test_live_role_request_is_visible_and_approvable_only_by_recipient(monkeypatch):
+    _login_on(monkeypatch)
+    m = main._demo.d["members"]
+    made = _logged_in(m[0]).post("/api/roles", json={"roles": {m[1]: ["pm"]}})
+    assert made.status_code == 200 and made.json()["requests"][0]["target"] == m[1]
+
+    target_items = _logged_in(m[1]).get("/api/triage").json()["items"]
+    req = next(i for i in target_items if i.get("target") == m[1])
+    assert not any(i.get("target") == m[1] for i in _logged_in(m[2]).get("/api/triage").json()["items"])
+    # 화면 헤더를 받는 사람으로 위조해도 로그인한 GitHub 계정이 다르면 승인할 수 없다.
+    denied = _logged_in(m[2]).post("/api/execute", json={"token": req["proposal"]["token"]}, headers={"X-Bento-User": m[1]})
+    assert denied.status_code == 403 and m[1] in denied.json()["detail"]
+    assert _logged_in(m[1]).post("/api/execute", json={"token": req["proposal"]["token"]}).json()["ok"]
+    assert main.build_state(main._demo).roles[m[1]] == ["pm"]
 
 
 def test_team_wide_change_needs_someone_other_than_proposer():

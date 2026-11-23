@@ -711,7 +711,10 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .hsec > .sech + .lead-tasks { border-top: 0; padding-top: 0; }
 .hsec .lead-tasks-title { margin: 0 0 4px; font-size: var(--fs-body); }
 .hsec .lead-tasks .btn, .hsec .lead-late .btn { height: 36px; min-height: 36px; padding: 0 14px; font-size: var(--fs-small); font-weight: 600; margin: 6px 0 4px; align-self: flex-start; }
-.hsec .lead-tasks .linkbtn { font-size: var(--fs-small); margin: 4px 0; }
+.hsec .lead-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 12px 0 6px; }
+.hsec .lead-actions.has-more { justify-content: space-between; }
+.hsec .lead-actions .linkbtn { flex: none; margin: 0; font-size: var(--fs-small); }
+.hsec .lead-actions .btn { flex: none; align-self: auto; margin: 0; }
 .hsec .lead-late { display: flex; flex-direction: column; border-top: 1px solid var(--line); padding-top: 4px; }
 .hsec .lead-late .prow { min-height: 44px; align-items: center; font-size: var(--fs-small); } .hsec .lead-late .prow b { font-size: var(--fs-body); } .hsec .lead-late .prow span { font-size: var(--fs-small); }
 .hsec details.teamall { background: none; border: 0; border-radius: 0; padding: 0; gap: 0; border-top: 1px solid var(--line); }
@@ -2114,15 +2117,17 @@ function homeBoard(v, me2, items) {
       c.appendChild(h("div", "lead-tasks-title", `담당 정하기 · ${unassigned.length}개`));
       const FIRST_N = 3;  // 홈이 길어지지 않게 3개만 먼저
       unassigned.slice(0, FIRST_N).forEach((t) => c.appendChild(hTaskRow(t, true)));
+      const actions = h("div", "lead-actions");
       if (unassigned.length > FIRST_N) {
         const rest = h("div"); rest.className = "lead-rest"; rest.hidden = true;
         unassigned.slice(FIRST_N).forEach((t) => rest.appendChild(hTaskRow(t, true)));
-        const mb = h("button", "linkbtn", `${unassigned.length - FIRST_N}개 더 보기`); mb.type = "button"; mb.style.alignSelf = "flex-start";
-        mb.onclick = () => { rest.hidden = !rest.hidden; mb.textContent = rest.hidden ? `${unassigned.length - FIRST_N}개 더 보기` : "접기"; };
-        c.append(rest, mb);
+        const mb = h("button", "linkbtn", `${unassigned.length - FIRST_N}개 더 보기`); mb.type = "button"; mb.setAttribute("aria-expanded", "false");
+        mb.onclick = () => { rest.hidden = !rest.hidden; mb.textContent = rest.hidden ? `${unassigned.length - FIRST_N}개 더 보기` : "접기"; mb.setAttribute("aria-expanded", String(!rest.hidden)); };
+        c.appendChild(rest); actions.classList.add("has-more"); actions.appendChild(mb);
       }
       const assignItem = items.find((i) => i.id === "assign");
-      if (assignItem) { const bt = h("button", "btn primary", Object.keys(roles).length ? "추천대로 나눠 주기" : "맡은 일이 적은 사람에게 나눠 주기"); bt.type = "button"; bt.onclick = () => { showTab("chat"); openItem(assignItem); }; c.appendChild(bt); }
+      if (assignItem) { const bt = h("button", "btn primary", Object.keys(roles).length ? "추천대로 나눠 주기" : "맡은 일이 적은 사람에게 나눠 주기"); bt.type = "button"; bt.onclick = () => { showTab("chat"); openItem(assignItem); }; actions.appendChild(bt); }
+      if (actions.childElementCount) c.appendChild(actions);
       lsec.appendChild(c);
     }
     if (lateP.length || (b && b.rebalance)) {
@@ -2152,7 +2157,18 @@ function homeBoard(v, me2, items) {
     });
   }
 }
-function refreshHome() { if (curDraft()) return renderHome(); api("/triage").then((t) => { lastTriage = t; renderHome(); }).catch(() => renderHome()); loadBoard(); }
+function notifyRoleRequests(items) {
+  const who = meUser(); if (!who) return;
+  (items || []).filter((it) => it.target === who && it.proposal).forEach((it) => {
+    const key = `role-request:${curRepo()}:${it.id}`; if (store.get(key, false)) return;
+    store.set(key, true);
+    bot(`${it.proposed_by || "팀원"} 님이 내 역할을 제안했어요. 내용을 확인하고 승인하면 그때 역할표에 반영돼요.`);
+    const b = h("button", "btn primary chat-action", "내 역할 확인하기"); b.type = "button";
+    b.onclick = () => { b.disabled = true; showTab("chat"); openItem(it); };
+    add(b);
+  });
+}
+function refreshHome() { if (curDraft()) return renderHome(); api("/triage").then((t) => { lastTriage = t; notifyRoleRequests(t.items); renderHome(); }).catch(() => renderHome()); loadBoard(); }
 function resumeChat() {
   const box = $("resume"), hist = $("history"); if (!box) return; box.innerHTML = ""; if (hist) hist.innerHTML = "";
   // 지난 대화 (흐리게, 맨 위)
@@ -2609,7 +2625,7 @@ function openItem(it) {
   if (it.proposal) {  // 다른 팀원이 보낸 승인 요청
     me(it.title); bot(`${it.proposed_by || "팀원"} 님이 보낸 승인 요청이에요. 내용을 보고 괜찮으면 승인해 주세요. 승인하면 GitHub에 '제안·승인한 사람'이 함께 남아요.`);
     const ev = h("div", "row-btns"); it.evidence.forEach((e) => ev.appendChild(link(e.label, e.url))); add(ev);
-    if (it.proposed_by && it.proposed_by === meUser()) { bot("내가 보낸 요청이라 나는 승인할 수 없어요. 다른 팀원이나 팀장이 승인하면 실행돼요."); return; }
+    if (!it.target && it.proposed_by && it.proposed_by === meUser()) { bot("내가 보낸 요청이라 나는 승인할 수 없어요. 다른 팀원이나 팀장이 승인하면 실행돼요."); return; }
     approval(it.proposal, (ok) => { if (ok) { lastTriage = null; refreshHome(); } }, { reasons: [it.why], evidence: it.evidence }); return;
   }
   me(it.title);
@@ -3435,7 +3451,7 @@ function buildRoles(v, closeSheet) {
   // 설명은 위에 따로 한 카드, 역할 고르기는 아래 카드
   const ic = h("div", "card role-introcard");
   const ul = h("ul", "perm-list role-intro");
-  ["팀장은 한 명만 선택하며, 선택하지 않으면 GitHub 저장소 관리자가 맡음", "계획 단계와 할 일을 역할에 맞는 사람에게 배정함", "리뷰어도 같은 역할 팀원을 먼저 추천함", "역할 개수 제한 없이 여러 역할을 함께 선택할 수 있음", "저장하면 팀 저장소에 바로 반영돼 팀원 모두 같은 역할표를 봄"].forEach((t) => { const li = h("li"); li.appendChild(h("span", "pm", "•")); li.appendChild(h("span", null, t)); ul.appendChild(li); });
+  ["팀장은 한 명만 선택하며, 선택하지 않으면 GitHub 저장소 관리자가 맡음", "계획 단계와 할 일을 역할에 맞는 사람에게 배정함", "리뷰어도 같은 역할 팀원을 먼저 추천함", "역할 개수 제한 없이 여러 역할을 함께 선택할 수 있음", "역할을 받을 사람에게만 요청이 가며, 본인이 승인한 뒤 역할표에 반영됨"].forEach((t) => { const li = h("li"); li.appendChild(h("span", "pm", "•")); li.appendChild(h("span", null, t)); ul.appendChild(li); });
   ic.appendChild(ul); v.appendChild(ic);
   const cr = h("div", "card rolecard");
   const body = h("div"); body.textContent = "역할표 불러오는 중…"; cr.appendChild(body); v.appendChild(cr);
@@ -3461,8 +3477,8 @@ function buildRoles(v, closeSheet) {
       });
       row.appendChild(chips); body.appendChild(row);
     });
-    const sv = h("button", "btn primary", "역할 저장"); sv.type = "button"; sv.style.marginTop = "12px";
-    sv.onclick = async () => { sv.disabled = true; try { const r = await api("/roles", { method: "POST", body: JSON.stringify({ repo: curRepo(), roles: pick }) }); if (!r.saved) { snack(!r.message || /바뀐 역할이 없/.test(r.message) ? "바뀐 역할이 없음" : r.message, true); sv.disabled = false; return; } snack("팀 역할을 저장함"); if (closeSheet) closeSheet(); lastTriage = null; refreshHome(); loadBoard(); if (mePage === "roles") renderMe(); bot("역할을 저장했어요. 이제 계획과 할 일을 역할대로 나눠요."); } catch (e) { sv.disabled = false; fail(e); } };
+    const sv = h("button", "btn primary", "역할 승인 요청 보내기"); sv.type = "button"; sv.style.marginTop = "12px";
+    sv.onclick = async () => { sv.disabled = true; try { const r = await api("/roles", { method: "POST", body: JSON.stringify({ repo: curRepo(), roles: pick }) }); if (!r.requested) { snack(!r.message || /바뀐 역할이 없/.test(r.message) ? "바뀐 역할이 없음" : r.message, true); sv.disabled = false; return; } snack("역할 승인 요청을 보냄"); if (closeSheet) closeSheet(); lastTriage = null; refreshHome(); loadBoard(); if (mePage === "roles") renderMe(); const names = (r.requests || []).map((x) => x.target).join(", "); bot(`${names || "역할을 받을 팀원"} 님에게만 승인 요청을 보냈어요. 각자 승인하면 본인 역할이 반영돼요.`); } catch (e) { sv.disabled = false; fail(e); } };
     body.appendChild(sv);
   }).catch((e) => { body.textContent = e.message; });
 }

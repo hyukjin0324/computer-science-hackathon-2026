@@ -150,11 +150,12 @@ def _steps(actions: list, repo: str | None = None) -> list[dict]:
     return steps
 
 
-def _proposal(repo: str, summary: str, actions: list, item_id: str | None = None) -> dict:
+def _proposal(repo: str, summary: str, actions: list, item_id: str | None = None, target: str | None = None) -> dict:
     by = _ASKER.get()
-    token = sign({"repo": repo, "summary": summary, "item": item_id, "by": by, "actions": [a.model_dump() for a in actions]}, settings.signing_key)
+    token = sign({"repo": repo, "summary": summary, "item": item_id, "by": by, "target": target,
+                  "actions": [a.model_dump() for a in actions]}, settings.signing_key)
     team = any(a.type in TEAM_WIDE for a in actions)
-    return {"summary": summary, "steps": _steps(actions, repo), "token": token, "by": by, "team_wide": team}
+    return {"summary": summary, "steps": _steps(actions, repo), "token": token, "by": by, "target": target, "team_wide": team}
 
 
 @app.get("/api/health")
@@ -332,8 +333,11 @@ def get_triage(repo: str | None = None):
         it["lazy"] = own.lazy_status(gh, it, first["actions"], rules, st.members, now) if first and rules["lazy"] else {"eligible": False}
         it["options"] = [{"label": o["label"], "recommended": o.get("recommended", False), "sub": o.get("sub", ""),
                           "proposal": _proposal(gh.repo, o["label"], o["actions"], it["id"])} for o in options]
-    for it in _approval_items(gh, st):  # 다른 팀원이 보낸 승인 요청: 팀장(제안자가 아니면)이 먼저, 아니면 팀 누구나
-        lead = next((m for m in st.leads if m != it["proposed_by"]), None)
+    for it in _approval_items(gh, st):
+        target = it.get("target")
+        if target and viewer != target:  # 역할 요청은 받을 사람의 Bento에만 보인다.
+            continue
+        lead = target or next((m for m in st.leads if m != it["proposed_by"]), None)
         it.update(owner=lead, age_hours=0, level=0 if lead else 2, lazy={"eligible": False})
         items.insert(0, it)
     return {"repo": gh.repo, "items": items, "members": st.members, "duty": own.duty(st.members, now, st.rules), "duty_schedule": own.duty_schedule(st.members, st.rules, now), "rules": rules, "roles": st.roles, "leads": st.leads}
@@ -775,10 +779,10 @@ def roles_get(repo: str | None = None):
 
 @app.post("/api/roles")
 def roles_set(body: RolesIn, request: Request, x_bento_code: str | None = Header(default=None)):
-    """팀 역할 바꾸기. 저장 버튼을 누른 것이 확인이라 따로 승인을 받지 않는다. 로그인을 켠 서버에서는 그 저장소 팀원만."""
+    """팀 역할 바꾸기. 바뀌는 사람마다 승인 요청을 보내고, 본인이 승인한 뒤에만 반영한다."""
     _check_code(x_bento_code, request)
     gh, st = state_for(body.repo)
-    actor = _discord_actor(request, st)
+    actor = _member_actor(request, st, "역할 승인 요청을 보낼")
     roles = {m: [c for c in dict.fromkeys(cs) if c in own.ROLES] for m, cs in body.roles.items() if m in st.members}
     effective = {**st.roles, **roles}
     picked_leads = [m for m in st.members if own.LEAD_ROLE in effective.get(m, [])]
@@ -786,13 +790,32 @@ def roles_set(body: RolesIn, request: Request, x_bento_code: str | None = Header
         raise HTTPException(400, "팀장은 한 명만 선택해 주세요")
     changed = {m: c for m, c in roles.items() if sorted(c) != sorted(st.roles.get(m, []))}
     if not changed:
-        return {"saved": False, "message": "바뀐 역할이 없어요", "roles": st.roles}
+        return {"requested": False, "message": "바뀐 역할이 없어요", "roles": st.roles}
+
+    # 팀장 교체는 한 번에 반영해야 '기존 팀장 제거 → 새 팀장 추가' 사이에 실패하지 않는다.
+    # 새 팀장이 있으면 그 사람이, 팀장을 없애는 변경이면 기존 팀장이 승인한다.
+    old_leads = {m for m in st.members if own.LEAD_ROLE in st.roles.get(m, [])}
+    new_leads = {m for m in st.members if own.LEAD_ROLE in effective.get(m, [])}
+    lead_changed = {m for m in changed if (m in old_leads) != (m in new_leads)}
+    groups: list[tuple[str, dict[str, list[str]]]] = []
+    consumed: set[str] = set()
+    if lead_changed:
+        target = next(iter(new_leads), next(iter(old_leads), None))
+        if target:
+            groups.append((target, {m: changed[m] for m in lead_changed}))
+            consumed.update(lead_changed)
+    groups.extend((m, {m: codes}) for m, codes in changed.items() if m not in consumed)
+
+    requests = []
     try:
-        own.write_roles(gh, changed)
+        for target, change in groups:
+            proposal = _proposal(gh.repo, f"{target}님의 역할 정하기", [SetRoles(roles=change)], "roles", target=target)
+            data = verify(proposal["token"], settings.signing_key)
+            req = _create_approval_request(gh, st, proposal["token"], data)
+            requests.append({"target": target, **req})
     except GitHubError as e:
-        raise HTTPException(502, f"GitHub에 저장하지 못했어요: {e}") from e
-    merged = {**st.roles, **changed}
-    return {"saved": True, "roles": {m: c for m, c in merged.items() if c}, "changed": sorted(changed), "by": actor}
+        raise HTTPException(502, f"GitHub에 승인 요청을 남기지 못했어요: {e}") from e
+    return {"requested": True, "requests": requests, "changed": sorted(changed), "by": actor or _ASKER.get()}
 
 
 FOOT_UNDO = "\n\n<sub>— 캘린더에서 누른 것을 Bento가 대신 남겼어요</sub>"
@@ -1200,6 +1223,9 @@ def run_proposal(body: ExecuteIn, request: Request, x_bento_code: str | None = H
     if not actions:
         raise HTTPException(400, "실행할 행동을 하나 이상 골라 주세요")
     who = (x_bento_user or "").strip()
+    target = data.get("target")
+    if target and who != target:
+        raise HTTPException(403, f"이 역할 요청은 {target}님만 승인할 수 있어요")
     if who and who in contact_targets(actions):
         raise HTTPException(409, {"message": "자기 자신에게 댓글이나 리뷰 요청을 보내는 제안은 실행하지 않아요", "errors": []})
     if any(a.type in TEAM_WIDE for a in actions) and data.get("by") and who and data["by"] == who:
@@ -1238,6 +1264,31 @@ class RequestIn(BaseModel):
     token: str
 
 
+def _create_approval_request(gh, st, token: str, data: dict) -> dict:
+    """서명된 제안을 승인 요청 이슈로 남긴다. target이 있으면 그 사람 전용 요청이다."""
+    actions = ActionList.validate_python(data["actions"])
+    target = data.get("target")
+    if target and target not in st.members:
+        raise HTTPException(400, "역할을 받을 사람이 이 저장소 팀원이 아니에요")
+    key = _tok_key(token)
+    for i in st.issues:
+        if i.title.startswith(APPROVE_PREFIX) and f"bento-approve:{key}" in (i.body or ""):
+            return {"issue": i.number, "url": i.url, "already": True}
+    by = data.get("by") or "팀원"
+    lines = "\n".join(f"- {s['label']}" + (f" · {s['sub']}" if s["sub"] else "") for s in _steps(actions, gh.repo))
+    if target:
+        intro = f"**{by}** 님이 @{target} 님의 역할을 제안했어요. @{target} 님이 Bento 대화에서 확인하고 승인해 주세요."
+        rule = "역할을 받을 본인이 승인한 뒤에만 역할표에 반영돼요."
+    else:
+        ask = " ".join(f"@{m}" for m in st.leads if m != data.get("by")) or "다른 팀원"
+        intro = f"**{by}** 님이 제안했어요. {ask} 님(또는 다른 팀원)이 Bento에서 확인하고 승인해 주세요."
+        rule = "팀 전체에 영향을 주는 변경이라, 제안한 사람이 아닌 팀원이나 팀장이 승인해야 실행돼요."
+    text = (f"{intro}\n\n{lines}\n\n{rule}\n"
+            f"<!-- bento-approve:{key} -->\n<!-- bento-token:{token} -->")
+    n = gh.create_issue(f"{APPROVE_PREFIX} {data.get('summary', '')[:60]}", text, [], None)
+    return {"issue": n.get("number"), "url": n.get("html_url"), "already": False}
+
+
 @app.post("/api/approval-request")
 def approval_request(body: RequestIn, request: Request, x_bento_code: str | None = Header(default=None)):
     """다른 팀원(또는 팀장)에게 승인 요청 보내기: GitHub에 요청 이슈를 만들고, 팀원 Bento의 승인 대기에 뜬다."""
@@ -1251,19 +1302,7 @@ def approval_request(body: RequestIn, request: Request, x_bento_code: str | None
     actor = _member_actor(request, st, "승인 요청을 보낼")
     if actor and data.get("by") != actor:
         raise HTTPException(403, "내가 낸 제안만 승인 요청을 보낼 수 있어요. 화면을 새로 고친 뒤 다시 제안해 주세요")
-    actions = ActionList.validate_python(data["actions"])
-    key = _tok_key(body.token)
-    for i in st.issues:
-        if i.title.startswith(APPROVE_PREFIX) and f"bento-approve:{key}" in (i.body or ""):
-            return {"issue": i.number, "url": i.url, "already": True}
-    by = data.get("by") or "팀원"
-    lines = "\n".join(f"- {s['label']}" + (f" · {s['sub']}" if s["sub"] else "") for s in _steps(actions, gh.repo))
-    ask = " ".join(f"@{m}" for m in st.leads if m != data.get("by")) or "다른 팀원"
-    text = (f"**{by}** 님이 제안했어요. {ask} 님(또는 다른 팀원)이 Bento에서 확인하고 승인해 주세요.\n\n{lines}\n\n"
-            "팀 전체에 영향을 주는 변경이라, 제안한 사람이 아닌 팀원이나 팀장이 승인해야 실행돼요.\n"
-            f"<!-- bento-approve:{key} -->\n<!-- bento-token:{body.token} -->")
-    n = gh.create_issue(f"{APPROVE_PREFIX} {data.get('summary', '')[:60]}", text, [], None)
-    return {"issue": n.get("number"), "url": n.get("html_url"), "already": False}
+    return _create_approval_request(gh, st, body.token, data)
 
 
 APPROVE_MAX_AGE = 3 * 24 * 3600  # 다른 팀원에게 보낸 승인 요청은 3일 동안 승인할 수 있다 (보통 제안은 6시간)
@@ -1301,14 +1340,18 @@ def _approval_items(gh, st) -> list[dict]:
         if time.time() - data.get("iat", 0) > APPROVE_MAX_AGE:
             out.append({"id": f"approve-{i.number}", "sev": "확인", "title": f"오래된 승인 요청 · {data.get('summary', '')}",
                         "why": "3일 넘게 승인되지 않아 더는 실행할 수 없어요. 필요하면 다시 제안하고, GitHub의 승인 요청 이슈는 닫아 주세요",
-                        "evidence": ev, "options": [], "handoff": [], "proposed_by": data.get("by"), "expired": True})
+                        "evidence": ev, "options": [], "handoff": [], "proposed_by": data.get("by"),
+                        "target": data.get("target"), "expired": True})
             continue
         actions = ActionList.validate_python(data["actions"])
+        target = data.get("target")
         out.append({"id": f"approve-{i.number}", "sev": "주의", "title": f"승인 요청 · {data.get('summary', '')}",
-                    "why": f"{data.get('by') or '팀원'} 님이 제안했어요 · 제안한 사람이 아닌 팀원이나 팀장이 승인해요",
+                    "why": (f"{data.get('by') or '팀원'} 님이 제안했어요 · {target}님 본인이 승인하면 역할이 반영돼요" if target else
+                            f"{data.get('by') or '팀원'} 님이 제안했어요 · 제안한 사람이 아닌 팀원이나 팀장이 승인해요"),
                     "evidence": ev, "options": [],
-                    "proposal": {"summary": data.get("summary", ""), "steps": _steps(actions, gh.repo), "token": m.group(1), "by": data.get("by"), "team_wide": True},
-                    "proposed_by": data.get("by")})
+                    "proposal": {"summary": data.get("summary", ""), "steps": _steps(actions, gh.repo), "token": m.group(1), "by": data.get("by"),
+                                 "target": target, "team_wide": not bool(target)},
+                    "proposed_by": data.get("by"), "target": target})
     return out
 
 

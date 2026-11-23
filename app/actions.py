@@ -248,14 +248,13 @@ def validate(actions: list, state: RepoState) -> list[str]:
             from .ownership import LEAD_ROLE, ROLES
             if not a.roles:
                 bad("정할 역할이 없어요")
-            picked_leads = []
             for who, codes in a.roles.items():
                 if who not in state.members:
                     bad(f"{who}님은 이 저장소 팀원이 아니에요")
                 if not set(codes) <= set(ROLES):
                     bad("알 수 없는 역할이 있어요")
-                if LEAD_ROLE in codes:
-                    picked_leads.append(who)
+            effective = {**state.roles, **a.roles}
+            picked_leads = [who for who in state.members if LEAD_ROLE in effective.get(who, [])]
             if len(picked_leads) > 1:
                 bad("팀장은 한 명만 선택해 주세요")
         elif isinstance(a, TeamMessage):
