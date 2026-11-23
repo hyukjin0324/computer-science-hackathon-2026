@@ -4108,7 +4108,8 @@ const ME_PAGES = {
   const pc = h("div", "card dutycard duty-period");  // 변경 주기 + 순서 섞기 + 저장
   const card = h("div", "card dutycard");  // 당번 순서
   const list = h("div", "duty-list");
-  sch.forEach((x, i) => { const r = h("div", "app" + (i === 0 ? " now" : " later")); r.style.gridTemplateColumns = "1fr auto"; const t = h("span", "duty-who"); t.appendChild(nameWithFace(x.who, x.who, 28)); if (i === 0) { const ck = h("span", "duty-check", "✓"); ck.setAttribute("aria-label", "지금 당번"); t.appendChild(ck); } r.appendChild(t); const dt = h("span", "note", x.from === x.to ? md(x.from) : `${md(x.from)} ~ ${md(x.to)}`); r.appendChild(dt); list.appendChild(r); });
+  // 팀원 수만큼만 (한 바퀴): 2명이면 2줄. 전에는 다음 5번을 다 보여 줘서 같은 사람이 여러 번 나왔다
+  sch.slice(0, new Set(sch.map((x) => x.who)).size).forEach((x, i) => { const r = h("div", "app" + (i === 0 ? " now" : " later")); r.style.gridTemplateColumns = "1fr auto"; const t = h("span", "duty-who"); t.appendChild(nameWithFace(x.who, x.who, 28)); if (i === 0) { const ck = h("span", "duty-check", "✓"); ck.setAttribute("aria-label", "지금 당번"); t.appendChild(ck); } r.appendChild(t); const dt = h("span", "note", x.from === x.to ? md(x.from) : `${md(x.from)} ~ ${md(x.to)}`); r.appendChild(dt); list.appendChild(r); });
   card.appendChild(list);
   const hl = h("div", "lab duty-q", "변경 주기"); pc.appendChild(hl);
   let pick = rot, reshuffle = false; const opts = [[1, "매일"], [2, "2일"], [3, "3일"], [7, "일주일"]]; if (!opts.some(([d]) => d === rot)) opts.push([rot, `${rot}일`]);
