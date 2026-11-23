@@ -214,7 +214,8 @@ def lazy_status(gh, item: dict, actions: list, rules: dict, members: list[str], 
 
 
 # ---------- 팀 역할 (팀원마다 라벨 하나: bento-role:아이디 → "be,fe") ----------
-ROLES = {"pm": "기획·PM", "fe": "프론트엔드", "be": "백엔드", "ds": "디자인", "pt": "발표"}
+LEAD_ROLE = "lead"
+ROLES = {LEAD_ROLE: "팀장", "pm": "기획·PM", "fe": "프론트엔드", "be": "백엔드", "ds": "디자인", "pt": "발표"}
 ROLE_PREFIX = "bento-role:"
 # 할 일 제목 → 맡을 역할 (위에서부터 먼저 맞는 것)
 _ROLE_RULES = [

@@ -167,7 +167,7 @@ _NAMES: dict[str, str] = {}
 
 def build_state(gh, now: datetime | None = None) -> RepoState:
     now = now or datetime.now(timezone.utc)
-    from .ownership import read_roles, read_rules
+    from .ownership import LEAD_ROLE, read_roles, read_rules
 
     def _leads():
         try:
@@ -230,7 +230,10 @@ def build_state(gh, now: datetime | None = None) -> RepoState:
     ]
     milestones = [Milestone(m["number"], m["title"], m.get("due_on"), m.get("open_issues", 0), m.get("closed_issues", 0), m.get("description") or "") for m in ms_raw]
     roles = {m: r for m, r in roles_raw.items() if m in members}
-    leads = [m for m in leads_raw if m in members]
+    # 역할표에서 팀장을 직접 골랐으면 그 사람을 우선한다. 아직 고르지 않은 팀은 기존처럼
+    # GitHub 저장소 관리자(읽지 못하면 저장소 소유자)를 팀장으로 쓴다.
+    explicit_leads = [m for m in members if LEAD_ROLE in roles.get(m, [])]
+    leads = explicit_leads[:1] or [m for m in leads_raw if m in members]
     from .signals import collect
     try:
         sig = collect(gh, prs, now)

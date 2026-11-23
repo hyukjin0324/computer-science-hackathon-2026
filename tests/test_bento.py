@@ -991,7 +991,7 @@ def test_roles_are_saved_directly_then_used_for_tasks_and_reviewers():
     from app.triage import triage
     r = client.get("/api/roles").json()
     m = r["members"]
-    assert set(r["choices"]) == {"pm", "fe", "be", "ds", "pt"}
+    assert set(r["choices"]) == {"lead", "pm", "fe", "be", "ds", "pt"}
     one = client.post("/api/roles", json={"roles": {m[0]: ["pm", "x"]}}).json()  # 없는 역할은 빼고, 승인 없이 바로 저장
     assert one["saved"] and one["roles"][m[0]] == ["pm"] and "proposal" not in one
     out = client.post("/api/roles", json={"roles": {m[0]: ["be"], m[1]: ["fe"], m[2]: ["pt", "ds"]}}).json()
@@ -1016,6 +1016,25 @@ def test_roles_are_saved_directly_then_used_for_tasks_and_reviewers():
     st2 = dataclasses.replace(st, prs=[pr0], roles={m[1]: ["fe"], m[3]: ["fe"]})
     item = next(i for i in triage(st2) if i["id"].startswith("review-"))
     assert item["options"][0]["label"].startswith(m[3]) and "프론트엔드" in item["options"][0]["sub"]
+
+
+def test_selected_team_lead_overrides_repo_admin_and_roles_have_no_limit():
+    from app import ownership as own
+
+    m = main._demo.d["members"]
+    assert main.build_state(main._demo).leads == [m[0]]  # 선택 전에는 기존 저장소 관리자
+
+    all_roles = list(own.ROLES)
+    saved = client.post("/api/roles", json={"roles": {m[1]: all_roles}})
+    assert saved.status_code == 200 and saved.json()["roles"][m[1]] == all_roles
+    assert main.build_state(main._demo).leads == [m[1]]
+
+    many = client.post("/api/roles", json={"roles": {m[0]: ["lead"], m[1]: ["lead"]}})
+    assert many.status_code == 400 and "한 명만" in many.json()["detail"]
+
+    cleared = client.post("/api/roles", json={"roles": {m[1]: [c for c in all_roles if c != "lead"]}})
+    assert cleared.status_code == 200
+    assert main.build_state(main._demo).leads == [m[0]]  # 선택을 지우면 기존 저장소 관리자로 복귀
 
 
 def test_team_wide_change_needs_someone_other_than_proposer():
