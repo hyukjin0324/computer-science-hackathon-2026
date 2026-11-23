@@ -3574,7 +3574,10 @@ async function runSubmitCheck(journeyState) {
     s3.setAttribute("aria-disabled", String(!reviewDone || !teamDone || !proofOpen));
     journeyState.set(!reviewDone ? 1 : !teamDone ? 2 : proofOpen ? 4 : 3);
   };
-  const cc = checkCard("2단계 · 제출물 점검", r, (ok) => { reviewDone = ok; updateStages(); });
+  // '확인 요청 뒤 바뀐 것'만 남았으면 3단계(팀원 확인 다시 받기)는 열어 둔다. 그걸 고치는 곳이 3단계라, 막으면 앞으로 못 간다
+  const fails = r.rows.filter((x) => x.status === "fail");
+  const onlyStale = fails.length > 0 && fails.every((x) => x.name === "확인 요청 뒤 바뀐 것");
+  const cc = checkCard("2단계 · 제출물 점검", r, (ok) => { reviewDone = ok || onlyStale; updateStages(); });
   cc.card.appendChild(h("div", "note", `기준 버전: ${r.head.branch} 브랜치 커밋 ${r.head.short}`));
   if (!r.ready) {
     const retry = h("button", "btn", "다시 점검하기"); retry.type = "button";

@@ -145,7 +145,7 @@ def run_checks(gh, state, deliverables: list[Deliverable], deadline_iso: str | N
                 diff = gh.compare(lock, head)
                 rows.append(_row("확인 요청 뒤 바뀐 것", "fail", f"커밋 {diff['ahead_by']}개 · 바뀐 파일: {', '.join(diff['files'][:6]) or '없음'}",
                                  [{"label": "바뀐 부분 보기", "url": gh.html(f"/compare/{lock[:12]}...{head[:12]}")}],
-                                 {"label": "바뀐 버전으로 팀원 확인을 다시 받아 주세요"}))
+                                 {"label": "아래 3단계에서 바뀐 버전으로 팀원 확인을 다시 받아 주세요"}))
     return {"rows": rows, "head": {"sha": head, "short": head[:7], "url": commit_ev["url"], "branch": branch}, "lock": lock,
             "human": human_checks(deliverables, "submit"), "ready": not any(r["status"] == "fail" for r in rows),
             "deploy": deploy}
