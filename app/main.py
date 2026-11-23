@@ -1636,6 +1636,14 @@ def submit_confirm(body: ConfirmIn):
 def submit_status(repo: str | None = None, issue: int | None = None):
     gh, st = state_for(repo)
     n = issue or sub_mod.find_confirm_issue(st)
+    if not n:  # 제출 완료를 기록하면 확인 이슈가 닫힌다: 팀원 화면도 '제출 완료'로 바뀌게 최근 60일 안에 닫힌 확인 이슈를 찾는다
+        try:
+            since = (datetime.now(timezone.utc) - timedelta(days=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            closed = [i for i in gh.closed_issues(since) if (i.get("title") or "").startswith(sub_mod.CONFIRM_PREFIX)]
+            if closed:
+                n = max(closed, key=lambda i: i.get("closed_at") or "")["number"]
+        except Exception:  # noqa: BLE001 - 못 읽으면 지금처럼 확인 요청 없음
+            n = None
     if not n:
         return {"issue": None}
     try:
