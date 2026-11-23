@@ -319,6 +319,8 @@ def get_triage(repo: str | None = None):
     now = datetime.now(timezone.utc)
     rules = own.read_rules(gh)
     viewer = _ASKER.get()
+    if viewer:  # '○○님이 며칠째 활동이 없음'은 그 사람 본인에게 보이지 않는다 (안부 버튼도 빠져서 '확인했어요'만 남았다)
+        items = [it for it in items if it["id"] != f"quiet-{viewer}"]
     for it in items:
         owner, age = own.owner_and_age(it, st, settings.review_wait_hours, now)
         it.update(owner=owner, owner_why=own.owner_reason(it, st, owner, now), age_hours=round(age, 1), level=own.level(age))
@@ -1158,7 +1160,7 @@ def _run(repo: str, actions: list, by: str | None = None, require_member: bool =
         try:
             coord.acquire(gh)  # 서버 여러 대 사이: GitHub 라벨로 잠근다
         except coord.Busy:
-            raise HTTPException(409, {"message": "다른 팀원의 승인을 실행하는 중이에요. 몇 초 뒤에 다시 눌러 주세요", "errors": [], "busy": True}) from None
+            raise HTTPException(409, {"message": "다른 팀원의 승인을 실행하는 중이에요. 몇 초 뒤에 다시 눌러 주세요", "busy": True}) from None
         except GitHubError as e:
             raise HTTPException(502 if e.status != 404 else 404, f"GitHub에서 잠금을 걸지 못했어요: {e}") from e
         try:
@@ -1172,7 +1174,7 @@ def _run(repo: str, actions: list, by: str | None = None, require_member: bool =
                                           else "저장소 상태가 바뀌었거나 실행할 수 없는 행동이 있어서 실행하지 않았어요", "errors": errors, "stale": stale})
             if by and by != "lazy" and by not in st.members:
                 if require_member and settings.live:
-                    raise HTTPException(403, {"message": f"{by}님은 {gh.repo} 팀원이 아니라서 실행할 수 없어요", "errors": []})
+                    raise HTTPException(403, {"message": f"{by}님은 {gh.repo} 팀원이 아니라서 실행할 수 없어요"})
                 by = None  # 팀원 목록에 없는 이름은 적지 않는다
             results = execute(actions, gh, settings, op=key[:12], by=f"{proposer}|{by}" if proposer in st.members and by and by != "lazy" else by)  # 팀원 이름만 적는다
             if any(r["ok"] for r in results):
@@ -1208,7 +1210,7 @@ def run_proposal(body: ExecuteIn, request: Request, x_bento_code: str | None = H
         raise HTTPException(400, "실행할 행동을 하나 이상 골라 주세요")
     who = (x_bento_user or "").strip()
     if who and who in contact_targets(actions):
-        raise HTTPException(409, {"message": "자기 자신에게 댓글이나 리뷰 요청을 보내는 제안은 실행하지 않아요", "errors": []})
+        raise HTTPException(409, {"message": "자기 자신에게 댓글이나 리뷰 요청을 보내는 제안은 실행하지 않아요"})  # 빈 errors를 보내면 화면이 문장 끝에 내용 없는 '·'를 붙인다
     if any(a.type in TEAM_WIDE for a in actions) and data.get("by") and who and data["by"] == who:
         gh, st = state_for(data["repo"])
         if len(st.members) > 1 and who not in st.leads:
@@ -1469,7 +1471,10 @@ def submit_proof(body: ProofIn):
     proof = " ".join(body.proof.split())[:300]
     if len(proof) < 2:
         raise HTTPException(400, "접수 번호나 확인 메일 문구를 적어 주세요")
-    lock = sub_mod.confirm_status(gh, body.issue, st.members)["lock"] if st.issue(body.issue) else None
+    target = st.issue(body.issue)
+    if not target or not target.title.startswith(sub_mod.CONFIRM_PREFIX):  # 전에는 아무 이슈 번호나 받아 '제출 완료'로 닫는 제안을 만들었다
+        raise HTTPException(400, "열린 제출 확인 이슈가 아니에요. 제출 점검에서 다시 확인 요청을 만들어 주세요")
+    lock = sub_mod.confirm_status(gh, body.issue, st.members)["lock"]
     comment = f"제출 완료 증거: {proof}\n제출 버전: {lock[:7] if lock else '기록 없음'} · 제출은 팀원이 직접 했어요"
     return {"proposal": _proposal(gh.repo, "제출 완료 기록하기", [CloseIssue(issue=body.issue, comment=comment)], "proof")}
 
