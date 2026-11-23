@@ -180,6 +180,16 @@ class DemoGitHub:
     def tree(self, sha): return copy.deepcopy(self.d["tree"])
     def events(self): return copy.deepcopy(self.d["events"])
     def invitations(self): return copy.deepcopy(self.d["invitations"])
+
+    def is_collaborator(self, login):
+        return login.casefold() in {member.casefold() for member in self.members()}
+
+    def add_collaborator(self, login):
+        invitation = {"invitee": {"login": login}, "created_at": _ts(0), "expired": False}
+        self.d["invitations"].append(invitation)
+        self.log.append(f"invite {login}")
+        return copy.deepcopy(invitation)
+
     def pr_commits(self, n): return copy.deepcopy(self.d["pr_commits"].get(n, []))
     no_cache = True  # 데모는 메모리라 바로 읽어도 된다 (테스트에서 상태를 바꿔 가며 본다)
 

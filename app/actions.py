@@ -9,8 +9,9 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Literal, Union
 
 import httpx
-from pydantic import BaseModel, Field, TypeAdapter
+from pydantic import BaseModel, Field, TypeAdapter, field_validator
 
+from .github import GitHubError
 from .state import RepoState
 
 FOOTER = "\n\n<sub>— 팀원 승인을 받아 Bento가 남겼어요</sub>"
@@ -115,7 +116,20 @@ class TeamMessage(BaseModel):
     text: str
 
 
-Action = Annotated[Union[RequestReviewers, Comment, CreateIssue, AssignIssue, CloseIssue, CreateMilestone, UpdateMilestone, SetMilestone, SetTeamRules, SetRoles, ReassignIssue, TeamMessage], Field(discriminator="type")]
+class InviteCollaborator(BaseModel):
+    type: Literal["invite_collaborator"] = "invite_collaborator"
+    login: str
+
+    @field_validator("login")
+    @classmethod
+    def normalize_login(cls, value: str) -> str:
+        login = value.strip().removeprefix("@")
+        if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}", login):
+            raise ValueError("GitHub 아이디만 입력해 주세요")
+        return login.lower()
+
+
+Action = Annotated[Union[RequestReviewers, Comment, CreateIssue, AssignIssue, CloseIssue, CreateMilestone, UpdateMilestone, SetMilestone, SetTeamRules, SetRoles, ReassignIssue, TeamMessage, InviteCollaborator], Field(discriminator="type")]
 ActionList = TypeAdapter(list[Action])
 
 # 승인 화면에서 사람이 고칠 수 있는 글 필드
@@ -328,6 +342,8 @@ def label(a, discord: bool) -> tuple[str, str]:
         return "Bento · 팀 역할 정하기", " · ".join(f"{w} {role_names(c) or '역할 없음'}" for w, c in a.roles.items())
     if isinstance(a, TeamMessage):
         return ("디스코드 팀 채널에 메시지", "") if discord else ("팀 메시지 (메신저 미연결)", "디스코드를 연결하기 전까지는 보내지 않고 복사만 할 수 있어요")
+    if isinstance(a, InviteCollaborator):
+        return f"@{a.login}님을 팀 저장소에 초대", "저장소 쓰기 권한으로 초대해요. 수락은 GitHub에서 해요."
     return "알 수 없는 행동", ""
 
 
@@ -379,11 +395,36 @@ def footer(by: str | None) -> str:
     return f"\n\n<sub>— {by}님 승인으로 Bento가 남겼어요</sub>" if by else FOOTER
 
 
+def _invite_collaborator(a: InviteCollaborator, gh, live: bool) -> dict:
+    url = gh.html("/invitations") if live else None
+    try:
+        if gh.is_collaborator(a.login):
+            return {"ok": True, "skipped": True, "note": f"@{a.login}님은 이미 저장소 팀원이에요."}
+        for invite in gh.invitations():
+            login = (invite.get("invitee") or {}).get("login") or ""
+            if not invite.get("expired") and login.casefold() == a.login:
+                return {"ok": True, "skipped": True, "url": url, "note": f"@{a.login}님은 이미 GitHub 초대 수락을 기다리고 있어요."}
+        invitation = gh.add_collaborator(a.login)
+    except GitHubError as e:
+        messages = {
+            403: "Bento 앱에 저장소 Administration 쓰기 권한이 있는지, 조직에서 팀원 초대를 허용하는지 확인해 주세요.",
+            404: "GitHub 아이디와 Bento 앱의 저장소 설치·권한을 확인해 주세요.",
+            422: "GitHub가 초대를 받지 못했어요. 아이디와 저장소의 초대 제한을 확인해 주세요.",
+        }
+        return {"ok": False, "error": messages.get(e.status, "GitHub에서 초대를 보내지 못했어요. 잠시 후 다시 시도해 주세요.")}
+    except httpx.RequestError:
+        return {"ok": False, "error": "GitHub 응답을 받지 못했어요. 다시 시도하면 기존 초대부터 확인해요."}
+    if not invitation:  # GitHub 204: 초대 없이 저장소에 추가된 경우도 있다.
+        return {"ok": True, "url": gh.html(), "note": f"@{a.login}님에게 저장소 접근 권한이 있어요."}
+    note = f"@{a.login}님에게 초대를 보냈어요. GitHub에서 수락하면 팀원이 돼요." if live else f"@{a.login}님의 데모 초대를 만들었어요."
+    return {"ok": True, "url": url, "note": note}
+
+
 def execute(actions: list, gh, settings, op: str | None = None, by: str | None = None) -> list[dict]:
     FOOT = footer(by)
-    """검증을 통과한 행동을 순서대로 실행한다. 실패하면 거기서 멈추고 그때까지의 결과를 돌려준다."""
+    """검증된 행동을 순서대로 실행한다. 각 초대는 독립적으로 처리한다."""
     results: list[dict] = []
-    milestone_numbers = {m["title"]: m["number"] for m in gh.milestones()}
+    milestone_numbers = {m["title"]: m["number"] for m in gh.milestones()} if not all(isinstance(a, InviteCollaborator) for a in actions) else {}
     hook = None
     if any(isinstance(a, TeamMessage) for a in actions):
         from .discord import webhook_for
@@ -395,6 +436,10 @@ def execute(actions: list, gh, settings, op: str | None = None, by: str | None =
         title, _ = label(a, bool(hook))
         try:
             url = None
+            if isinstance(a, InviteCollaborator):
+                result = _invite_collaborator(a, gh, settings.live)
+                results.append({"label": title, **result})
+                continue
             if isinstance(a, RequestReviewers):
                 gh.request_reviewers(a.pr, a.users)
                 url = gh.html(f"/pull/{a.pr}")

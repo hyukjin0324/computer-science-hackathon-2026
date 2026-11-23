@@ -1,6 +1,7 @@
 """GitHub App으로 저장소를 읽고 쓰는 얇은 클라이언트.
 
-Bento가 쓰는 권한: Contents 읽기, Pull requests·Issues 읽기/쓰기, Checks 읽기. (초대 목록은 Administration 읽기가 있어야 보이고, 없으면 그 점검만 건너뛴다)
+Bento가 쓰는 권한: Contents 읽기, Pull requests·Issues 읽기/쓰기, Checks 읽기.
+저장소 초대 확인에는 Administration 읽기, 발송에는 Administration 쓰기 권한을 쓴다.
 머지·푸시에 필요한 Contents 쓰기 권한은 받지 않는다.
 """
 
@@ -125,6 +126,19 @@ class GitHub:
     def members(self) -> list[str]:
         return [u["login"] for u in self.api_all(self._r("/assignees"))]
 
+    def collaborator_permission(self, login: str) -> str:
+        data = self.api("GET", self._r(f"/collaborators/{login}/permission"))
+        return data.get("permission") or "none"
+
+    def is_collaborator(self, login: str) -> bool:
+        try:
+            self.api("GET", self._r(f"/collaborators/{login}"))
+        except GitHubError as e:
+            if e.status == 404:
+                return False
+            raise
+        return True
+
     # 팀 상태 신호 읽기: 커밋·활동·초대·파일 목록 (모두 읽기만 한다)
     def commits(self, branch: str | None = None, since: str | None = None, per_page: int = 50):
         params = {"per_page": per_page}
@@ -145,7 +159,7 @@ class GitHub:
         return self.api("GET", self._r("/events"), params={"per_page": 100})
 
     def invitations(self):
-        return self.api("GET", self._r("/invitations"), params={"per_page": 100})
+        return self.api_all(self._r("/invitations"))
 
     def pr_commits(self, n: int):
         return self.api("GET", self._r(f"/pulls/{n}/commits"), params={"per_page": 100})
@@ -200,6 +214,10 @@ class GitHub:
         return self.api("GET", self._r(f"/issues/{n}/reactions"), params={"per_page": 100})
 
     # ---------- 쓰기 (승인 뒤에만 호출) ----------
+    def add_collaborator(self, login: str) -> dict:
+        # GitHub의 기본 역할은 쓰기이며, permission 필드는 조직 저장소에만 유효하다.
+        return self.api("PUT", self._r(f"/collaborators/{login}"))
+
     def create_milestone(self, title: str, due_on: str | None, description: str):
         body = {"title": title, "description": description}
         if due_on:
