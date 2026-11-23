@@ -185,6 +185,47 @@ def test_repository_shared_notice_overrides_stale_browser_notice(page, app_url):
     expect(project_button).not_to_contain_text("다른 브라우저에 남은 대회")
 
 
+def test_home_does_not_recommend_another_contest_after_one_is_selected(page, app_url):
+    selected = {"title": "이미 정한 팀 대회", "submit_deadline_iso": "2026-11-30T12:00:00+09:00", "deliverables": []}
+    recommendation = {
+        "id": "another-contest",
+        "title": "새로 추천된 다른 대회",
+        "deadline_iso": "2026-11-27T23:59:00+09:00",
+        "deadline_text": "11월 27일 23:59",
+        "tags": ["AI"],
+        "source_name": "테스트",
+        "ai_ok": False,
+        "url": "https://example.test/another",
+    }
+    page.route(
+        "**/api/notice/saved?repo=*",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({"extract": selected}, ensure_ascii=False),
+        ),
+    )
+    page.route(
+        "**/api/discover?*",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({
+                "items": [recommendation],
+                "pending": [],
+                "sources": [],
+                "not_auto": [],
+                "checked_at": "2026-11-24T02:00:00+09:00",
+            }, ensure_ascii=False),
+        ),
+    )
+
+    open_app(page, app_url)
+
+    expect(page.get_by_text("다음 마감 · 이미 정한 팀 대회", exact=True)).to_be_visible(timeout=10_000)
+    expect(page.get_by_text("새로 추천된 다른 대회", exact=True)).to_have_count(0)
+
+
 def test_missing_github_installation_offers_recovery_actions(page, app_url):
     open_app(page, app_url)
 
