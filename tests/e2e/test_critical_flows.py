@@ -209,7 +209,7 @@ def test_application_collaboration_and_submission_lifecycle(page, app_url):
 
     page.get_by_role("button", name="홈", exact=True).click()
     expect(page.locator('[aria-label^="지금 단계: 협업"]')).to_be_visible()
-    expect(page.get_by_role("heading", name="팀원 할 일")).to_be_visible()
+    expect(page.get_by_role("heading", name="팀원 별 할 일")).to_be_visible()
 
     # 공고에서 읽은 필수 제출물과 현재 제출물을 대조한다.
     page.get_by_role("button", name=re.compile(r"^대화(?: \d+)?$")).click()
