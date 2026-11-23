@@ -83,6 +83,7 @@ svg { display: block; }
 .proj .pname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proj .pdot { width: 9px; height: 9px; border-radius: 50%; background: var(--blue); flex: none; }
 .proj small { color: var(--muted); font-weight: 500; }
+.proj .demo-badge { flex: none; padding: 2px 6px; border-radius: var(--r-pill); background: var(--warn-soft); color: var(--ink); font-size: var(--fs-caption); font-weight: 700; }
 .sheet-bg { position: absolute; inset: 0; z-index: 100; background: rgb(23 24 28 / .45); display: flex; align-items: flex-end; margin: 0 calc(-1 * max(16px, env(safe-area-inset-left, 0px))); }
 .sheet { width: 100%; max-height: 86%; overflow-y: auto; background: var(--surface); border-radius: var(--r-sheet) var(--r-sheet) 0 0; padding: 10px 20px max(22px, env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 10px; box-shadow: 0 -8px 30px rgb(23 24 28 / .12); }
 .sheet::before { content: ""; width: 40px; height: 5px; border-radius: var(--r-pill); background: var(--line); align-self: center; margin-bottom: 4px; flex: none; }
@@ -1057,7 +1058,7 @@ function projKey() { return cur && cur.draft ? "d:" + cur.draft : "r:" + curRepo
 function projName() { const d = curDraft(); return d ? d.title : (extract && extract.title) || (curRepo() || "").split("/")[1] || "팀플"; }
 function setExtract(ex) { extract = ex; const d = curDraft(); if (d) { d.extract = ex; saveDrafts(); } else store.set("extract:" + projKey(), ex); renderCal(); }
 function renderHead() {
-  const d = curDraft(); const b = $("projBtn"); b.textContent = ""; const dot = h("span", "pdot"); dot.style.background = "var(--blue)"; b.appendChild(dot); if (d) b.appendChild(h("small", null, "준비 중")); b.appendChild(h("span", "pname", projName() + " ▾"));
+  const d = curDraft(); const b = $("projBtn"); b.textContent = ""; const dot = h("span", "pdot"); dot.style.background = "var(--blue)"; b.appendChild(dot); if (d) b.appendChild(h("small", null, "준비 중")); else if (H.mode === "demo") b.appendChild(h("small", "demo-badge", "데모 데이터")); b.appendChild(h("span", "pname", projName() + " ▾"));
   const pp = $("panelProj"); if (pp) pp.textContent = (d ? "준비 중 · " : "") + projName();
 }
 async function loadSaved() {  // 팀원이 이미 분석해 저장소에 저장한 공고가 있으면 다시 분석하지 않고 가져온다
@@ -1134,7 +1135,14 @@ async function thinking(text, p) {
   b.insertAdjacentHTML("afterbegin", MASCOT(22, true)); add(b); syncComposer();
   try { return await p; } finally { dismissChat(b); syncComposer(); }
 }
-function fail(e) { bot(e.message + (e.errors ? "\n· " + e.errors.join("\n· ") : "")); }
+function fail(e) {
+  bot(e.message + (e.errors ? "\n· " + e.errors.join("\n· ") : ""));
+  if (e.status !== 404 || !/Bento 앱이 설치되지 않았거나 저장소가 없어요/.test(e.message || "")) return;
+  const actions = add(h("div", "row-btns"));
+  if (H.install_url) { const install = link("Bento 앱 설치", H.install_url); install.target = "_self"; actions.appendChild(install); }
+  const choose = h("button", "btn", "다른 팀플 고르기"); choose.type = "button"; choose.onclick = openProjectSheet; actions.appendChild(choose);
+  const retry = h("button", "btn", "다시 확인"); retry.type = "button"; retry.onclick = () => location.reload(); actions.appendChild(retry);
+}
 
 /* ---------- 첫 화면 ---------- */
 const LINE = {  // 바로 맡기기 아이콘: 이모지 대신 얇은 선 아이콘 (차분하게)
