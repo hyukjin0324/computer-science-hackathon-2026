@@ -2563,7 +2563,8 @@ function homeBoard(v, me2, items) {
     const isLead = b && (b.leads || []).includes(me2);
     const submitDue = isLead && extract && extract.submit_deadline_iso && stageOf() < 3 ? extract.submit_deadline_iso : null;
     const doneSet = new Set(homeDone()); const left = myItems.filter((it) => !doneSet.has("i" + it.id)).length + ts.filter((t) => !doneSet.has("t" + t.number)).length + (submitDue ? 1 : 0);
-    sh.appendChild(h("span", null, [roles[me2], b ? `남은 일 ${left}개` : ""].filter(Boolean).join(" · "))); sec.appendChild(sh);
+    const doneN = ((people.find((p) => p.login === me2) || {}).done || []).length;  // 역할은 빼고 남은 일·끝낸 일 개수만
+    sh.appendChild(h("span", null, b ? `남은 일 ${left}개` + (doneN ? ` · 끝낸 일 ${doneN}개` : "") : "")); sec.appendChild(sh);
     if (submitDue) {
       const dd = ddays(submitDue); const tone = dd != null && dd < 0 ? "crit" : dd != null && dd <= 2 ? "warn" : "ok";
       const a = h("button"); a.type = "button"; a.onclick = () => { showTab("chat"); submit(); };
@@ -2627,7 +2628,7 @@ function homeBoard(v, me2, items) {
     tsec = h("section", "hsec hteam"); const sh = h("div", "sech"); sh.appendChild(h("h2", null, "팀원 별 할 일")); tsec.appendChild(sh); v.appendChild(tsec);
     groups.sort((x, y) => y.late - x.late || (y.items.length + y.tasks.length) - (x.items.length + x.tasks.length)).forEach((g) => {
       const det = h("details", "teamall"); const sm = h("summary"); sm.appendChild(h("strong", null, g.m));
-      sm.appendChild(h("span", "gsub", `${roles[g.m] || "역할 없음"} · 할 일 ${g.items.length + g.tasks.length}개${g.done.length ? ` · 끝낸 일 ${g.done.length}개` : ""}`)); if (g.late) sm.appendChild(h("span", "late", `늦음 ${g.late}`));
+      sm.appendChild(h("span", "gsub", `남은 일 ${g.items.length + g.tasks.length}개${g.done.length ? ` · 끝낸 일 ${g.done.length}개` : ""}`)); if (g.late) sm.appendChild(h("span", "late", `늦음 ${g.late}`));
       det.appendChild(sm); [...g.items.map((it) => hItemRow(it, true)), ...g.tasks.map((t) => hTaskRow(t)), ...g.done.map((t) => hDoneRow(t))].forEach((row) => { row.classList.add("dotrow"); const ck = row.querySelector(".htask-check"); if (ck) ck.style.background = projColor("var(--blue)"); det.appendChild(row); });  // 점 색 = 지금 대회 색 (위 대회 이름 앞 점과 같은 색)  // 팀원 할 일은 내가 체크할 게 아니라 네모 대신 작은 동그라미
       tsec.appendChild(det);
     });
