@@ -409,11 +409,11 @@ def test_closed_issues_or_past_deadline_do_not_hide_project(page, app_url):
     open_app(page, app_url)
     project = {"repo": "team/finished-tasks", "error": False, "due": "2020-01-01", "total": 3, "done": 3}
 
-    assert page.evaluate("project => projEnded(project)", project) is False
+    assert page.evaluate("project => isProjectHidden(project)", project) is False
     page.evaluate("setProjectHidden('r:team/finished-tasks', true)")
-    assert page.evaluate("project => projEnded(project)", project) is True
+    assert page.evaluate("project => isProjectHidden(project)", project) is True
     page.evaluate("setProjectHidden('r:team/finished-tasks', false)")
-    assert page.evaluate("project => projEnded(project)", project) is False
+    assert page.evaluate("project => isProjectHidden(project)", project) is False
 
 
 def test_late_progress_opens_today_tasks(page, app_url):
