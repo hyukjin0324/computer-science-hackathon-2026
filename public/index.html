@@ -3763,9 +3763,25 @@ async function loadCalState() {
   if (booted) checkRepoDeadline();
 }
 const PALETTE = ["--p0", "--p1", "--p2", "--p3", "--p4", "--p5"];
-function colorOf(key) {  // 팀플마다 색을 한 번 정하면 계속 같은 색
+function colorOf(key) {  // 현재 팀플끼리는 색이 겹치지 않게 하고, 한 번 정한 색은 계속 쓴다
   const map = store.get("colors", {});
-  if (!(key in map)) { const used = Object.values(map); map[key] = PALETTE.findIndex((_, i) => !used.includes(i)); if (map[key] < 0) map[key] = Object.keys(map).length % PALETTE.length; store.set("colors", map); }
+  const keys = [...new Set([
+    ...drafts.map((d) => "d:" + d.id),
+    ...(Array.isArray(projects) ? projects.map((p) => "r:" + p.repo) : []),
+    !curDraft() && curRepo() ? "r:" + curRepo() : null,
+    key,
+  ].filter(Boolean))];
+  const used = new Set(); let changed = false;
+  keys.forEach((k, order) => {
+    let i = Number(map[k]);
+    if (!Number.isInteger(i) || i < 0 || i >= PALETTE.length || used.has(i)) {
+      i = PALETTE.findIndex((_, n) => !used.has(n));
+      if (i < 0) i = order % PALETTE.length;
+    }
+    if (map[k] !== i) { map[k] = i; changed = true; }
+    used.add(i);
+  });
+  if (changed) store.set("colors", map);
   return PALETTE[map[key]];
 }
 function allProjects() {
