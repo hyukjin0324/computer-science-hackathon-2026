@@ -3609,7 +3609,7 @@ function renderCal() {
     const t = h("button", "bigrow"); t.type = "button"; t.style.gridTemplateColumns = "1fr auto"; const tx = h("span"); tx.appendChild(h("b", null, `${projName()} 계획 짜기`)); tx.appendChild(h("small", null, "마감에서 거꾸로 할 일을 날짜별로 나눠 드려요")); t.appendChild(tx); t.appendChild(h("span", "chev", "›")); t.onclick = () => { showTab("chat"); planFlow(); }; body.appendChild(t);
   }
   // 달력 카드: 월 제목 + 오늘·이전·다음 버튼, 범례, 날짜 칸을 한 묶음으로
-  const first = new Date(now.getFullYear(), now.getMonth() + calMonthOff, 1), lead = (first.getDay() + 6) % 7;  // 월요일 시작
+  const first = new Date(now.getFullYear(), now.getMonth() + calMonthOff, 1), lead = first.getDay();  // 일요일 시작
   const start = new Date(first); start.setDate(1 - lead);
   const cells = Math.ceil((lead + new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate()) / 7) * 7;  // 그 달이 다 들어가는 주 수만큼
   const calCard = h("section", "calcard"); calCard.setAttribute("aria-label", "달력");
@@ -3621,7 +3621,7 @@ function renderCal() {
   calCard.appendChild(mh);
   const lg = h("div", "legend");
   [["sq", "마감"], ["", "할 일"]].forEach(([k, n]) => { const sp = h("span", "lg-item"); sp.appendChild(h("i", k || null)); sp.appendChild(document.createTextNode(n)); lg.appendChild(sp); }); calCard.appendChild(lg); body.appendChild(calCard);
-  const wk = h("div", "week"); ["월", "화", "수", "목", "금", "토", "일"].forEach((d) => wk.appendChild(h("div", "dow", d)));
+  const wk = h("div", "week"); ["일", "월", "화", "수", "목", "금", "토"].forEach((d) => wk.appendChild(h("div", "dow", d)));
   for (let k = 0; k < cells; k++) {
     const d = new Date(start); d.setDate(start.getDate() + k); const key = dayKey(d);
     const mine = ev.filter((e) => dayKey(e.d) === key);
