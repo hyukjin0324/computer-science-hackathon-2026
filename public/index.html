@@ -701,8 +701,8 @@ select.finput { -webkit-appearance: none; appearance: none; padding-right: 38px;
 .htask b { display: block; font-size: var(--fs-body); font-weight: 600; line-height: 1.35; }
 .htask small { display: block; font-size: var(--fs-small); color: var(--muted); margin-top: 3px; }
 .htask .chev { color: #979AA1; font-size: 24px; line-height: 1; }
-.htask .hdue { display: inline-block; margin-left: 10px; padding: 1px 8px; border-radius: 99px; font-size: var(--fs-small); font-weight: 800; line-height: 1.35; vertical-align: 0; background: var(--ok-soft); color: var(--ok); }  /* 마감(D-1·늦음)은 크게 칩으로 */
-.htask .hdue.warn { background: var(--warn-soft); color: var(--warn); } .htask .hdue.crit { background: var(--crit-soft); color: var(--crit); }
+.htask .hdue { display: inline; margin-left: 9px; font-size: var(--fs-small); font-weight: 800; color: var(--ok); }  /* 마감(D-1·늦음)은 색과 굵기로 강조 */
+.htask .hdue.warn { color: var(--warn); } .htask .hdue.crit { color: var(--crit); }
 .htask-check { width: 18px; height: 18px; border: 2px solid var(--warn); border-radius: 5px; }
 .htask-check.ok { border-color: var(--ok); } .htask-check.crit { border-color: var(--crit); } .htask-check.info { border-color: var(--info); } .htask-check.muted { border-color: #A3A5AA; }
 .htask.done .htask-go > span > b:first-child { text-decoration: line-through; color: #A3A5AA; } .htask.done .hdue { opacity: .5; }
