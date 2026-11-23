@@ -820,6 +820,7 @@ button.htask-check::after { content: ""; position: absolute; inset: -13px; }  /*
 .hsec .lead-actions .linkbtn { transition: color .15s; }
 .hsec .lead-actions .linkbtn:hover, .hsec .lead-actions .linkbtn:focus-visible { background: none; color: var(--muted); }
 .hsec .lead-late { display: flex; flex-direction: column; border-top: 1px solid var(--line); padding-top: 4px; }
+.hsec .lead-late .btn { align-self: center; }  /* 다시 나누기는 안내 아래 가운데 */
 .hsec .lead-late > .note { text-align: center; font-size: var(--fs-caption); }  /* 일이 몰렸어요 안내는 가운데, 한 단계 작게 */
 .hsec .lead-late .prow { min-height: 44px; align-items: center; font-size: var(--fs-small); } .hsec .lead-late .prow b { font-size: var(--fs-body); } .hsec .lead-late .prow span { font-size: var(--fs-small); }
 .hsec details.teamall { background: none; border: 0; border-radius: 0; padding: 0; gap: 0; border-top: 1px solid var(--line); }
@@ -3980,18 +3981,21 @@ function buildRoles(v, closeSheet) {
     if (!ex.length) { body.textContent = "저장소 팀원을 읽지 못함"; return; }
     if (!me2 || !ex.includes(me2)) { body.textContent = "먼저 마이페이지에서 내 GitHub 아이디를 선택해 주세요."; return; }
     const pick = [...(r.roles[me2] || [])];
-    const row = h("div", "rolerow"); row.appendChild(nameWithFace(me2, me2 + " (나)", 28));
-    const chips = h("div", "chips"); chips.setAttribute("role", "group"); chips.setAttribute("aria-label", "내 역할");
+    ex.forEach((m) => {
+      const mine = m === me2, selected = mine ? pick : [...(r.roles[m] || [])];
+      const row = h("div", "rolerow"); row.appendChild(nameWithFace(m, m + (mine ? " (나)" : ""), 28));
+      const chips = h("div", "chips"); chips.setAttribute("role", "group"); chips.setAttribute("aria-label", mine ? "내 역할" : `${m} 역할`);
       Object.entries(r.choices).forEach(([code, name]) => {
-        const b = h("button", "chiptog", name); b.type = "button"; b.setAttribute("aria-pressed", String(pick.includes(code)));
+        const b = h("button", "chiptog", name); b.type = "button"; b.setAttribute("aria-pressed", String(selected.includes(code)));
         b.dataset.role = code;
         b.onclick = () => {
+          if (!mine) { snack("본인 역할만 수정할 수 있어요", true); return; }
           const on = pick.includes(code); if (on) pick.splice(pick.indexOf(code), 1); else pick.push(code); b.setAttribute("aria-pressed", String(!on));
         };
         chips.appendChild(b);
       });
-    row.appendChild(chips); body.appendChild(row);
-    const all = h("div", "note", "팀 역할표 · " + ex.map((m) => `${m}: ${(r.roles[m] || []).map((c) => r.choices[c]).filter(Boolean).join("·") || "미정"}`).join(" / ")); body.appendChild(all);
+      row.appendChild(chips); body.appendChild(row);
+    });
     const sv = h("button", "btn primary", "내 역할 저장"); sv.type = "button"; sv.style.marginTop = "12px";
     sv.onclick = async () => { sv.disabled = true; try { const out = await api("/roles", { method: "POST", body: JSON.stringify({ repo: curRepo(), roles: { [me2]: pick } }) }); snack(out.saved ? "내 역할을 저장했어요" : out.message, true); if (closeSheet) closeSheet(); lastTriage = null; await loadBoard(); refreshHome(); if (mePage === "roles") renderMe(); } catch (e) { sv.disabled = false; fail(e); } };
     body.appendChild(sv);
