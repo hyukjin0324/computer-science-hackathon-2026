@@ -1192,11 +1192,14 @@ function renderHead() {
   const d = curDraft(); const b = $("projBtn"); b.textContent = ""; const dot = h("span", "pdot");
   dot.style.background = projColor("var(--blue)"); b.appendChild(dot); if (d) b.appendChild(h("small", null, "준비 중")); else if (H.mode === "demo") b.appendChild(h("small", "demo-badge", "데모 데이터")); b.appendChild(h("span", "pname", projName() + " ▾"));
 }
-async function loadSaved() {  // 팀원이 이미 분석해 저장소에 저장한 공고가 있으면 다시 분석하지 않고 가져온다
+async function loadSaved({ preferShared = false } = {}) {  // GitHub에 저장된 공고가 있으면 팀원 모두 같은 값을 본다
   const key = projKey();
+  const before = extract;
   try {
     const s = await api("/notice/saved?repo=" + encodeURIComponent(curRepo()));
-    if (s.extract && projKey() === key && !extract) { setExtract(s.extract); renderHead(); }
+    // 저장소를 막 열었을 때는 이 브라우저의 오래된 캐시보다 GitHub의 공용 공고가 우선이다.
+    // 기다리는 동안 사용자가 새 공고를 분석했다면 그 새 입력은 덮어쓰지 않는다.
+    if (s.extract && projKey() === key && (!extract || (preferShared && extract === before))) { setExtract(s.extract); renderHead(); }
   } catch (e) { /* 없으면 그냥 넘어감 */ }
 }
 const ROOMS = {};  // 팀플 키 → 그 대화방의 화면 조각 (이 탭이 열려 있는 동안)
@@ -1223,7 +1226,7 @@ function useProject(next, quiet) {
   const d = curDraft();
   extract = d ? d.extract || null : store.get("extract:" + projKey(), null);
   calState = null; lastTriage = null; lastProgress = null; lastBoard = null; renderHead(); renderCal(); renderMe(); renderHome();
-  const savedNotice = !d && !extract ? loadSaved() : null;
+  const savedNotice = !d ? loadSaved({ preferShared: true }) : null;
   if (!d) { loadCalState(); if (booted) refreshHome(); }  // 다른 팀플로 바꾸면 할 일을 다시 읽는다 (안 그러면 '불러오는 중'에 머문다)
   const toKey = projKey(); const fresh = fromKey && fromKey !== toKey && !ROOMS[toKey];
   switchRoom(fromKey, toKey); roomKey = toKey;

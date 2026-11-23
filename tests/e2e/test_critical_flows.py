@@ -159,6 +159,32 @@ def test_tabs_calendar_and_mypage_keep_working(page, app_url):
     expect(page).to_have_url(re.compile(r"#me-projects$"))
 
 
+def test_repository_shared_notice_overrides_stale_browser_notice(page, app_url):
+    stale = {"title": "다른 브라우저에 남은 대회", "deliverables": []}
+    shared = {"title": "팀 저장소에 연결된 공용 대회", "deliverables": []}
+    page.add_init_script(
+        "localStorage.setItem('bento:repo', 'team-matzip/knu-matzip');"
+        "localStorage.setItem('bento:cur', JSON.stringify({repo: 'team-matzip/knu-matzip'}));"
+        "localStorage.setItem('bento:extract:r:team-matzip/knu-matzip', JSON.stringify("
+        + json.dumps(stale, ensure_ascii=False)
+        + "));"
+    )
+    page.route(
+        "**/api/notice/saved?repo=*",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({"extract": shared}, ensure_ascii=False),
+        ),
+    )
+
+    open_app(page, app_url)
+
+    project_button = page.get_by_role("button", name="팀플 바꾸기")
+    expect(project_button).to_contain_text("팀 저장소에 연결된 공용 대회", timeout=10_000)
+    expect(project_button).not_to_contain_text("다른 브라우저에 남은 대회")
+
+
 def test_missing_github_installation_offers_recovery_actions(page, app_url):
     open_app(page, app_url)
 
