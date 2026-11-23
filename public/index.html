@@ -1078,7 +1078,9 @@ function projKey() { return cur && cur.draft ? "d:" + cur.draft : "r:" + curRepo
 function projName() { const d = curDraft(); return d ? d.title : (extract && extract.title) || (curRepo() || "").split("/")[1] || "팀플"; }
 function setExtract(ex) { extract = ex; const d = curDraft(); if (d) { d.extract = ex; saveDrafts(); } else store.set("extract:" + projKey(), ex); renderCal(); }
 function renderHead() {
-  const d = curDraft(); const b = $("projBtn"); b.textContent = ""; const dot = h("span", "pdot"); dot.style.background = "var(--blue)"; b.appendChild(dot); if (d) b.appendChild(h("small", null, "준비 중")); else if (H.mode === "demo") b.appendChild(h("small", "demo-badge", "데모 데이터")); b.appendChild(h("span", "pname", projName() + " ▾"));
+  const d = curDraft(); const b = $("projBtn"); b.textContent = ""; const dot = h("span", "pdot");
+  // ☰ 메뉴·캘린더와 같은 대회별 색. 팀플을 아직 못 불러왔으면(키 없음) 색을 배정하지 않고 기본 파랑
+  const ck = d ? "d:" + d.id : curRepo() ? "r:" + curRepo() : null; dot.style.background = ck ? `var(${colorOf(ck)})` : "var(--blue)"; b.appendChild(dot); if (d) b.appendChild(h("small", null, "준비 중")); else if (H.mode === "demo") b.appendChild(h("small", "demo-badge", "데모 데이터")); b.appendChild(h("span", "pname", projName() + " ▾"));
 }
 async function loadSaved() {  // 팀원이 이미 분석해 저장소에 저장한 공고가 있으면 다시 분석하지 않고 가져온다
   const key = projKey();
