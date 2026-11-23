@@ -13,7 +13,7 @@ def test_desktop_phone_frame_is_anchored_to_viewport_center():
     assert rule is not None
     declarations = rule.group(1)
     assert "position: absolute" in declarations
-    assert "left: 50%" in declarations
+    assert "left: calc(50% - 12px)" in declarations
     assert "top: 50%" in declarations
     assert "transform: translate(-50%, -50%) scale(var(--phone-k, 1))" in declarations
     assert "transform-origin: center" in declarations
