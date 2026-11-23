@@ -2966,11 +2966,17 @@ function isPast(iso) {  // 날짜만 있거나 GitHub 마일스톤처럼 자정(
   return (dayOnly ? new Date(iso.slice(0, 10) + "T23:59:59").getTime() : Date.parse(iso)) < Date.now();
 }
 function repoProjectKey(repo) { return "r:" + repo; }
-function hiddenProjectKeys() { return new Set(store.get("hiddenProjects", [])); }
+// 보관한 팀플: 직접 보관했거나(hiddenProjects), 제출 완료 기록이 있는 팀플. 전에는 보관 목록에 넣은 기기에서만 빠져서,
+// 이 기능 전에 제출을 기록했거나 다른 경로로 '끝!'이 된 팀플은 진행 중 목록에 그대로 남았다. '다시 진행하기'를 누른 팀플만 예외
 function setProjectHidden(key, hidden) {
-  const keys = hiddenProjectKeys();
-  if (hidden) keys.add(key); else keys.delete(key);
-  store.set("hiddenProjects", [...keys].slice(-100));
+  const keys = new Set(store.get("hiddenProjects", [])), back = new Set(store.get("reopenedProjects", []));
+  if (hidden) { keys.add(key); back.delete(key); } else { keys.delete(key); back.add(key); }
+  store.set("hiddenProjects", [...keys].slice(-100)); store.set("reopenedProjects", [...back].slice(-100));
+}
+function hiddenProjectKeys() {
+  const keys = new Set(store.get("hiddenProjects", [])), back = new Set(store.get("reopenedProjects", []));
+  try { Object.keys(localStorage).forEach((k) => { const m = /^bento:done:(r:.+):submit$/.exec(k); if (m && !back.has(m[1])) keys.add(m[1]); }); } catch (e) { /* 기기 저장소를 못 읽으면 보관 목록만 */ }
+  return keys;
 }
 function isProjectHidden(p, keys = hiddenProjectKeys()) { return !p.error && keys.has(repoProjectKey(p.repo)); }
 function projSub(p) { if (p.error) return "저장소를 읽지 못했어요"; return [p.notice || "연결된 공고 없음", p.due ? `제출 ${dtxt(p.due)}` : "", p.total ? `제출물 ${p.done}/${p.total}` : ""].filter(Boolean).join(" · "); }
