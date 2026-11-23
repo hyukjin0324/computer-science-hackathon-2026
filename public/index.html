@@ -2628,14 +2628,9 @@ function homeBoard(v, me2, items) {
     tsec = h("section", "hsec hteam"); const sh = h("div", "sech"); sh.appendChild(h("h2", null, "팀원 별 할 일")); tsec.appendChild(sh); v.appendChild(tsec);
     groups.sort((x, y) => y.late - x.late || (y.items.length + y.tasks.length) - (x.items.length + x.tasks.length)).forEach((g) => {
       const det = h("details", "teamall"); const sm = h("summary"); sm.appendChild(h("strong", null, g.m));
-<<<<<<< Updated upstream
       sm.appendChild(h("span", "gsub", `남은 일 ${g.items.length + g.tasks.length}개${g.done.length ? ` · 끝낸 일 ${g.done.length}개` : ""}`)); if (g.late) sm.appendChild(h("span", "late", `늦음 ${g.late}`));
-      det.appendChild(sm); [...g.items.map((it) => hItemRow(it, true)), ...g.tasks.map((t) => hTaskRow(t)), ...g.done.map((t) => hDoneRow(t))].forEach((row) => { row.classList.add("dotrow"); const ck = row.querySelector(".htask-check"); if (ck) ck.style.background = projColor("var(--blue)"); det.appendChild(row); });  // 점 색 = 지금 대회 색 (위 대회 이름 앞 점과 같은 색)  // 팀원 할 일은 내가 체크할 게 아니라 네모 대신 작은 동그라미
-=======
-      sm.appendChild(h("span", "gsub", `${roles[g.m] || "역할 없음"} · 할 일 ${g.items.length + g.tasks.length}개`)); if (g.late) sm.appendChild(h("span", "late", `늦음 ${g.late}`));
       const ck = (people.find((p) => p.login === g.m) || {}).checkin; if (ck && !ck.overdue) sm.appendChild(h("span", "gsub ckwait", "안부 물어봄 · 답 기다리는 중"));  // 답장이 오거나 움직이면 서버가 지운다
-      det.appendChild(sm); [...g.items.map((it) => hItemRow(it, true)), ...g.tasks.map((t) => hTaskRow(t))].forEach((row) => { row.classList.add("dotrow"); const ck = row.querySelector(".htask-check"); if (ck) ck.style.background = projColor("var(--blue)"); det.appendChild(row); });  // 점 색 = 지금 대회 색 (위 대회 이름 앞 점과 같은 색)  // 팀원 할 일은 내가 체크할 게 아니라 네모 대신 작은 동그라미
->>>>>>> Stashed changes
+      det.appendChild(sm); [...g.items.map((it) => hItemRow(it, true)), ...g.tasks.map((t) => hTaskRow(t)), ...g.done.map((t) => hDoneRow(t))].forEach((row) => { row.classList.add("dotrow"); const ck = row.querySelector(".htask-check"); if (ck) ck.style.background = projColor("var(--blue)"); det.appendChild(row); });  // 점 색 = 지금 대회 색 (위 대회 이름 앞 점과 같은 색)  // 팀원 할 일은 내가 체크할 게 아니라 네모 대신 작은 동그라미
       tsec.appendChild(det);
     });
   }
