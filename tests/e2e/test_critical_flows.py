@@ -387,21 +387,23 @@ def test_application_collaboration_and_submission_lifecycle(page, app_url):
     page.get_by_role("button", name="완료 기록하기", exact=True).click()
     page.get_by_role("button", name="제출 완료로 기록", exact=True).click()
 
-    expect(page.get_by_text("제출 완료로 기록했어요. 팀플 목록의 숨긴 팀플로 옮겼어요.")).to_be_visible()
+    expect(page.get_by_text("제출 완료로 기록했어요. 이 팀플은 마이페이지 → 보관함 → 팀플로 옮겼어요.")).to_be_visible()
     page.get_by_role("button", name="홈", exact=True).click()
     expect(page.locator('[aria-label^="지금 단계: 끝"]')).to_be_visible()
 
+    # 보관한 팀플은 팀플 바꾸기 목록에 나오지 않고, 보관함 → 보관한 팀플에서만 다시 진행한다
     page.get_by_role("button", name="팀플 바꾸기").click()
     sheet = page.get_by_role("dialog", name="팀플 바꾸기")
-    expect(sheet.get_by_text("숨긴 팀플 1개", exact=True)).to_be_visible()
-    hidden_repo = sheet.get_by_role("button").filter(has_text="knu-matzip")
-    expect(hidden_repo).to_contain_text("다시 표시")
-    hidden_repo.click()
-    expect(page.get_by_text("팀플을 다시 표시했어요")).to_be_visible()
+    expect(sheet.get_by_text("보관한 팀플 1개는 마이페이지 → 보관함 → 팀플에 있어요")).to_be_visible()
+    expect(sheet.get_by_role("button").filter(has_text="knu-matzip")).to_have_count(0)
+    page.keyboard.press("Escape")
+    page.evaluate("() => { showTab('box'); seg = 'projects'; renderBox(); }")
+    page.get_by_role("button", name="다시 진행하기", exact=True).click()
+    expect(page.get_by_text("팀플을 다시 진행 중으로 옮겼어요")).to_be_visible()
 
     page.get_by_role("button", name="팀플 바꾸기").click()
     sheet = page.get_by_role("dialog", name="팀플 바꾸기")
-    expect(sheet.get_by_text("숨긴 팀플 1개", exact=True)).to_have_count(0)
+    expect(sheet.get_by_text("보관한 팀플 1개는 마이페이지 → 보관함 → 팀플에 있어요")).to_have_count(0)
     assert len(submit_requests) == 2
 
 
