@@ -4253,7 +4253,7 @@ const ME_PAGES = {
   const sf = h("button", "btn", rules.seed ? "순서 다시 섞기" : "순서 무작위로 정하기"); sf.type = "button"; sf.classList.add("duty-shuffle");
   sf.onclick = () => { reshuffle = !reshuffle; sf.textContent = reshuffle ? "✓ 저장하면 순서를 새로 섞음" : (rules.seed ? "순서 다시 섞기" : "순서 무작위로 정하기"); sync(); };
   pc.appendChild(sf);
-  sv.onclick = async () => { sv.disabled = true; try { await api("/duty", { method: "POST", body: JSON.stringify({ repo: curRepo(), rotate_days: pick, reshuffle }) }); snack("당번 주기를 저장했어요"); refreshHome(); setTimeout(() => { if (mePage === "duty") renderMe(); }, 600); } catch (e) { snack(e.message); sync(); } };  // 승인 없이 바로 저장
+  sv.onclick = async () => { sv.disabled = true; try { const res = await api("/duty", { method: "POST", body: JSON.stringify({ repo: curRepo(), rotate_days: pick, reshuffle }) }); if (lastTriage && res.rules) lastTriage.rules = { ...(lastTriage.rules || {}), ...res.rules };  /* 다시 그릴 때 옛 주기(일주일 등)로 돌아가 보이지 않게 */ snack("당번 주기를 저장했어요"); refreshHome(); setTimeout(() => { if (mePage === "duty") renderMe(); }, 600); } catch (e) { snack(e.message); sync(); } };  // 승인 없이 바로 저장
   pc.appendChild(h("div", "duty-sep")); pc.appendChild(sv); v.appendChild(card); v.appendChild(pc); sync();  // 저장 버튼 위에 구분선
   }],
   rules: ["반대가 없으면 실행", (v) => {
