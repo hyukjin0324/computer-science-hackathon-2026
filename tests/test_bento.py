@@ -370,7 +370,11 @@ def test_work_plan_runs_backwards_from_deadline_and_stays_in_order():
 
 
 def test_schedule_to_github_is_a_signed_proposal_and_skips_existing():
-    steps = client.post("/api/schedule", json={"extract": SAMPLE_EXTRACT.model_dump()}).json()["steps"]
+    # 샘플 공고 마감(11/24 12:00)이 지나면 계획이 비어 실패했다: 마감을 오늘 기준 앞으로 옮겨 쓴다
+    now = datetime.now(KST)
+    ex = SAMPLE_EXTRACT.model_copy(update={"apply_deadline_iso": (now + timedelta(days=4)).replace(microsecond=0).isoformat(),
+                                           "submit_deadline_iso": (now + timedelta(days=10)).replace(microsecond=0).isoformat()})
+    steps = client.post("/api/schedule", json={"extract": ex.model_dump()}).json()["steps"]
     body = [{"title": s["title"], "due": s["due"]} for s in steps if s["kind"] != "due"]
     p = client.post("/api/schedule/github", json={"steps": body}).json()["proposal"]
     labels = [s["label"] for s in p["steps"]]
