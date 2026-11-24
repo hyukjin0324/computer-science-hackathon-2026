@@ -899,6 +899,12 @@ class RulesIn(BaseModel):
     reshuffle: bool = False
 
 
+class DutyIn(BaseModel):
+    repo: str | None = None
+    rotate_days: int
+    reshuffle: bool = False
+
+
 class RolesIn(BaseModel):
     repo: str | None = None
     roles: dict[str, list[str]]
@@ -1041,6 +1047,26 @@ def team_rules(body: RulesIn):
     gh, st = state_for(body.repo)
     lazy = [c for c in dict.fromkeys(body.lazy) if c in own.CATEGORIES]
     return {"proposal": _proposal(gh.repo, "팀 규칙 바꾸기", [SetTeamRules(lazy=lazy, hours=body.hours, rotate_days=body.rotate_days, reshuffle=body.reshuffle)], "rules"), "current": own.read_rules(gh)}
+
+
+@app.post("/api/duty")
+def duty_set(body: DutyIn, request: Request, x_bento_code: str | None = Header(default=None)):
+    """당번 주기·순서: 팀원이면 승인 없이 바로 저장한다. '반대가 없으면 실행' 설정은 그대로 둔다."""
+    import secrets as _secrets
+    _check_code(x_bento_code, request)
+    gh, st = state_for(body.repo)
+    _member_actor(request, st, "당번 주기를 바꿀")
+    if not 1 <= body.rotate_days <= 14:
+        raise HTTPException(400, "당번은 1~14일마다 바꿀 수 있어요")
+    cur = own.read_rules(gh)
+    seed = _secrets.token_hex(3) if (body.reshuffle or not cur["seed"]) else None
+    moved = body.reshuffle or body.rotate_days != cur["rotate"] or not cur["start"]
+    start = datetime.now(own.KST).strftime("%Y%m%d") if moved else None  # 바꾼 날부터 새 주기로 시작
+    try:
+        own.write_rules(gh, cur["lazy"], cur["hours"], body.rotate_days, seed, start)
+    except GitHubError as e:
+        raise HTTPException(502, f"당번 주기를 저장하지 못했어요: {e}") from e
+    return {"saved": True, "rules": own.read_rules(gh)}
 
 
 def lazy_tick(repo: str | None, now: datetime | None = None) -> dict:
