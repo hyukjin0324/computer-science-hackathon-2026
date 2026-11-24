@@ -4235,7 +4235,7 @@ const ME_PAGES = {
   const md = (iso) => { const d = new Date(iso + "T00:00:00"); return `${d.getMonth() + 1}/${d.getDate()}`; };
   // 설명은 위 카드에 한 줄씩, 당번 순서·주기 고르기는 아래 카드
   const ic = h("div", "card role-introcard"); const ul = h("ul", "perm-list role-intro");
-  ["승인 담당자가 없는 일은 그날의 당번이 먼저 챙김", "순서는 한 번 무작위로 정해 고정하고, 정한 날수마다 다음 사람에게 넘어감", "Discord를 연결해 두면 당번이 바뀌는 날 알려 줌 (서버 자동 알림을 켠 경우)", "주기를 바꾸면 팀 전체에 영향을 주므로 팀원 승인을 받음", "저장한 날부터 새 주기로 시작함"].forEach((t) => { const li = h("li"); li.appendChild(h("span", "pm", "•")); li.appendChild(h("span", null, t)); ul.appendChild(li); });
+  ["승인 담당자가 없는 일은 그날의 당번이 먼저 챙김", "순서는 한 번 무작위로 정해 고정하고, 정한 날수마다 다음 사람에게 넘어감", "Discord를 연결해 두면 당번이 바뀌는 날 알려 줌 (서버 자동 알림을 켠 경우)", "주기와 순서는 팀원 누구나 바로 바꿀 수 있음", "저장한 날부터 새 주기로 시작함"].forEach((t) => { const li = h("li"); li.appendChild(h("span", "pm", "•")); li.appendChild(h("span", null, t)); ul.appendChild(li); });
   ic.appendChild(ul); v.appendChild(ic);
   const pc = h("div", "card dutycard duty-period");  // 변경 주기 + 순서 섞기 + 저장
   const card = h("div", "card dutycard");  // 당번 순서
@@ -4246,14 +4246,14 @@ const ME_PAGES = {
   const hl = h("div", "lab duty-q", "변경 주기"); pc.appendChild(hl);
   let pick = rot, reshuffle = false; const opts = [[1, "매일"], [2, "2일"], [3, "3일"], [7, "일주일"]]; if (!opts.some(([d]) => d === rot)) opts.push([rot, `${rot}일`]);
   const seg = h("div", "hseg"); seg.setAttribute("role", "radiogroup"); seg.setAttribute("aria-label", "당번을 바꾸는 주기");
-  const sv = h("button", "btn primary", "팀원에게 승인받고 저장"); sv.type = "button";
+  const sv = h("button", "btn primary", "저장"); sv.type = "button";
   const dirty = () => pick !== rot || reshuffle || !rules.seed; const sync = () => { sv.disabled = !dirty(); seg.querySelectorAll(".hsegopt").forEach((b) => b.setAttribute("aria-checked", String(+b.dataset.d === pick))); };
   opts.sort((a, b) => a[0] - b[0]).forEach(([d, name]) => { const b = h("button", "hsegopt", name); b.type = "button"; b.dataset.d = String(d); b.setAttribute("role", "radio"); b.onclick = () => { pick = d; sync(); }; seg.appendChild(b); });
   pc.appendChild(seg);
   const sf = h("button", "btn", rules.seed ? "순서 다시 섞기" : "순서 무작위로 정하기"); sf.type = "button"; sf.classList.add("duty-shuffle");
   sf.onclick = () => { reshuffle = !reshuffle; sf.textContent = reshuffle ? "✓ 저장하면 순서를 새로 섞음" : (rules.seed ? "순서 다시 섞기" : "순서 무작위로 정하기"); sync(); };
   pc.appendChild(sf);
-  sv.onclick = async () => { sv.disabled = true; try { const p = await api("/team-rules", { method: "POST", body: JSON.stringify({ repo: curRepo(), lazy: rules.lazy || [], hours: rules.hours || 24, rotate_days: pick, reshuffle }) }); approval(p.proposal, (ok) => { if (ok) { refreshHome(); setTimeout(() => { if (mePage === "duty") renderMe(); }, 600); } else sync(); }); } catch (e) { snack(e.message); sync(); } };
+  sv.onclick = async () => { sv.disabled = true; try { await api("/duty", { method: "POST", body: JSON.stringify({ repo: curRepo(), rotate_days: pick, reshuffle }) }); snack("당번 주기를 저장했어요"); refreshHome(); setTimeout(() => { if (mePage === "duty") renderMe(); }, 600); } catch (e) { snack(e.message); sync(); } };  // 승인 없이 바로 저장
   pc.appendChild(h("div", "duty-sep")); pc.appendChild(sv); v.appendChild(card); v.appendChild(pc); sync();  // 저장 버튼 위에 구분선
   }],
   rules: ["반대가 없으면 실행", (v) => {

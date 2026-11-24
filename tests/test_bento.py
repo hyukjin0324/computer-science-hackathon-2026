@@ -1846,6 +1846,20 @@ def test_team_rules_set_rotation_preserves_other_settings_and_shows_in_approval(
     assert any("1~14일" in e for e in errs)
 
 
+def test_duty_saves_right_away_without_approval_and_keeps_lazy_rules():
+    main._demo.reset()
+    own.write_rules(main._demo, ["reviewers"], 36)
+    r = client.post("/api/duty", json={"rotate_days": 2}).json()
+    assert r["saved"]
+    rules = own.read_rules(main._demo)
+    assert rules["rotate"] == 2 and rules["lazy"] == ["reviewers"] and rules["hours"] == 36
+    assert rules["seed"] and len(rules["start"]) == 8
+    seed = rules["seed"]
+    client.post("/api/duty", json={"rotate_days": 2, "reshuffle": True})
+    assert own.read_rules(main._demo)["seed"] != seed  # 새로 섞으면 순서가 바뀐다
+    assert client.post("/api/duty", json={"rotate_days": 30}).status_code == 400
+
+
 def test_board_tells_why_each_person_has_a_task():
     main._demo.reset()
     b = client.get("/api/board").json()
